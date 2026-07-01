@@ -197,55 +197,56 @@ export async function verifyClinicPassword(id: string, p: string) {
     return { success: pass === p, message: pass !== p ? 'Contraseña incorrecta' : undefined };
 }
 
-// --- PACIENTES (OPTIMIZADO PARA ARCHIVO) ---
+// --- PACIENTES (OPTIMIZADO PARA ARCHIVO Y BÚSQUEDA PRECISA) ---
 export async function getPatientsData(options?: any): Promise<Patient[]> {
   const colRef = collection(adminDb, 'patients');
 
-  // 1. Prioridad: Búsqueda exacta por CURP o Expediente
+  // 1. Búsqueda exacta por CURP o Expediente
   if (options?.searchCurp) {
-    const q = query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(1));
+    const q = query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(20));
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Patient[];
   }
 
   if (options?.searchExpediente) {
-    const q = query(colRef, where('expediente', '==', options.searchExpediente.trim()), limit(10));
+    const q = query(colRef, where('expediente', '==', options.searchExpediente.trim()), limit(20));
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Patient[];
   }
 
-  // 2. Búsqueda por Nombre Inteligente (Especial para nombres compuestos o "Nombre Apellido")
+  // 2. Búsqueda Inteligente por Nombre/Apellidos
   if (options?.searchName) {
     const term = options.searchName.toUpperCase().trim();
     const words = term.split(' ').filter((w: string) => w.length > 0);
+    if (words.length === 0) return [];
+
     const firstWord = words[0];
 
-    // Lanzamos dos búsquedas en paralelo para mayor probabilidad de éxito (Apellido o Nombre)
-    const q1 = query(colRef, where('paternalLastName', '>=', firstWord), where('paternalLastName', '<=', firstWord + '\uf8ff'), limit(150));
-    const q2 = query(colRef, where('name', '>=', firstWord), where('name', '<=', firstWord + '\uf8ff'), limit(150));
+    // Consulta triple en paralelo para cubrir Nombre, Apellido Paterno y Apellido Materno
+    const q1 = query(colRef, where('paternalLastName', '>=', firstWord), where('paternalLastName', '<=', firstWord + '\uf8ff'), limit(500));
+    const q2 = query(colRef, where('name', '>=', firstWord), where('name', '<=', firstWord + '\uf8ff'), limit(500));
+    const q3 = query(colRef, where('maternalLastName', '>=', firstWord), where('maternalLastName', '<=', firstWord + '\uf8ff'), limit(500));
     
-    const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+    const [snap1, snap2, snap3] = await Promise.all([getDocs(q1), getDocs(q2), getDocs(q3)]);
     
     const resultsMap = new Map<string, Patient>();
-    [...snap1.docs, ...snap2.docs].forEach(d => {
+    [...snap1.docs, ...snap2.docs, ...snap3.docs].forEach(d => {
         const data = { ...serializeData(d.data()), id: d.id } as Patient;
         resultsMap.set(d.id, data);
     });
 
     let results = Array.from(resultsMap.values());
 
-    // Filtrado en memoria para asegurar que TODAS las palabras ingresadas estén en el nombre completo
-    if (words.length > 1) {
-        results = results.filter(p => {
-            const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
-            return words.every((word: string) => fullName.includes(word));
-        });
-    }
+    // Refinado en memoria: todas las palabras ingresadas deben estar presentes en el nombre completo
+    results = results.filter(p => {
+        const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
+        return words.every((word: string) => fullName.includes(word));
+    });
 
     return results.sort((a,b) => (a.paternalLastName || '').localeCompare(b.paternalLastName || ''));
   }
 
-  // 3. Listado por estatus o general
+  // 3. Listado por estatus
   let q: Query<DocumentData> = colRef;
   if (options?.status && options.status !== 'Total') {
       q = query(colRef, where('status', '==', options.status), limit(options?.limitNum || 1000));
@@ -303,49 +304,61 @@ export async function getPatientByCURP(curp: string) {
 }
 
 export async function bulkInsertPatients(patients: any[]) {
-    const batch = writeBatch(adminDb);
+    const patientsCol = collection(adminDb, 'patients');
     let added = 0;
     let updated = 0;
-    for (const p of patients) {
-        const curp = String(p.CURP || p.curp || '').toUpperCase().trim();
-        if (!curp) continue;
-        const patientData = {
-            expediente: String(p['No.Expediente'] || p.expediente || ''),
-            name: String(p.Nombre || p.name || '').toUpperCase().trim(),
-            paternalLastName: String(p.Apaterno || p.paternalLastName || '').toUpperCase().trim(),
-            maternalLastName: String(p.Amaterno || p.maternalLastName || '').toUpperCase().trim(),
-            curp: curp,
-            birthDate: String(p.FNacimiento || p.birthDate || ''),
-            age: Number(p.Edad || p.age || 0),
-            sex: String(p.Sexo || p.sex || 'Hombre') as 'Hombre' | 'Mujer',
-            birthState: String(p.Estado || p.birthState || 'TABASCO').toUpperCase(),
-            address: String(p.Domicilio || p.address || '').toUpperCase(),
-            coloniaName: String(p.Colonia || p.coloniaName || '').toUpperCase(),
-            phoneNumber: String(p.Telefono || p.phoneNumber || ''),
-            status: (p.Estatus || p.status || PatientStatus.Vigente) as PatientStatus,
-            fatherName: String(p.NombrePadre || p.fatherName || '').toUpperCase() || null,
-            motherName: String(p.NombreMadre || p.motherName || '').toUpperCase() || null,
-            fatherAge: Number(p.EdadPadre || p.fatherAge || 0) || null,
-            motherAge: Number(p.EdadMadre || p.motherAge || 0) || null,
-            registrationDate: String(p.FechaApertura || p.registrationDate || ''),
-            derechoAbiencia: String(p.DerechoAbiencia || p.derechoAbiencia || '').toUpperCase() || null
-        };
-        const q = query(collection(adminDb, 'patients'), where('curp', '==', curp), limit(1));
+
+    // Procesamos en bloques de 30 para optimizar las consultas 'in'
+    for (let i = 0; i < patients.length; i += 30) {
+        const chunk = patients.slice(i, i + 30);
+        const curps = chunk.map(p => String(p.CURP || p.curp || '').toUpperCase().trim()).filter(Boolean);
+        
+        if (curps.length === 0) continue;
+
+        const q = query(patientsCol, where('curp', 'in', curps));
         const snap = await getDocs(q);
-        if (snap.empty) {
-            const nid = uuidv4();
-            batch.set(doc(adminDb, 'patients', nid), { ...patientData, id: nid });
-            added++;
-        } else {
-            batch.update(snap.docs[0].ref, patientData);
-            updated++;
-        }
+        const existingMap = new Map(snap.docs.map(d => [d.data().curp, d.ref]));
+
+        const batch = writeBatch(adminDb);
+        chunk.forEach(p => {
+            const curp = String(p.CURP || p.curp || '').toUpperCase().trim();
+            if (!curp) return;
+
+            const patientData = {
+                expediente: String(p['No.Expediente'] || p.expediente || ''),
+                name: String(p.Nombre || p.name || '').toUpperCase().trim(),
+                paternalLastName: String(p.Apaterno || p.paternalLastName || '').toUpperCase().trim(),
+                maternalLastName: String(p.Amaterno || p.maternalLastName || '').toUpperCase().trim(),
+                curp: curp,
+                birthDate: String(p.FNacimiento || p.birthDate || ''),
+                age: Number(p.Edad || p.age || 0),
+                sex: String(p.Sexo || p.sex || 'Hombre') as 'Hombre' | 'Mujer',
+                birthState: String(p.Estado || p.birthState || 'TABASCO').toUpperCase(),
+                address: String(p.Domicilio || p.address || '').toUpperCase(),
+                coloniaName: String(p.Colonia || p.coloniaName || '').toUpperCase(),
+                phoneNumber: String(p.Telefono || p.phoneNumber || ''),
+                status: (p.Estatus || p.status || PatientStatus.Vigente) as PatientStatus,
+                registrationDate: String(p.FechaApertura || p.registrationDate || formatDate(new Date(), 'yyyy-MM-dd')),
+                derechoAbiencia: String(p.DerechoAbiencia || p.derechoAbiencia || '').toUpperCase() || null
+            };
+
+            const existingRef = existingMap.get(curp);
+            if (existingRef) {
+                batch.update(existingRef, patientData);
+                updated++;
+            } else {
+                const nid = uuidv4();
+                batch.set(doc(adminDb, 'patients', nid), { ...patientData, id: nid });
+                added++;
+            }
+        });
+        await batch.commit();
     }
-    await batch.commit();
+    
     return { success: true, addedCount: added, updatedCount: updated, processedCount: patients.length };
 }
 
-// --- CITAS ---
+// --- CITAS (VISIBILIDAD TOTAL) ---
 export async function getAppointmentsData() {
     const apps = await getRawCollection('appointments', 10000); 
     const pats = await getPatientsForApps(apps);
