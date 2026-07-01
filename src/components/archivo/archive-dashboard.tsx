@@ -153,13 +153,13 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
     setCurrentPage(1); 
     
     try {
-      // Configuramos las opciones de búsqueda para que el servidor use índices directos
+      // Configuramos las opciones de búsqueda para que el servidor use índices directos y búsqueda multi-campo
       const searchOptions = { 
           status: statusFilter, 
           searchName: searchName.trim() || undefined,
           searchCurp: searchCurp.trim() || undefined,
           searchExpediente: searchExpediente.trim() || undefined,
-          limitNum: (searchName || searchCurp || searchExpediente) ? 200 : 1000 
+          limitNum: (searchName || searchCurp || searchExpediente) ? 2000 : 1000 
       };
 
       const [patientsData, countsData, clinicsData, serviceTypesData, appointmentsData, coloniasData] = await Promise.all([

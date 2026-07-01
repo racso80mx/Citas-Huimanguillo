@@ -222,10 +222,10 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
 
     const firstWord = words[0];
 
-    // Consulta triple en paralelo para cubrir Nombre, Apellido Paterno y Apellido Materno
-    const q1 = query(colRef, where('paternalLastName', '>=', firstWord), where('paternalLastName', '<=', firstWord + '\uf8ff'), limit(500));
-    const q2 = query(colRef, where('name', '>=', firstWord), where('name', '<=', firstWord + '\uf8ff'), limit(500));
-    const q3 = query(colRef, where('maternalLastName', '>=', firstWord), where('maternalLastName', '<=', firstWord + '\uf8ff'), limit(500));
+    // Consulta triple en paralelo para cubrir Nombre, Apellido Paterno y Apellido Materno con límite mayor
+    const q1 = query(colRef, where('paternalLastName', '>=', firstWord), where('paternalLastName', '<=', firstWord + '\uf8ff'), limit(2000));
+    const q2 = query(colRef, where('name', '>=', firstWord), where('name', '<=', firstWord + '\uf8ff'), limit(2000));
+    const q3 = query(colRef, where('maternalLastName', '>=', firstWord), where('maternalLastName', '<=', firstWord + '\uf8ff'), limit(2000));
     
     const [snap1, snap2, snap3] = await Promise.all([getDocs(q1), getDocs(q2), getDocs(q3)]);
     
@@ -237,7 +237,7 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
 
     let results = Array.from(resultsMap.values());
 
-    // Refinado en memoria: todas las palabras ingresadas deben estar presentes en el nombre completo
+    // Refinado en memoria: todas las palabras ingresadas deben estar presentes en cualquier parte del nombre completo
     results = results.filter(p => {
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         return words.every((word: string) => fullName.includes(word));
@@ -308,7 +308,6 @@ export async function bulkInsertPatients(patients: any[]) {
     let added = 0;
     let updated = 0;
 
-    // Procesamos en bloques de 30 para optimizar las consultas 'in'
     for (let i = 0; i < patients.length; i += 30) {
         const chunk = patients.slice(i, i + 30);
         const curps = chunk.map(p => String(p.CURP || p.curp || '').toUpperCase().trim()).filter(Boolean);
