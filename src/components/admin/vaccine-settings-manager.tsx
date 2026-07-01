@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useEffect, useTransition, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
@@ -19,6 +18,7 @@ import type { VaccineSettings, Vaccine } from '@/lib/definitions';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { Textarea } from '../ui/textarea';
+import { Separator } from '../ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { timeSlots10Min } from '@/lib/time-slots';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -86,7 +86,6 @@ export function VaccineSettingsManager() {
   const [vaccines, setVaccines] = useState<Vaccine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, startSavingTransition] = useTransition();
-  const [showPassword, setShowPassword] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedVaccine, setSelectedVaccine] = useState<Vaccine | null>(null);
   const { toast } = useToast();
@@ -114,7 +113,6 @@ export function VaccineSettingsManager() {
 
   useEffect(() => {
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const dynamicBreakSlots = useMemo(() => {
@@ -199,7 +197,6 @@ export function VaccineSettingsManager() {
           title: 'Configuración Guardada',
           description: 'La configuración de vacunación ha sido actualizada exitosamente.',
           className: 'bg-accent text-accent-foreground',
-          duration: 8000,
         });
         await fetchData();
       } else {

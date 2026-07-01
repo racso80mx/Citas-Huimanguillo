@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useEffect, useTransition, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
@@ -18,6 +17,7 @@ import { Loader2, Save, FlaskConical, CalendarClock, Settings, Eye, EyeOff, Plus
 import type { LabSettings, LabStudy } from '@/lib/definitions';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
+import { Separator } from '../ui/separator';
 import {
   Table,
   TableBody,
@@ -38,6 +38,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { timeSlots30Min } from '@/lib/time-slots';
 import { ScrollArea } from '../ui/scroll-area';
+import { Badge } from '../ui/badge';
 
 function LabStudyEditDialog({ study, onSave, onCancel }: { study: LabStudy, onSave: (study: LabStudy) => void, onCancel: () => void }) {
     const [editedStudy, setEditedStudy] = useState<LabStudy>(study);
@@ -105,7 +106,6 @@ export function LabSettingsManager() {
   const [studies, setStudies] = useState<LabStudy[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, startSavingTransition] = useTransition();
-  const [showPassword, setShowPassword] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedStudy, setSelectedStudy] = useState<LabStudy | null>(null);
   const { toast } = useToast();
@@ -134,7 +134,6 @@ export function LabSettingsManager() {
 
   useEffect(() => {
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const dynamicBreakSlots = useMemo(() => {
@@ -220,7 +219,6 @@ export function LabSettingsManager() {
           title: 'Configuración Guardada',
           description: 'La configuración del laboratorio ha sido actualizada exitosamente.',
           className: 'bg-accent text-accent-foreground',
-          duration: 8000,
         });
         await fetchData();
       } else {
