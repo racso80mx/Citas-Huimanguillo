@@ -248,9 +248,9 @@ export function LabSettingsManager() {
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <div className="space-y-8">
-            <Card className="shadow-lg border-primary/10">
-            <CardHeader>
+        <div className="space-y-8 h-full flex flex-col">
+            <Card className="shadow-lg border-primary/10 flex flex-col min-h-0">
+            <CardHeader className="shrink-0">
                 <CardTitle className="flex items-center gap-2">
                 <Settings /> Parámetros de Operación
                 </CardTitle>
@@ -258,121 +258,125 @@ export function LabSettingsManager() {
                 Gestiona los horarios y el catálogo de estudios.
                 </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-8">
-                <div className="space-y-6">
-                    <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><CalendarClock className="h-5 w-5"/> Citas y Horarios</h3>
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className='space-y-2'>
-                            <Label htmlFor="lab-slots">Citas por día</Label>
-                            <Input
-                            id="lab-slots"
-                            type="number"
-                            value={settings.dailySlots}
-                            onChange={(e) => handleSettingsChange('dailySlots', parseInt(e.target.value,10) || 0)}
-                            />
-                        </div>
-                        <div className='space-y-2'>
-                            <Label htmlFor="lab-waitlist">Lista de Espera</Label>
-                            <Input
-                            id="lab-waitlist"
-                            type="number"
-                            value={settings.waitlistSlots || 0}
-                            onChange={(e) => handleSettingsChange('waitlistSlots', parseInt(e.target.value,10) || 0)}
-                            placeholder="Ej. 5"
-                            />
-                        </div>
-                        <div className='space-y-2'>
-                            <Label htmlFor="lab-start">Hora Inicio</Label>
-                            <Select value={settings.startTime} onValueChange={(value) => handleSettingsChange('startTime', value)}>
-                                <SelectTrigger id="lab-start"><SelectValue /></SelectTrigger>
-                                <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`start-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                        <div className='space-y-2'>
-                            <Label htmlFor="lab-end">Hora Fin</Label>
-                            <Select value={settings.endTime} onValueChange={(value) => handleSettingsChange('endTime', value)}>
-                                <SelectTrigger id="lab-end"><SelectValue /></SelectTrigger>
-                                <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`end-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    <div className="grid sm:grid-cols-2 gap-4">
-                        <div className='space-y-2'>
-                            <Label htmlFor="lab-break">Tiempo de Descanso</Label>
-                            <Select value={settings.breakTime || ''} onValueChange={(value) => handleSettingsChange('breakTime', value === 'none' ? '' : value)}>
-                                <SelectTrigger id="lab-break"><SelectValue placeholder="Seleccionar descanso..." /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">Sin Descanso</SelectItem>
-                                    {dynamicBreakSlots.map(slot => (
-                                        <SelectItem key={`break-${slot}`} value={slot}>{slot}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="flex items-center space-x-2 pt-8">
-                            <Switch 
-                            id="lab-weekend"
-                            checked={settings.weekendBookingEnabled}
-                            onCheckedChange={(checked) => handleSettingsChange('weekendBookingEnabled', checked)}
-                            />
-                            <Label htmlFor="lab-weekend">Permitir citas en fin de semana</Label>
-                        </div>
-                    </div>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                        <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><FlaskConical className="h-5 w-5"/> Gestionar Catálogo</h3>
-                        <Button onClick={handleAddNewClick} size="sm" className="bg-primary hover:bg-primary/90"><PlusCircle className="mr-2 h-4 w-4" />Agregar Estudio</Button>
-                    </div>
-                    <ScrollArea className="h-[450px] border rounded-xl bg-card shadow-inner">
-                        <Table>
-                            <TableHeader className="bg-muted/50 sticky top-0 z-10">
-                                <TableRow>
-                                    <TableHead>Código</TableHead>
-                                    <TableHead>Estudio</TableHead>
-                                    <TableHead>Sección</TableHead>
-                                    <TableHead>Estado</TableHead>
-                                    <TableHead className="text-right">Acciones</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {studies.map(study => (
-                                    <TableRow key={study.id} className="hover:bg-muted/30">
-                                        <TableCell className="font-mono text-xs font-bold">{study.code || '---'}</TableCell>
-                                        <TableCell className="font-medium text-xs uppercase">{study.name}</TableCell>
-                                        <TableCell className="text-xs uppercase text-muted-foreground">{study.section}</TableCell>
-                                        <TableCell>
-                                            <Badge variant={study.available ? 'secondary' : 'outline'} className="text-[10px] font-black uppercase">
-                                                {study.available ? 'Activo' : 'Inactivo'}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex justify-end gap-1">
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleEditClick(study)}>
-                                                    <Pencil className="h-3.5 w-3.5" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeStudy(study.id)}>
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                </Button>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                        {studies.length === 0 && (
-                            <div className="text-center py-20 text-muted-foreground italic">
-                                No hay estudios definidos. Agrega uno para comenzar.
+            <ScrollArea className="flex-1 min-h-0">
+                <CardContent className="space-y-8 p-6">
+                    <div className="space-y-6">
+                        <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><CalendarClock className="h-5 w-5"/> Citas y Horarios</h3>
+                        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className='space-y-2'>
+                                <Label htmlFor="lab-slots">Citas por día</Label>
+                                <Input
+                                id="lab-slots"
+                                type="number"
+                                value={settings.dailySlots}
+                                onChange={(e) => handleSettingsChange('dailySlots', parseInt(e.target.value,10) || 0)}
+                                />
                             </div>
-                        )}
-                    </ScrollArea>
-                </div>
-            </CardContent>
-            <CardFooter className="bg-muted/5 border-t pt-6">
-                <Button onClick={handleSave} disabled={isSaving} className="w-full h-12 font-black uppercase">
+                            <div className='space-y-2'>
+                                <Label htmlFor="lab-waitlist">Lista de Espera</Label>
+                                <Input
+                                id="lab-waitlist"
+                                type="number"
+                                value={settings.waitlistSlots || 0}
+                                onChange={(e) => handleSettingsChange('waitlistSlots', parseInt(e.target.value,10) || 0)}
+                                placeholder="Ej. 5"
+                                />
+                            </div>
+                            <div className='space-y-2'>
+                                <Label htmlFor="lab-start">Hora Inicio</Label>
+                                <Select value={settings.startTime} onValueChange={(value) => handleSettingsChange('startTime', value)}>
+                                    <SelectTrigger id="lab-start"><SelectValue /></SelectTrigger>
+                                    <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`start-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
+                                </Select>
+                            </div>
+                            <div className='space-y-2'>
+                                <Label htmlFor="lab-end">Hora Fin</Label>
+                                <Select value={settings.endTime} onValueChange={(value) => handleSettingsChange('endTime', value)}>
+                                    <SelectTrigger id="lab-end"><SelectValue /></SelectTrigger>
+                                    <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`end-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                        <div className="grid sm:grid-cols-2 gap-4">
+                            <div className='space-y-2'>
+                                <Label htmlFor="lab-break">Tiempo de Descanso</Label>
+                                <Select value={settings.breakTime || ''} onValueChange={(value) => handleSettingsChange('breakTime', value === 'none' ? '' : value)}>
+                                    <SelectTrigger id="lab-break"><SelectValue placeholder="Seleccionar descanso..." /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Sin Descanso</SelectItem>
+                                        {dynamicBreakSlots.map(slot => (
+                                            <SelectItem key={`break-${slot}`} value={slot}>{slot}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="flex items-center space-x-2 pt-8">
+                                <Switch 
+                                id="lab-weekend"
+                                checked={settings.weekendBookingEnabled}
+                                onCheckedChange={(checked) => handleSettingsChange('weekendBookingEnabled', checked)}
+                                />
+                                <Label htmlFor="lab-weekend">Permitir citas en fin de semana</Label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                            <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><FlaskConical className="h-5 w-5"/> Gestionar Catálogo</h3>
+                            <Button onClick={handleAddNewClick} size="sm" className="bg-primary hover:bg-primary/90"><PlusCircle className="mr-2 h-4 w-4" />Agregar Estudio</Button>
+                        </div>
+                        <div className="border rounded-xl bg-card shadow-inner">
+                            <ScrollArea className="h-[400px]">
+                                <Table>
+                                    <TableHeader className="bg-muted/50 sticky top-0 z-10">
+                                        <TableRow>
+                                            <TableHead>Código</TableHead>
+                                            <TableHead>Estudio</TableHead>
+                                            <TableHead>Sección</TableHead>
+                                            <TableHead>Estado</TableHead>
+                                            <TableHead className="text-right">Acciones</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {studies.map(study => (
+                                            <TableRow key={study.id} className="hover:bg-muted/30">
+                                                <TableCell className="font-mono text-xs font-bold">{study.code || '---'}</TableCell>
+                                                <TableCell className="font-medium text-xs uppercase">{study.name}</TableCell>
+                                                <TableCell className="text-xs uppercase text-muted-foreground">{study.section}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={study.available ? 'secondary' : 'outline'} className="text-[10px] font-black uppercase">
+                                                        {study.available ? 'Activo' : 'Inactivo'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="flex justify-end gap-1">
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleEditClick(study)}>
+                                                            <Pencil className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeStudy(study.id)}>
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                                {studies.length === 0 && (
+                                    <div className="text-center py-20 text-muted-foreground italic">
+                                        No hay estudios definidos. Agrega uno para comenzar.
+                                    </div>
+                                )}
+                            </ScrollArea>
+                        </div>
+                    </div>
+                </CardContent>
+            </ScrollArea>
+            <CardFooter className="bg-muted/5 border-t pt-6 shrink-0">
+                <Button onClick={handleSave} disabled={isSaving} className="w-full h-12 font-black uppercase shadow-lg">
                 {isSaving ? (
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                 ) : (

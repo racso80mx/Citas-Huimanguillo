@@ -163,7 +163,7 @@ export function VaccineSettingsManager() {
 
   const handleDialogCancel = () => {
       setIsDialogOpen(false);
-      setSelectedVaccine(null);
+      setSelectedStudy(null);
   }
 
   const removeVaccine = (id: string) => {
@@ -226,9 +226,9 @@ export function VaccineSettingsManager() {
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <div className="space-y-8">
-            <Card className="shadow-lg border-primary/10">
-            <CardHeader>
+        <div className="space-y-8 flex flex-col h-full">
+            <Card className="shadow-lg border-primary/10 flex flex-col min-h-0">
+            <CardHeader className="shrink-0">
                 <CardTitle className="flex items-center gap-2 text-primary uppercase font-black">
                 <Settings /> Parámetros Operativos
                 </CardTitle>
@@ -236,128 +236,132 @@ export function VaccineSettingsManager() {
                 Gestiona horarios y el catálogo de biológicos disponibles.
                 </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-8">
-                <div className="space-y-6">
-                    <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><CalendarClock className="h-5 w-5"/> Horarios y Cupos</h3>
-                    <div className='grid sm:grid-cols-2 lg:grid-cols-4 gap-4'>
-                        <div className='space-y-2'>
-                            <Label htmlFor="vaccine-slots">Citas por día</Label>
-                            <Input
-                            id="vaccine-slots"
-                            type="number"
-                            value={settings.dailySlots}
-                            onChange={(e) => handleSettingsChange('dailySlots', parseInt(e.target.value,10) || 0)}
-                            />
-                        </div>
-                        <div className='space-y-2'>
-                            <Label htmlFor="vaccine-waitlist">Lista de Espera</Label>
-                            <Input
-                            id="vaccine-waitlist"
-                            type="number"
-                            value={settings.waitlistSlots || 0}
-                            onChange={(e) => handleSettingsChange('waitlistSlots', parseInt(e.target.value,10) || 0)}
-                            placeholder="Ej. 5"
-                            />
-                        </div>
-                        <div className='space-y-2'>
-                            <Label htmlFor="vaccine-start">Hora Inicio</Label>
-                            <Select value={settings.startTime} onValueChange={(value) => handleSettingsChange('startTime', value)}>
-                                <SelectTrigger id="vaccine-start"><SelectValue /></SelectTrigger>
-                                <SelectContent>{timeSlots10Min.map(slot => <SelectItem key={`start-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                        <div className='space-y-2'>
-                            <Label htmlFor="vaccine-end">Hora Fin</Label>
-                            <Select value={settings.endTime} onValueChange={(value) => handleSettingsChange('endTime', value)}>
-                                <SelectTrigger id="vaccine-end"><SelectValue /></SelectTrigger>
-                                <SelectContent>{timeSlots10Min.map(slot => <SelectItem key={`end-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    <div className="grid sm:grid-cols-2 gap-4">
-                        <div className='space-y-2'>
-                            <Label htmlFor="vaccine-break">Tiempo de Descanso</Label>
-                            <Select value={settings.breakTime || ''} onValueChange={(value) => handleSettingsChange('breakTime', value === 'none' ? '' : value)}>
-                                <SelectTrigger id="vaccine-break"><SelectValue placeholder="Seleccionar descanso..." /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">Sin Descanso</SelectItem>
-                                    {dynamicBreakSlots.map(slot => (
-                                        <SelectItem key={`break-${slot}`} value={slot}>{slot}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="flex items-center space-x-2 pt-8">
-                            <Switch 
-                            id="vaccine-weekend"
-                            checked={settings.weekendBookingEnabled}
-                            onCheckedChange={(checked) => handleSettingsChange('weekendBookingEnabled', checked)}
-                            />
-                            <Label htmlFor="vaccine-weekend">Permitir citas en fin de semana</Label>
-                        </div>
-                    </div>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                        <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><ShieldPlus className="h-5 w-5"/> Catálogo de Vacunas</h3>
-                        <Button onClick={handleAddNewClick} size="sm" className="bg-primary hover:bg-primary/90"><PlusCircle className="mr-2 h-4 w-4" />Agregar Vacuna</Button>
-                    </div>
-                    <ScrollArea className="h-[400px] border rounded-xl bg-card shadow-inner">
-                        <Table>
-                            <TableHeader className="bg-muted/50 sticky top-0 z-10">
-                                <TableRow>
-                                    <TableHead>Biológico</TableHead>
-                                    <TableHead>Edad Aplicación</TableHead>
-                                    <TableHead>Estado</TableHead>
-                                    <TableHead className="text-right">Acciones</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {vaccines.map(vaccine => (
-                                    <TableRow key={vaccine.id} className="hover:bg-muted/30">
-                                        <TableCell>
-                                            <div className="flex flex-col">
-                                                <span className="font-bold text-xs uppercase leading-tight">{vaccine.name}</span>
-                                                <span className="text-[10px] text-muted-foreground line-clamp-1 italic mt-0.5">{vaccine.description}</span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="text-[10px] font-bold uppercase">{vaccine.applicationAge}</TableCell>
-                                        <TableCell>
-                                            <Badge variant={vaccine.available ? 'secondary' : 'outline'} className="text-[10px] font-black uppercase">
-                                                {vaccine.available ? 'Sí' : 'No'}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex justify-end gap-1">
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleEditClick(vaccine)}>
-                                                    <Pencil className="h-3.5 w-3.5" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeVaccine(vaccine.id)}>
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                </Button>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                        {vaccines.length === 0 && (
-                            <div className="text-center py-10 text-muted-foreground italic">
-                                No hay vacunas definidas. Agrega una para comenzar.
+            <ScrollArea className="flex-1 min-h-0">
+                <CardContent className="space-y-8 p-6">
+                    <div className="space-y-6">
+                        <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><CalendarClock className="h-5 w-5"/> Horarios y Cupos</h3>
+                        <div className='grid sm:grid-cols-2 lg:grid-cols-4 gap-4'>
+                            <div className='space-y-2'>
+                                <Label htmlFor="vaccine-slots">Citas por día</Label>
+                                <Input
+                                id="vaccine-slots"
+                                type="number"
+                                value={settings.dailySlots}
+                                onChange={(e) => handleSettingsChange('dailySlots', parseInt(e.target.value,10) || 0)}
+                                />
                             </div>
-                        )}
-                    </ScrollArea>
-                </div>
-            </CardContent>
-            <CardFooter className="bg-muted/5 border-t pt-6">
-                <Button onClick={handleSave} disabled={isSaving} className="w-full h-12 font-black uppercase">
+                            <div className='space-y-2'>
+                                <Label htmlFor="vaccine-waitlist">Lista de Espera</Label>
+                                <Input
+                                id="vaccine-waitlist"
+                                type="number"
+                                value={settings.waitlistSlots || 0}
+                                onChange={(e) => handleSettingsChange('waitlistSlots', parseInt(e.target.value,10) || 0)}
+                                placeholder="Ej. 5"
+                                />
+                            </div>
+                            <div className='space-y-2'>
+                                <Label htmlFor="vaccine-start">Hora Inicio</Label>
+                                <Select value={settings.startTime} onValueChange={(value) => handleSettingsChange('startTime', value)}>
+                                    <SelectTrigger id="vaccine-start"><SelectValue /></SelectTrigger>
+                                    <SelectContent>{timeSlots10Min.map(slot => <SelectItem key={`start-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
+                                </Select>
+                            </div>
+                            <div className='space-y-2'>
+                                <Label htmlFor="vaccine-end">Hora Fin</Label>
+                                <Select value={settings.endTime} onValueChange={(value) => handleSettingsChange('endTime', value)}>
+                                    <SelectTrigger id="vaccine-end"><SelectValue /></SelectTrigger>
+                                    <SelectContent>{timeSlots10Min.map(slot => <SelectItem key={`end-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                        <div className="grid sm:grid-cols-2 gap-4">
+                            <div className='space-y-2'>
+                                <Label htmlFor="vaccine-break">Tiempo de Descanso</Label>
+                                <Select value={settings.breakTime || ''} onValueChange={(value) => handleSettingsChange('breakTime', value === 'none' ? '' : value)}>
+                                    <SelectTrigger id="vaccine-break"><SelectValue placeholder="Seleccionar descanso..." /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Sin Descanso</SelectItem>
+                                        {dynamicBreakSlots.map(slot => (
+                                            <SelectItem key={`break-${slot}`} value={slot}>{slot}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="flex items-center space-x-2 pt-8">
+                                <Switch 
+                                id="vaccine-weekend"
+                                checked={settings.weekendBookingEnabled}
+                                onCheckedChange={(checked) => handleSettingsChange('weekendBookingEnabled', checked)}
+                                />
+                                <Label htmlFor="vaccine-weekend">Permitir citas en fin de semana</Label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                            <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><ShieldPlus className="h-5 w-5"/> Catálogo de Vacunas</h3>
+                            <Button onClick={handleAddNewClick} size="sm" className="bg-primary hover:bg-primary/90"><PlusCircle className="mr-2 h-4 w-4" />Agregar Vacuna</Button>
+                        </div>
+                        <div className="border rounded-xl bg-card shadow-inner">
+                            <ScrollArea className="h-[400px]">
+                                <Table>
+                                    <TableHeader className="bg-muted/50 sticky top-0 z-10">
+                                        <TableRow>
+                                            <TableHead>Biológico</TableHead>
+                                            <TableHead>Edad Aplicación</TableHead>
+                                            <TableHead>Estado</TableHead>
+                                            <TableHead className="text-right">Acciones</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {vaccines.map(vaccine => (
+                                            <TableRow key={vaccine.id} className="hover:bg-muted/30">
+                                                <TableCell>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-xs uppercase leading-tight">{vaccine.name}</span>
+                                                        <span className="text-[10px] text-muted-foreground line-clamp-1 italic mt-0.5">{vaccine.description}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-[10px] font-bold uppercase">{vaccine.applicationAge}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={vaccine.available ? 'secondary' : 'outline'} className="text-[10px] font-black uppercase">
+                                                        {vaccine.available ? 'Sí' : 'No'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="flex justify-end gap-1">
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleEditClick(vaccine)}>
+                                                            <Pencil className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeVaccine(vaccine.id)}>
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                                {vaccines.length === 0 && (
+                                    <div className="text-center py-10 text-muted-foreground italic">
+                                        No hay vacunas definidas. Agrega una para comenzar.
+                                    </div>
+                                )}
+                            </ScrollArea>
+                        </div>
+                    </div>
+                </CardContent>
+            </ScrollArea>
+            <CardFooter className="bg-muted/5 border-t pt-6 shrink-0">
+                <Button onClick={handleSave} disabled={isSaving} className="w-full h-12 font-black uppercase shadow-lg">
                 {isSaving ? (
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                 ) : (
-                    <Save className="mr-2 h-5 w-5" />
+                    <Save className="mr-5 h-5 w-5" />
                 )}
                 {isSaving ? 'Actualizando...' : 'GUARDAR CONFIGURACIÓN DE VACUNACIÓN'}
                 </Button>
@@ -367,7 +371,7 @@ export function VaccineSettingsManager() {
                 <VaccineEditDialog
                     vaccine={selectedVaccine}
                     onSave={handleDialogSave}
-                    onCancel={handleDialogCancel}
+                    onCancel={() => { setIsDialogOpen(false); setSelectedVaccine(null); }}
                 />
             )}
         </div>
