@@ -52,7 +52,8 @@ import {
   X,
   Trash2,
   Pencil,
-  FlaskConical
+  FlaskConical,
+  Settings
 } from 'lucide-react';
 import {
   startOfDay,
@@ -86,12 +87,17 @@ import { MedicationInventoryDialog } from './medication-inventory-dialog';
 import { AvailabilityViewerDialog } from './availability-viewer-dialog';
 import { ScheduleAppointmentDialog } from '../archivo/schedule-appointment-dialog';
 import { CreatePrescriptionDialog } from './create-prescription-dialog';
+import { LabSettingsManager } from '../admin/lab-settings-manager';
+import { XRaySettingsManager } from '../admin/x-ray-settings-manager';
+import { UltrasoundSettingsManager } from '../admin/ultrasound-settings-manager';
+import { VaccineSettingsManager } from '../admin/vaccine-settings-manager';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '../ui/scroll-area';
 import { Badge } from '../ui/badge';
 import { downloadExcel } from '@/lib/report-helpers';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 type ReportType = 'clinic' | 'x-ray' | 'ultrasound' | 'laboratorio' | 'vacunas';
 
@@ -126,6 +132,8 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
   const [isAvailabilityDialogOpen, setIsAvailabilityDialogOpen] = useState(false);
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
   const [isPrescriptionOpen, setIsPrescriptionOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  
   const [selectedPatientForPrescription, setSelectedPatientForPrescription] = useState<Patient | null>(null);
   const [editingPrescription, setEditingPrescription] = useState<Prescription | null>(null);
   
@@ -320,6 +328,9 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
             <CardDescription>Bienvenido, {entity.doctorName}. Control operativo del servicio.</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" className="text-primary border-primary/40 font-bold" onClick={() => setIsSettingsOpen(true)}>
+                <Settings className="mr-2 h-4 w-4" /> Parámetros
+            </Button>
             {isClinicReport && (
                 <>
                     <Button variant="outline" className="text-green-700 border-green-200" onClick={() => setIsNewAppointmentOpen(true)}><PlusCircle className="mr-2 h-4 w-4" /> Nueva Cita</Button>
@@ -404,7 +415,7 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
                                     <Label className="text-xs font-bold uppercase opacity-60">Buscar en historial de {entity.name}</Label>
                                     <div className="relative">
                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                        <Input placeholder="Nombre, CURP o Expediente..." className="pl-9 h-11" value={historySearchTerm} onChange={e => setHistorySearchTerm(e.target.value)} />
+                                        <Input placeholder="Nombre, CURP o Expediente..." className="pl-9 h-11" value={historySearchTerm} onChange={e => historySearchTerm(e.target.value)} />
                                     </div>
                                 </div>
                                 <Button variant="outline" className="h-11" onClick={() => setIsSearchingArchive(!isSearchingArchive)}>
@@ -587,6 +598,33 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
       <AvailabilityViewerDialog isOpen={isAvailabilityDialogOpen} onClose={() => setIsAvailabilityDialogOpen(false)} reportType={reportType} entity={entity} />
       {isNewAppointmentOpen && <ScheduleAppointmentDialog isOpen={isNewAppointmentOpen} onClose={() => setIsNewAppointmentOpen(false)} patient={{} as any} clinics={isClinicReport ? [entity] : clinics} colonias={colonias} onBookingSuccess={fetchData} isDoctorBypass={true} />}
       {isPrescriptionOpen && <CreatePrescriptionDialog isOpen={isPrescriptionOpen} onClose={() => setIsPrescriptionOpen(false)} clinic={entity} initialPatient={selectedPatientForPrescription} initialPrescription={editingPrescription} onPrescriptionCreated={fetchData} />}
+      
+      {/* DIALOGO DE CONFIGURACIÓN DE PARÁMETROS */}
+      {isSettingsOpen && (
+          <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+              <DialogContent className="sm:max-w-4xl max-h-[95vh] flex flex-col p-0">
+                  <DialogHeader className="p-6 border-b bg-muted/10">
+                      <DialogTitle className="flex items-center gap-2 text-2xl font-black uppercase">
+                          <Settings className="h-6 w-6 text-primary" /> Parámetros Operativos: {reportType.toUpperCase()}
+                      </DialogTitle>
+                      <DialogDescription>Ajusta cupos, horarios y catálogos exclusivos de este servicio.</DialogDescription>
+                  </DialogHeader>
+                  <ScrollArea className="flex-1">
+                      <div className="p-6">
+                        {reportType === 'laboratorio' && <LabSettingsManager />}
+                        {reportType === 'x-ray' && <XRaySettingsManager />}
+                        {reportType === 'ultrasound' && <UltrasoundSettingsManager />}
+                        {reportType === 'vacunas' && <VaccineSettingsManager />}
+                        {reportType === 'clinic' && (
+                            <div className="p-10 text-center text-muted-foreground border-2 border-dashed rounded-2xl italic">
+                                Para configurar los parámetros de este consultorio, dirígete al Panel Administrativo Global.
+                            </div>
+                        )}
+                      </div>
+                  </ScrollArea>
+              </DialogContent>
+          </Dialog>
+      )}
     </div>
   );
 }
@@ -627,9 +665,4 @@ function GlobalArchiveSearch({ onSelectPatient }: { onSelectPatient: (p: Patient
             </CardContent>
         </Card>
     );
-}
-
-function ReadOnlyInventory({ type }: { type: 'pharmacy' | 'warehouse' }) {
-    // This sub-component is used for read-only inventory lookup
-    return null; // Placeholder as logic is handled by dialogs
 }
