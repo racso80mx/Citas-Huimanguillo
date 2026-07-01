@@ -200,46 +200,61 @@ export async function verifyClinicPassword(id: string, p: string) {
 // --- PACIENTES (OPTIMIZADO PARA ARCHIVO) ---
 export async function getPatientsData(options?: any): Promise<Patient[]> {
   const colRef = collection(adminDb, 'patients');
-  let q: Query<DocumentData> = colRef;
 
-  // 1. Prioridad: Búsqueda exacta (Más precisa y rápida)
+  // 1. Prioridad: Búsqueda exacta por CURP o Expediente
   if (options?.searchCurp) {
-      const cleanCurp = options.searchCurp.toUpperCase().trim();
-      q = query(colRef, where('curp', '==', cleanCurp), limit(10));
-  } else if (options?.searchExpediente) {
-      const cleanExp = options.searchExpediente.trim();
-      q = query(colRef, where('expediente', '==', cleanExp), limit(10));
-  } 
-  // 2. Búsqueda por Nombre (Optimizada con prefijo)
-  else if (options?.searchName) {
-      const term = options.searchName.toUpperCase().trim();
-      // Usamos el apellido paterno como índice de búsqueda de prefijo (Firestore estándar)
-      q = query(colRef, 
-          where('paternalLastName', '>=', term), 
-          where('paternalLastName', '<=', term + '\uf8ff'),
-          limit(200)
-      );
+    const q = query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(1));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Patient[];
   }
+
+  if (options?.searchExpediente) {
+    const q = query(colRef, where('expediente', '==', options.searchExpediente.trim()), limit(10));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Patient[];
+  }
+
+  // 2. Búsqueda por Nombre Inteligente (Especial para nombres compuestos o "Nombre Apellido")
+  if (options?.searchName) {
+    const term = options.searchName.toUpperCase().trim();
+    const words = term.split(' ').filter((w: string) => w.length > 0);
+    const firstWord = words[0];
+
+    // Lanzamos dos búsquedas en paralelo para mayor probabilidad de éxito (Apellido o Nombre)
+    const q1 = query(colRef, where('paternalLastName', '>=', firstWord), where('paternalLastName', '<=', firstWord + '\uf8ff'), limit(150));
+    const q2 = query(colRef, where('name', '>=', firstWord), where('name', '<=', firstWord + '\uf8ff'), limit(150));
+    
+    const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+    
+    const resultsMap = new Map<string, Patient>();
+    [...snap1.docs, ...snap2.docs].forEach(d => {
+        const data = { ...serializeData(d.data()), id: d.id } as Patient;
+        resultsMap.set(d.id, data);
+    });
+
+    let results = Array.from(resultsMap.values());
+
+    // Filtrado en memoria para asegurar que TODAS las palabras ingresadas estén en el nombre completo
+    if (words.length > 1) {
+        results = results.filter(p => {
+            const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
+            return words.every((word: string) => fullName.includes(word));
+        });
+    }
+
+    return results.sort((a,b) => (a.paternalLastName || '').localeCompare(b.paternalLastName || ''));
+  }
+
   // 3. Listado por estatus o general
-  else if (options?.status && options.status !== 'Total') {
-      q = query(colRef, where('status', '==', options.status), limit(1000));
+  let q: Query<DocumentData> = colRef;
+  if (options?.status && options.status !== 'Total') {
+      q = query(colRef, where('status', '==', options.status), limit(options?.limitNum || 1000));
   } else {
       q = query(colRef, limit(options?.limitNum || 1000));
   }
-
-  const snap = await getDocs(q);
-  let results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Patient[];
   
-  // Refinamiento en memoria si la búsqueda por nombre fue por prefijo pero el usuario escribió más palabras
-  if (options?.searchName && options.searchName.includes(' ')) {
-      const terms = options.searchName.toUpperCase().split(' ').filter((t: string) => t.length > 0);
-      results = results.filter(p => {
-          const full = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
-          return terms.every(t => full.includes(t));
-      });
-  }
-
-  return results.sort((a,b) => (a.paternalLastName || '').localeCompare(b.paternalLastName || ''));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Patient[];
 }
 
 export async function getPatientCounts(): Promise<ArchiveCounts> {
