@@ -233,7 +233,7 @@ export function LabSettingsManager() {
 
   if (isLoading || !settings) {
     return (
-      <Card className="shadow-lg">
+      <Card className="shadow-lg border-primary/10">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings /> Configuración de Laboratorio
@@ -247,18 +247,17 @@ export function LabSettingsManager() {
   }
 
   return (
-    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <div className="space-y-8 h-full flex flex-col">
-            <Card className="shadow-lg border-primary/10 flex flex-col min-h-0">
-            <CardHeader className="shrink-0">
-                <CardTitle className="flex items-center gap-2">
-                <Settings /> Parámetros de Operación
-                </CardTitle>
-                <CardDescription>
-                Gestiona los horarios y el catálogo de estudios.
-                </CardDescription>
-            </CardHeader>
-            <ScrollArea className="flex-1 min-h-0">
+    <>
+        <div className="space-y-8">
+            <Card className="shadow-lg border-primary/10">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                    <Settings /> Parámetros de Operación
+                    </CardTitle>
+                    <CardDescription>
+                    Gestiona los horarios y el catálogo de estudios.
+                    </CardDescription>
+                </CardHeader>
                 <CardContent className="space-y-8 p-6">
                     <div className="space-y-6">
                         <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><CalendarClock className="h-5 w-5"/> Citas y Horarios</h3>
@@ -328,7 +327,7 @@ export function LabSettingsManager() {
                             <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><FlaskConical className="h-5 w-5"/> Gestionar Catálogo</h3>
                             <Button onClick={handleAddNewClick} size="sm" className="bg-primary hover:bg-primary/90"><PlusCircle className="mr-2 h-4 w-4" />Agregar Estudio</Button>
                         </div>
-                        <div className="border rounded-xl bg-card shadow-inner">
+                        <div className="border rounded-xl bg-card shadow-inner overflow-hidden">
                             <ScrollArea className="h-[400px]">
                                 <Table>
                                     <TableHeader className="bg-muted/50 sticky top-0 z-10">
@@ -374,18 +373,20 @@ export function LabSettingsManager() {
                         </div>
                     </div>
                 </CardContent>
-            </ScrollArea>
-            <CardFooter className="bg-muted/5 border-t pt-6 shrink-0">
-                <Button onClick={handleSave} disabled={isSaving} className="w-full h-12 font-black uppercase shadow-lg">
-                {isSaving ? (
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                ) : (
-                    <Save className="mr-2 h-5 w-5" />
-                )}
-                {isSaving ? 'Actualizando...' : 'SINCRONIZAR CATÁLOGO DE LABORATORIO'}
-                </Button>
-            </CardFooter>
+                <CardFooter className="bg-muted/5 border-t pt-6">
+                    <Button onClick={handleSave} disabled={isSaving} className="w-full h-12 font-black uppercase shadow-lg">
+                    {isSaving ? (
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    ) : (
+                        <Save className="mr-2 h-5 w-5" />
+                    )}
+                    {isSaving ? 'Actualizando...' : 'SINCRONIZAR CATÁLOGO DE LABORATORIO'}
+                    </Button>
+                </CardFooter>
             </Card>
+        </div>
+
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             {selectedStudy && (
                 <LabStudyEditDialog
                     study={selectedStudy}
@@ -393,7 +394,7 @@ export function LabSettingsManager() {
                     onCancel={handleDialogCancel}
                 />
             )}
-        </div>
-    </Dialog>
+        </Dialog>
+    </>
   );
 }

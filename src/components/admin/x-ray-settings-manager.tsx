@@ -201,7 +201,7 @@ export function XRaySettingsManager() {
 
   if (isLoading || !settings) {
     return (
-      <Card className="shadow-lg">
+      <Card className="shadow-lg border-primary/10">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings /> Configuración de Rayos X
@@ -215,18 +215,17 @@ export function XRaySettingsManager() {
   }
 
   return (
-    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <div className="space-y-8 flex flex-col h-full">
-            <Card className="shadow-lg border-primary/10 flex flex-col min-h-0">
-            <CardHeader className="shrink-0">
-                <CardTitle className="flex items-center gap-2 text-primary uppercase font-black">
-                <Settings /> Parámetros Operativos
-                </CardTitle>
-                <CardDescription>
-                Gestiona horarios y el catálogo de estudios de radiografía.
-                </CardDescription>
-            </CardHeader>
-            <ScrollArea className="flex-1 min-h-0">
+    <>
+        <div className="space-y-8">
+            <Card className="shadow-lg border-primary/10">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-primary uppercase font-black">
+                    <Settings /> Parámetros Operativos
+                    </CardTitle>
+                    <CardDescription>
+                    Gestiona horarios y el catálogo de estudios de radiografía.
+                    </CardDescription>
+                </CardHeader>
                 <CardContent className="space-y-8 p-6">
                     <div className="space-y-6">
                         <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><CalendarClock className="h-5 w-5"/> Horarios y Cupos</h3>
@@ -296,7 +295,7 @@ export function XRaySettingsManager() {
                             <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><Stethoscope className="h-5 w-5"/> Catálogo de Estudios</h3>
                             <Button onClick={handleAddNewClick} size="sm" className="bg-primary hover:bg-primary/90"><PlusCircle className="mr-2 h-4 w-4" />Agregar Estudio</Button>
                         </div>
-                        <div className="border rounded-xl bg-card shadow-inner">
+                        <div className="border rounded-xl bg-card shadow-inner overflow-hidden">
                             <ScrollArea className="h-[400px]">
                                 <Table>
                                     <TableHeader className="bg-muted/50 sticky top-0 z-10">
@@ -343,18 +342,19 @@ export function XRaySettingsManager() {
                         </div>
                     </div>
                 </CardContent>
-            </ScrollArea>
-            <CardFooter className="bg-muted/5 border-t pt-6 shrink-0">
-                <Button onClick={handleSave} disabled={isSaving} className="w-full h-12 font-black uppercase shadow-lg">
-                {isSaving ? (
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                ) : (
-                    <Save className="mr-2 h-5 w-5" />
-                )}
-                {isSaving ? 'Actualizando...' : 'GUARDAR CONFIGURACIÓN DE RAYOS X'}
-                </Button>
-            </CardFooter>
+                <CardFooter className="bg-muted/5 border-t pt-6">
+                    <Button onClick={handleSave} disabled={isSaving} className="w-full h-12 font-black uppercase shadow-lg">
+                    {isSaving ? (
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    ) : (
+                        <Save className="mr-2 h-5 w-5" />
+                    )}
+                    {isSaving ? 'Actualizando...' : 'GUARDAR CONFIGURACIÓN DE RAYOS X'}
+                    </Button>
+                </CardFooter>
             </Card>
+        </div>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             {selectedStudy && (
                 <XRayStudyEditDialog
                     study={selectedStudy}
@@ -362,7 +362,7 @@ export function XRaySettingsManager() {
                     onCancel={handleDialogCancel}
                 />
             )}
-        </div>
-    </Dialog>
+        </Dialog>
+    </>
   );
 }
