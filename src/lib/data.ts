@@ -17,7 +17,9 @@ import {
   getCountFromServer,
   DocumentData,
   Query,
-  orderBy
+  orderBy,
+  startAt,
+  endAt
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -195,20 +197,48 @@ export async function verifyClinicPassword(id: string, p: string) {
     return { success: pass === p, message: pass !== p ? 'Contraseña incorrecta' : undefined };
 }
 
-// --- PACIENTES ---
+// --- PACIENTES (OPTIMIZADO PARA ARCHIVO) ---
 export async function getPatientsData(options?: any): Promise<Patient[]> {
   const colRef = collection(adminDb, 'patients');
   let q: Query<DocumentData> = colRef;
-  if (options?.searchCurp) q = query(colRef, where('curp', '==', options.searchCurp.toUpperCase()), limit(50));
-  else if (options?.searchExpediente) q = query(colRef, where('expediente', '==', options.searchExpediente), limit(50));
-  else if (options?.status && options.status !== 'Total') q = query(colRef, where('status', '==', options.status), limit(1000));
-  else q = query(colRef, limit(options?.limitNum || 2000));
+
+  // 1. Prioridad: Búsqueda exacta (Más precisa y rápida)
+  if (options?.searchCurp) {
+      const cleanCurp = options.searchCurp.toUpperCase().trim();
+      q = query(colRef, where('curp', '==', cleanCurp), limit(10));
+  } else if (options?.searchExpediente) {
+      const cleanExp = options.searchExpediente.trim();
+      q = query(colRef, where('expediente', '==', cleanExp), limit(10));
+  } 
+  // 2. Búsqueda por Nombre (Optimizada con prefijo)
+  else if (options?.searchName) {
+      const term = options.searchName.toUpperCase().trim();
+      // Usamos el apellido paterno como índice de búsqueda de prefijo (Firestore estándar)
+      q = query(colRef, 
+          where('paternalLastName', '>=', term), 
+          where('paternalLastName', '<=', term + '\uf8ff'),
+          limit(200)
+      );
+  }
+  // 3. Listado por estatus o general
+  else if (options?.status && options.status !== 'Total') {
+      q = query(colRef, where('status', '==', options.status), limit(1000));
+  } else {
+      q = query(colRef, limit(options?.limitNum || 1000));
+  }
+
   const snap = await getDocs(q);
   let results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Patient[];
-  if (options?.searchName) {
-      const t = options.searchName.toUpperCase();
-      results = results.filter(p => `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase().includes(t));
+  
+  // Refinamiento en memoria si la búsqueda por nombre fue por prefijo pero el usuario escribió más palabras
+  if (options?.searchName && options.searchName.includes(' ')) {
+      const terms = options.searchName.toUpperCase().split(' ').filter((t: string) => t.length > 0);
+      results = results.filter(p => {
+          const full = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
+          return terms.every(t => full.includes(t));
+      });
   }
+
   return results.sort((a,b) => (a.paternalLastName || '').localeCompare(b.paternalLastName || ''));
 }
 
@@ -266,9 +296,9 @@ export async function bulkInsertPatients(patients: any[]) {
         if (!curp) continue;
         const patientData = {
             expediente: String(p['No.Expediente'] || p.expediente || ''),
-            name: String(p.Nombre || p.name || '').toUpperCase(),
-            paternalLastName: String(p.Apaterno || p.paternalLastName || '').toUpperCase(),
-            maternalLastName: String(p.Amaterno || p.maternalLastName || '').toUpperCase(),
+            name: String(p.Nombre || p.name || '').toUpperCase().trim(),
+            paternalLastName: String(p.Apaterno || p.paternalLastName || '').toUpperCase().trim(),
+            maternalLastName: String(p.Amaterno || p.maternalLastName || '').toUpperCase().trim(),
             curp: curp,
             birthDate: String(p.FNacimiento || p.birthDate || ''),
             age: Number(p.Edad || p.age || 0),

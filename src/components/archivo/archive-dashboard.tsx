@@ -111,7 +111,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
   const [patients, setPatients] = useState<Patient[]>([]);
   const [counts, setCounts] = useState<ArchiveCounts>({ total: 0, vigente: 0, bajaTemporal: 0, bajaDefinitiva: 0 });
   
-  // Search fields for patients
+  // Search fields for patients (Optimizado)
   const [searchName, setSearchName] = useState('');
   const [searchCurp, setSearchCurp] = useState('');
   const [searchExpediente, setSearchExpediente] = useState('');
@@ -153,12 +153,13 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
     setCurrentPage(1); 
     
     try {
+      // Configuramos las opciones de búsqueda para que el servidor use índices directos
       const searchOptions = { 
           status: statusFilter, 
           searchName: searchName.trim() || undefined,
           searchCurp: searchCurp.trim() || undefined,
           searchExpediente: searchExpediente.trim() || undefined,
-          limitNum: (searchName || searchCurp || searchExpediente) ? 200 : 2000 
+          limitNum: (searchName || searchCurp || searchExpediente) ? 200 : 1000 
       };
 
       const [patientsData, countsData, clinicsData, serviceTypesData, appointmentsData, coloniasData] = await Promise.all([
