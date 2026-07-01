@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect, useTransition, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
@@ -36,6 +37,7 @@ import {
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { timeSlots30Min } from '@/lib/time-slots';
+import { ScrollArea } from '../ui/scroll-area';
 
 function LabStudyEditDialog({ study, onSave, onCancel }: { study: LabStudy, onSave: (study: LabStudy) => void, onCancel: () => void }) {
     const [editedStudy, setEditedStudy] = useState<LabStudy>(study);
@@ -147,7 +149,7 @@ export function LabSettingsManager() {
         if (current >= end || isNaN(current.getTime())) return [];
         while (current < end) {
             slots.push(current.toTimeString().substring(0, 5));
-            current = new Date(current.getTime() + 30 * 60000); // Lab assumes 30 min distribution for break selection
+            current = new Date(current.getTime() + 30 * 60000); 
         }
     } catch (e) { return []; }
     return slots;
@@ -216,7 +218,7 @@ export function LabSettingsManager() {
       if (settingsResult.success && studiesResult.success) {
         toast({
           title: 'Configuración Guardada',
-          description: 'La configuración del laboratorio ha sido actualizada. Se requiere un reinicio del servidor para que los cambios se reflejen.',
+          description: 'La configuración del laboratorio ha sido actualizada exitosamente.',
           className: 'bg-accent text-accent-foreground',
           duration: 8000,
         });
@@ -238,9 +240,6 @@ export function LabSettingsManager() {
           <CardTitle className="flex items-center gap-2">
             <Settings /> Configuración de Laboratorio
           </CardTitle>
-          <CardDescription>
-            Gestiona los horarios y la disponibilidad de los estudios.
-          </CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center items-center h-24">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -251,160 +250,148 @@ export function LabSettingsManager() {
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <Card className="shadow-lg">
-        <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-            <Settings /> Configuración de Laboratorio
-            </CardTitle>
-            <CardDescription>
-            Gestiona los horarios y el catálogo de estudios.
-            </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-8">
-            <div className="space-y-6">
-                <h3 className="font-semibold text-lg flex items-center gap-2"><CalendarClock/> Citas y Horarios</h3>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className='space-y-2'>
-                        <Label htmlFor="lab-slots">Citas por día</Label>
-                        <Input
-                        id="lab-slots"
-                        type="number"
-                        value={settings.dailySlots}
-                        onChange={(e) => handleSettingsChange('dailySlots', parseInt(e.target.value,10) || 0)}
-                        />
+        <div className="space-y-8">
+            <Card className="shadow-lg border-primary/10">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                <Settings /> Parámetros de Operación
+                </CardTitle>
+                <CardDescription>
+                Gestiona los horarios y el catálogo de estudios.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+                <div className="space-y-6">
+                    <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><CalendarClock className="h-5 w-5"/> Citas y Horarios</h3>
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className='space-y-2'>
+                            <Label htmlFor="lab-slots">Citas por día</Label>
+                            <Input
+                            id="lab-slots"
+                            type="number"
+                            value={settings.dailySlots}
+                            onChange={(e) => handleSettingsChange('dailySlots', parseInt(e.target.value,10) || 0)}
+                            />
+                        </div>
+                        <div className='space-y-2'>
+                            <Label htmlFor="lab-waitlist">Lista de Espera</Label>
+                            <Input
+                            id="lab-waitlist"
+                            type="number"
+                            value={settings.waitlistSlots || 0}
+                            onChange={(e) => handleSettingsChange('waitlistSlots', parseInt(e.target.value,10) || 0)}
+                            placeholder="Ej. 5"
+                            />
+                        </div>
+                        <div className='space-y-2'>
+                            <Label htmlFor="lab-start">Hora Inicio</Label>
+                            <Select value={settings.startTime} onValueChange={(value) => handleSettingsChange('startTime', value)}>
+                                <SelectTrigger id="lab-start"><SelectValue /></SelectTrigger>
+                                <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`start-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                        <div className='space-y-2'>
+                            <Label htmlFor="lab-end">Hora Fin</Label>
+                            <Select value={settings.endTime} onValueChange={(value) => handleSettingsChange('endTime', value)}>
+                                <SelectTrigger id="lab-end"><SelectValue /></SelectTrigger>
+                                <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`end-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
                     </div>
-                    <div className='space-y-2'>
-                        <Label htmlFor="lab-waitlist">Citas Lista de Espera</Label>
-                        <Input
-                        id="lab-waitlist"
-                        type="number"
-                        value={settings.waitlistSlots || 0}
-                        onChange={(e) => handleSettingsChange('waitlistSlots', parseInt(e.target.value,10) || 0)}
-                        placeholder="Ej. 5"
-                        />
-                    </div>
-                    <div className='space-y-2'>
-                        <Label htmlFor="lab-start">Hora Inicio</Label>
-                        <Select value={settings.startTime} onValueChange={(value) => handleSettingsChange('startTime', value)}>
-                            <SelectTrigger id="lab-start"><SelectValue /></SelectTrigger>
-                            <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`start-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
-                        </Select>
-                    </div>
-                    <div className='space-y-2'>
-                        <Label htmlFor="lab-end">Hora Fin</Label>
-                        <Select value={settings.endTime} onValueChange={(value) => handleSettingsChange('endTime', value)}>
-                            <SelectTrigger id="lab-end"><SelectValue /></SelectTrigger>
-                            <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`end-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
-                        </Select>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                        <div className='space-y-2'>
+                            <Label htmlFor="lab-break">Tiempo de Descanso</Label>
+                            <Select value={settings.breakTime || ''} onValueChange={(value) => handleSettingsChange('breakTime', value === 'none' ? '' : value)}>
+                                <SelectTrigger id="lab-break"><SelectValue placeholder="Seleccionar descanso..." /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">Sin Descanso</SelectItem>
+                                    {dynamicBreakSlots.map(slot => (
+                                        <SelectItem key={`break-${slot}`} value={slot}>{slot}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex items-center space-x-2 pt-8">
+                            <Switch 
+                            id="lab-weekend"
+                            checked={settings.weekendBookingEnabled}
+                            onCheckedChange={(checked) => handleSettingsChange('weekendBookingEnabled', checked)}
+                            />
+                            <Label htmlFor="lab-weekend">Permitir citas en fin de semana</Label>
+                        </div>
                     </div>
                 </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                    <div className='space-y-2'>
-                        <Label htmlFor="lab-break">Tiempo de Descanso</Label>
-                        <Select value={settings.breakTime || ''} onValueChange={(value) => handleSettingsChange('breakTime', value === 'none' ? '' : value)}>
-                            <SelectTrigger id="lab-break"><SelectValue placeholder="Seleccionar descanso..." /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="none">Sin Descanso</SelectItem>
-                                {dynamicBreakSlots.map(slot => (
-                                    <SelectItem key={`break-${slot}`} value={slot}>{slot}</SelectItem>
+
+                <Separator />
+
+                <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><FlaskConical className="h-5 w-5"/> Gestionar Catálogo</h3>
+                        <Button onClick={handleAddNewClick} size="sm" className="bg-primary hover:bg-primary/90"><PlusCircle className="mr-2 h-4 w-4" />Agregar Estudio</Button>
+                    </div>
+                    <ScrollArea className="h-[450px] border rounded-xl bg-card shadow-inner">
+                        <Table>
+                            <TableHeader className="bg-muted/50 sticky top-0 z-10">
+                                <TableRow>
+                                    <TableHead>Código</TableHead>
+                                    <TableHead>Estudio</TableHead>
+                                    <TableHead>Sección</TableHead>
+                                    <TableHead>Estado</TableHead>
+                                    <TableHead className="text-right">Acciones</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {studies.map(study => (
+                                    <TableRow key={study.id} className="hover:bg-muted/30">
+                                        <TableCell className="font-mono text-xs font-bold">{study.code || '---'}</TableCell>
+                                        <TableCell className="font-medium text-xs uppercase">{study.name}</TableCell>
+                                        <TableCell className="text-xs uppercase text-muted-foreground">{study.section}</TableCell>
+                                        <TableCell>
+                                            <Badge variant={study.available ? 'secondary' : 'outline'} className="text-[10px] font-black uppercase">
+                                                {study.available ? 'Activo' : 'Inactivo'}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <div className="flex justify-end gap-1">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleEditClick(study)}>
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeStudy(study.id)}>
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
                                 ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="flex items-center space-x-2 pt-8">
-                        <Switch 
-                        id="lab-weekend"
-                        checked={settings.weekendBookingEnabled}
-                        onCheckedChange={(checked) => handleSettingsChange('weekendBookingEnabled', checked)}
-                        />
-                        <Label htmlFor="lab-weekend">Permitir citas en fin de semana</Label>
-                    </div>
+                            </TableBody>
+                        </Table>
+                        {studies.length === 0 && (
+                            <div className="text-center py-20 text-muted-foreground italic">
+                                No hay estudios definidos. Agrega uno para comenzar.
+                            </div>
+                        )}
+                    </ScrollArea>
                 </div>
-                <div className="space-y-2">
-                    <Label htmlFor="lab-password">Contraseña para Reportes</Label>
-                    <div className="relative">
-                        <Input
-                            id="lab-password"
-                            type={showPassword ? 'text' : 'password'}
-                            value={settings.password || ''}
-                            onChange={(e) => handleSettingsChange('password', e.target.value)}
-                            placeholder="Contraseña para reportes de Laboratorio"
-                        />
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute inset-y-0 right-0 h-full px-3"
-                            onClick={() => setShowPassword(!showPassword)}
-                        >
-                            {showPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                            ) : (
-                            <Eye className="h-4 w-4" />
-                            )}
-                        </Button>
-                    </div>
-                </div>
-            </div>
-            <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                    <h3 className="font-semibold text-lg flex items-center gap-2"><FlaskConical/> Gestionar Estudios</h3>
-                    <Button onClick={handleAddNewClick}><PlusCircle className="mr-2 h-4 w-4" />Agregar Estudio</Button>
-                </div>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Código</TableHead>
-                            <TableHead>Nombre del Estudio</TableHead>
-                            <TableHead>Sección</TableHead>
-                            <TableHead>Disponible</TableHead>
-                            <TableHead className="text-right">Acciones</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {studies.map(study => (
-                            <TableRow key={study.id}>
-                                <TableCell className="font-mono text-xs">{study.code || '---'}</TableCell>
-                                <TableCell className="font-medium">{study.name}</TableCell>
-                                <TableCell>{study.section}</TableCell>
-                                <TableCell>{study.available ? 'Sí' : 'No'}</TableCell>
-                                <TableCell className="text-right">
-                                    <Button variant="ghost" size="icon" onClick={() => handleEditClick(study)}>
-                                        <Pencil className="h-4 w-4" />
-                                    </Button>
-                                    <Button variant="ghost" size="icon" onClick={() => removeStudy(study.id)}>
-                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-                 {studies.length === 0 && (
-                    <div className="text-center py-10 text-muted-foreground">
-                        No hay estudios definidos. Agrega uno para comenzar.
-                    </div>
+            </CardContent>
+            <CardFooter className="bg-muted/5 border-t pt-6">
+                <Button onClick={handleSave} disabled={isSaving} className="w-full h-12 font-black uppercase">
+                {isSaving ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : (
+                    <Save className="mr-2 h-5 w-5" />
                 )}
-            </div>
-        </CardContent>
-        <CardFooter>
-            <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-                <Save className="mr-2 h-4 w-4" />
+                {isSaving ? 'Actualizando...' : 'SINCRONIZAR CATÁLOGO DE LABORATORIO'}
+                </Button>
+            </CardFooter>
+            </Card>
+            {selectedStudy && (
+                <LabStudyEditDialog
+                    study={selectedStudy}
+                    onSave={handleDialogSave}
+                    onCancel={handleDialogCancel}
+                />
             )}
-            {isSaving ? 'Guardando...' : 'Guardar Configuración de Laboratorio'}
-            </Button>
-        </CardFooter>
-        </Card>
-        {selectedStudy && (
-            <LabStudyEditDialog
-                study={selectedStudy}
-                onSave={handleDialogSave}
-                onCancel={handleDialogCancel}
-            />
-        )}
+        </div>
     </Dialog>
   );
 }

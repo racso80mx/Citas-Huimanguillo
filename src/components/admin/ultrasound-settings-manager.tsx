@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect, useTransition, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
@@ -22,6 +23,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { timeSlots30Min } from '@/lib/time-slots';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { ScrollArea } from '../ui/scroll-area';
+import { Badge } from '../ui/badge';
 
 function UltrasoundStudyEditDialog({ study, onSave, onCancel }: { study: UltrasoundStudy, onSave: (study: UltrasoundStudy) => void, onCancel: () => void }) {
     const [editedStudy, setEditedStudy] = useState<UltrasoundStudy>(study);
@@ -46,7 +49,7 @@ function UltrasoundStudyEditDialog({ study, onSave, onCancel }: { study: Ultraso
                 <div className='grid grid-cols-2 gap-4 items-center'>
                     <div className='space-y-2'>
                         <Label htmlFor={`us-name-${editedStudy.id}`}>Nombre del Estudio</Label>
-                        <Input id={`us-name-${editedStudy.id}`} value={editedStudy.name} onChange={(e) => handleFieldChange('name', e.target.value)} placeholder="Ej. Ultrasonido Abdominal"/>
+                        <Input id={`us-name-${editedStudy.id}`} value={editedStudy.name} onChange={(e) => handleFieldChange('name', e.target.value.toUpperCase())} placeholder="Ej. Ultrasonido Abdominal"/>
                     </div>
                     <div className="flex items-center space-x-2 pt-6">
                         <Switch id={`us-available-${editedStudy.id}`} checked={editedStudy.available} onCheckedChange={(checked) => handleFieldChange('available', checked)} />
@@ -116,7 +119,7 @@ export function UltrasoundSettingsManager() {
         if (current >= end || isNaN(current.getTime())) return [];
         while (current < end) {
             slots.push(current.toTimeString().substring(0, 5));
-            current = new Date(current.getTime() + 30 * 60000); // US uses 30 min distribution
+            current = new Date(current.getTime() + 30 * 60000); 
         }
     } catch (e) { return []; }
     return slots;
@@ -184,7 +187,7 @@ export function UltrasoundSettingsManager() {
       if (settingsResult.success && studiesResult.success) {
         toast({
           title: 'Configuración Guardada',
-          description: 'La configuración de Ultrasonido ha sido actualizada. Se requiere un reinicio del servidor para que los cambios se reflejen.',
+          description: 'La configuración de Ultrasonido ha sido actualizada exitosamente.',
           className: 'bg-accent text-accent-foreground',
           duration: 8000,
         });
@@ -206,9 +209,6 @@ export function UltrasoundSettingsManager() {
           <CardTitle className="flex items-center gap-2">
             <Settings /> Configuración de Ultrasonido
           </CardTitle>
-          <CardDescription>
-            Gestiona los horarios y la disponibilidad de los estudios.
-          </CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center items-center h-24">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -219,156 +219,149 @@ export function UltrasoundSettingsManager() {
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <Card className="shadow-lg">
-        <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-            <Settings /> Configuración de Ultrasonido
-            </CardTitle>
-            <CardDescription>
-            Gestiona los horarios, la disponibilidad y el catálogo de estudios.
-            </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-8">
-            <div className="space-y-6">
-                <h3 className="font-semibold text-lg flex items-center gap-2"><CalendarClock/> Horarios y Citas</h3>
-                <div className='grid sm:grid-cols-2 lg:grid-cols-4 gap-4'>
-                    <div className='space-y-2'>
-                        <Label htmlFor="ultrasound-slots">Citas por día</Label>
-                        <Input
-                        id="ultrasound-slots"
-                        type="number"
-                        value={settings.dailySlots}
-                        onChange={(e) => handleSettingsChange('dailySlots', parseInt(e.target.value,10) || 0)}
-                        />
+        <div className="space-y-8">
+            <Card className="shadow-lg border-primary/10">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-primary uppercase font-black">
+                <Settings /> Parámetros Operativos
+                </CardTitle>
+                <CardDescription>
+                Gestiona horarios y el catálogo de estudios de ultrasonografía.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+                <div className="space-y-6">
+                    <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><CalendarClock className="h-5 w-5"/> Horarios y Cupos</h3>
+                    <div className='grid sm:grid-cols-2 lg:grid-cols-4 gap-4'>
+                        <div className='space-y-2'>
+                            <Label htmlFor="ultrasound-slots">Citas por día</Label>
+                            <Input
+                            id="ultrasound-slots"
+                            type="number"
+                            value={settings.dailySlots}
+                            onChange={(e) => handleSettingsChange('dailySlots', parseInt(e.target.value,10) || 0)}
+                            />
+                        </div>
+                        <div className='space-y-2'>
+                            <Label htmlFor="ultrasound-waitlist">Lista de Espera</Label>
+                            <Input
+                            id="ultrasound-waitlist"
+                            type="number"
+                            value={settings.waitlistSlots || 0}
+                            onChange={(e) => handleSettingsChange('waitlistSlots', parseInt(e.target.value,10) || 0)}
+                            placeholder="Ej. 5"
+                            />
+                        </div>
+                        <div className='space-y-2'>
+                            <Label htmlFor="ultrasound-start">Hora Inicio</Label>
+                            <Select value={settings.startTime} onValueChange={(value) => handleSettingsChange('startTime', value)}>
+                                <SelectTrigger id="ultrasound-start"><SelectValue /></SelectTrigger>
+                                <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`start-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                        <div className='space-y-2'>
+                            <Label htmlFor="ultrasound-end">Hora Fin</Label>
+                            <Select value={settings.endTime} onValueChange={(value) => handleSettingsChange('endTime', value)}>
+                                <SelectTrigger id="ultrasound-end"><SelectValue /></SelectTrigger>
+                                <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`end-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
                     </div>
-                    <div className='space-y-2'>
-                        <Label htmlFor="ultrasound-waitlist">Citas Lista de Espera</Label>
-                        <Input
-                        id="ultrasound-waitlist"
-                        type="number"
-                        value={settings.waitlistSlots || 0}
-                        onChange={(e) => handleSettingsChange('waitlistSlots', parseInt(e.target.value,10) || 0)}
-                        placeholder="Ej. 5"
-                        />
-                    </div>
-                    <div className='space-y-2'>
-                        <Label htmlFor="ultrasound-start">Hora Inicio</Label>
-                        <Select value={settings.startTime} onValueChange={(value) => handleSettingsChange('startTime', value)}>
-                            <SelectTrigger id="ultrasound-start"><SelectValue /></SelectTrigger>
-                            <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`start-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
-                        </Select>
-                    </div>
-                    <div className='space-y-2'>
-                        <Label htmlFor="ultrasound-end">Hora Fin</Label>
-                        <Select value={settings.endTime} onValueChange={(value) => handleSettingsChange('endTime', value)}>
-                            <SelectTrigger id="ultrasound-end"><SelectValue /></SelectTrigger>
-                            <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`end-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
-                        </Select>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                        <div className='space-y-2'>
+                            <Label htmlFor="ultrasound-break">Tiempo de Descanso</Label>
+                            <Select value={settings.breakTime || ''} onValueChange={(value) => handleSettingsChange('breakTime', value === 'none' ? '' : value)}>
+                                <SelectTrigger id="ultrasound-break"><SelectValue placeholder="Seleccionar descanso..." /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">Sin Descanso</SelectItem>
+                                    {dynamicBreakSlots.map(slot => (
+                                        <SelectItem key={`break-${slot}`} value={slot}>{slot}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex items-center space-x-2 pt-8">
+                            <Switch 
+                            id="ultrasound-weekend"
+                            checked={settings.weekendBookingEnabled}
+                            onCheckedChange={(checked) => handleSettingsChange('weekendBookingEnabled', checked)}
+                            />
+                            <Label htmlFor="ultrasound-weekend">Permitir citas en fin de semana</Label>
+                        </div>
                     </div>
                 </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                    <div className='space-y-2'>
-                        <Label htmlFor="ultrasound-break">Tiempo de Descanso</Label>
-                        <Select value={settings.breakTime || ''} onValueChange={(value) => handleSettingsChange('breakTime', value === 'none' ? '' : value)}>
-                            <SelectTrigger id="ultrasound-break"><SelectValue placeholder="Seleccionar descanso..." /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="none">Sin Descanso</SelectItem>
-                                {dynamicBreakSlots.map(slot => (
-                                    <SelectItem key={`break-${slot}`} value={slot}>{slot}</SelectItem>
+
+                <Separator />
+
+                <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><Waves className="h-5 w-5"/> Catálogo de Estudios</h3>
+                        <Button onClick={handleAddNewClick} size="sm" className="bg-primary hover:bg-primary/90"><PlusCircle className="mr-2 h-4 w-4" />Agregar Estudio</Button>
+                    </div>
+                    <ScrollArea className="h-[400px] border rounded-xl bg-card shadow-inner">
+                        <Table>
+                            <TableHeader className="bg-muted/50 sticky top-0 z-10">
+                                <TableRow>
+                                    <TableHead>Estudio de Ultrasonido</TableHead>
+                                    <TableHead>Estado</TableHead>
+                                    <TableHead className="text-right">Acciones</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {studies.map(study => (
+                                    <TableRow key={study.id} className="hover:bg-muted/30">
+                                        <TableCell>
+                                            <div className="flex flex-col">
+                                                <span className="font-bold text-xs uppercase leading-tight">{study.name}</span>
+                                                <span className="text-[10px] text-muted-foreground line-clamp-1 italic mt-0.5">{study.indications}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={study.available ? 'secondary' : 'outline'} className="text-[10px] font-black uppercase">
+                                                {study.available ? 'Activo' : 'Inactivo'}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <div className="flex justify-end gap-1">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleEditClick(study)}>
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeStudy(study.id)}>
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
                                 ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="flex items-center space-x-2 pt-8">
-                        <Switch 
-                        id="ultrasound-weekend"
-                        checked={settings.weekendBookingEnabled}
-                        onCheckedChange={(checked) => handleSettingsChange('weekendBookingEnabled', checked)}
-                        />
-                        <Label htmlFor="ultrasound-weekend">Permitir citas en fin de semana</Label>
-                    </div>
+                            </TableBody>
+                        </Table>
+                        {studies.length === 0 && (
+                            <div className="text-center py-20 text-muted-foreground italic">
+                                No hay estudios definidos. Agrega uno para comenzar.
+                            </div>
+                        )}
+                    </ScrollArea>
                 </div>
-                <div className="space-y-2">
-                    <Label htmlFor="ultrasound-password">Contraseña para Reportes</Label>
-                    <div className="relative">
-                        <Input
-                            id="ultrasound-password"
-                            type={showPassword ? 'text' : 'password'}
-                            value={settings.password || ''}
-                            onChange={(e) => handleSettingsChange('password', e.target.value)}
-                            placeholder="Contraseña para reportes de Ultrasonido"
-                        />
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute inset-y-0 right-0 h-full px-3"
-                            onClick={() => setShowPassword(!showPassword)}
-                        >
-                            {showPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                            ) : (
-                            <Eye className="h-4 w-4" />
-                            )}
-                        </Button>
-                    </div>
-                </div>
-            </div>
-            <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                    <h3 className="font-semibold text-lg flex items-center gap-2"><Waves/> Gestionar Estudios</h3>
-                    <Button onClick={handleAddNewClick}><PlusCircle className="mr-2 h-4 w-4" />Agregar Estudio</Button>
-                </div>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Nombre del Estudio</TableHead>
-                            <TableHead>Disponible</TableHead>
-                            <TableHead className="text-right">Acciones</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {studies.map(study => (
-                            <TableRow key={study.id}>
-                                <TableCell className="font-medium">{study.name}</TableCell>
-                                <TableCell>{study.available ? 'Sí' : 'No'}</TableCell>
-                                <TableCell className="text-right">
-                                    <Button variant="ghost" size="icon" onClick={() => handleEditClick(study)}>
-                                        <Pencil className="h-4 w-4" />
-                                    </Button>
-                                    <Button variant="ghost" size="icon" onClick={() => removeStudy(study.id)}>
-                                        <Trash2 className="h-4 w-4 text-destructive" />
-                                    </Button>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-                 {studies.length === 0 && (
-                    <div className="text-center py-10 text-muted-foreground">
-                        No hay estudios definidos. Agrega uno para comenzar.
-                    </div>
+            </CardContent>
+            <CardFooter className="bg-muted/5 border-t pt-6">
+                <Button onClick={handleSave} disabled={isSaving} className="w-full h-12 font-black uppercase">
+                {isSaving ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : (
+                    <Save className="mr-2 h-4 w-4" />
                 )}
-            </div>
-        </CardContent>
-        <CardFooter>
-            <Button onClick={handleSave} disabled={isSaving}>
-            {isSaving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-                <Save className="mr-2 h-4 w-4" />
+                {isSaving ? 'Actualizando...' : 'GUARDAR CONFIGURACIÓN DE ULTRASONIDO'}
+                </Button>
+            </CardFooter>
+            </Card>
+            {selectedStudy && (
+                <UltrasoundStudyEditDialog
+                    study={selectedStudy}
+                    onSave={handleDialogSave}
+                    onCancel={handleDialogCancel}
+                />
             )}
-            {isSaving ? 'Guardando...' : 'Guardar Configuración de Ultrasonido'}
-            </Button>
-        </CardFooter>
-        </Card>
-        {selectedStudy && (
-            <UltrasoundStudyEditDialog
-                study={selectedStudy}
-                onSave={handleDialogSave}
-                onCancel={handleDialogCancel}
-            />
-        )}
+        </div>
     </Dialog>
   );
 }

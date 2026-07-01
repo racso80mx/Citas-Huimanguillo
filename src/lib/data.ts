@@ -55,7 +55,7 @@ import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
 import { format as formatDate, startOfMonth, startOfDay, endOfDay } from 'date-fns';
 
-// --- UTILIDADES ---
+// --- UTILIDADES DE SERIALIZACIÓN ---
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return data;
   if (data instanceof Timestamp) return data.toDate().toISOString();
@@ -71,6 +71,7 @@ export function serializeData(data: any): any {
   return data;
 }
 
+// --- MOTOR DE MAPEO INTELIGENTE (EXCEL) ---
 function fuzzyMapInsumo(item: any) {
     const keys = Object.keys(item);
     const normalize = (s: string) => String(s || '').toLowerCase().trim()
@@ -86,16 +87,17 @@ function fuzzyMapInsumo(item: any) {
 
     return {
         claveCuadroBasico: String(findValue(['clave', 'clavedecuadrobasico', 'articulo', 'codigo', 'cod', 'idinsumo', 'clv', 'clavebasica', 'cve']) || 'S/C'),
-        descripcion: String(findValue(['descripcion', 'nombre', 'insumo', 'producto', 'articulo', 'desc', 'sustancia', 'descripciondelarticulo']) || 'SIN DESCRIPCIÓN'),
+        descripcion: String(findValue(['descripcion', 'nombre', 'insumo', 'producto', 'articulo', 'desc', 'sustancia', 'descripciondelarticulo']) || 'SIN DESCRIPCIÓN').toUpperCase(),
         existencia: Number(findValue(['existencia', 'stock', 'cantidad', 'actual', 'total', 'cant', 'stockactual', 'disponible', 'existencias', 'entradas', 'salidas']) || 0),
         fechaCaducidad: String(findValue(['caducidad', 'vencimiento', 'fechadecaducidad', 'vence', 'fecha', 'venc', 'f.caducidad', 'expiracion', 'vencimientolote']) || ''),
-        lote: String(findValue(['lote', 'numerodelote', 'loteo', 'n.lote', 'lot', 'num.lote', 'batch']) || 'N/A'),
-        grupo: String(findValue(['grupo', 'categoria', 'familia', 'tipo', 'clasificacion']) || ''),
+        lote: String(findValue(['lote', 'numerodelote', 'loteo', 'n.lote', 'lot', 'num.lote', 'batch']) || 'N/A').toUpperCase(),
+        grupo: String(findValue(['grupo', 'categoria', 'familia', 'tipo', 'clasificacion']) || '').toUpperCase(),
         precioUnitario: Number(findValue(['precio', 'preciounitario', 'costo', 'valor']) || 0),
-        almacen: String(findValue(['almacen', 'deposito', 'bodega', 'unidad']) || '')
+        almacen: String(findValue(['almacen', 'deposito', 'bodega', 'unidad']) || '').toUpperCase()
     };
 }
 
+// --- LECTURA DE COLECCIONES ---
 export async function getRawCollection(name: string, limitNum: number = 10000) {
     try {
         const colRef = collection(adminDb, name);
@@ -130,7 +132,7 @@ async function getPasswordFromStore(id: string, defaultPass: string): Promise<st
     }
 }
 
-// --- ACTIVIDAD ---
+// --- ACTIVIDAD Y LOGS ---
 export async function logActivity(action: string, details: string) { 
     try {
         await addDoc(collection(adminDb, 'activityLog'), { timestamp: new Date().toISOString(), action: action.toUpperCase(), details }); 
@@ -147,7 +149,7 @@ export async function getLogsData() {
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
-// --- MÓDULOS ---
+// --- MÓDULOS Y SEGURIDAD ---
 export async function getModuleSettings(): Promise<ModuleSettings> {
   const snap = await getDoc(doc(adminDb, 'settings', 'moduleSettings'));
   const base = snap.exists() ? serializeData(snap.data()) as ModuleSettings : {
@@ -526,8 +528,6 @@ export async function updateUltrasoundSettings(s: UltrasoundSettings) { const { 
 export async function updateVaccineSettings(s: VaccineSettings) { const { password, ...rest } = s; await setDoc(doc(adminDb, 'settings', 'vaccineSettings'), rest); if (password) await setDoc(doc(adminDb, 'module_passwords', 'vaccine'), { password }); return { success: true }; }
 
 export async function getLabStudies() { return getRawCollection('labStudies'); }
-export async function getXRayStudies() { return getRawCollection('xrayStudies'); }
-export async function getUltrasoundStudies() { return getRawCollection('ultrasoundStudies'); }
 export async function getVaccines() { return getRawCollection('vaccines'); }
 export async function getMedications() { return getRawCollection('medications', 10000); }
 export async function getSupplies() { return getRawCollection('supplies', 10000); }
