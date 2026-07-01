@@ -52,7 +52,8 @@ import {
   Trash2,
   Pencil,
   FlaskConical,
-  Settings
+  Settings,
+  ClipboardList
 } from 'lucide-react';
 import {
   startOfDay,
@@ -96,7 +97,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '../ui/scroll-area';
 import { Badge } from '../ui/badge';
 import { downloadExcel } from '@/lib/report-helpers';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 type ReportType = 'clinic' | 'x-ray' | 'ultrasound' | 'laboratorio' | 'vacunas';
 
@@ -131,7 +131,6 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
   const [isAvailabilityDialogOpen, setIsAvailabilityDialogOpen] = useState(false);
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
   const [isPrescriptionOpen, setIsPrescriptionOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
   const [selectedPatientForPrescription, setSelectedPatientForPrescription] = useState<Patient | null>(null);
   const [editingPrescription, setEditingPrescription] = useState<Prescription | null>(null);
@@ -320,16 +319,13 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
 
   return (
     <div className="space-y-8 container mx-auto px-0 py-8">
-      <Card className="shadow-lg border-primary/10 mx-4 sm:mx-0">
-        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
+      <Card className="shadow-lg border-primary/10 mx-4 sm:mx-0 overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4 bg-muted/5 border-b">
           <div>
             <CardTitle className="text-3xl font-bold font-headline uppercase">Reportes: {entity.name}</CardTitle>
             <CardDescription>Bienvenido, {entity.doctorName}. Control operativo del servicio.</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="text-primary border-primary/40 font-bold" onClick={() => setIsSettingsOpen(true)}>
-                <Settings className="mr-2 h-4 w-4" /> Parámetros
-            </Button>
             {isClinicReport && (
                 <>
                     <Button variant="outline" className="text-green-700 border-green-200" onClick={() => setIsNewAppointmentOpen(true)}><PlusCircle className="mr-2 h-4 w-4" /> Nueva Cita</Button>
@@ -340,256 +336,288 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
             <Button variant="outline" onClick={onLogout}><LogOut className="mr-2 h-4 w-4" /> Cerrar Sesión</Button>
           </div>
         </CardHeader>
-      </Card>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 px-4 sm:px-0">
-        {[
-            { label: 'Agenda Hoy', val: summaryCounts.total, icon: UserCheck, color: 'text-primary' },
-            { label: 'Atendidos', val: summaryCounts.attended, icon: CheckCircle2, color: 'text-green-600' },
-            { label: 'Pendientes', val: summaryCounts.pending, icon: Clock, color: 'text-yellow-600' },
-            { label: 'No Asistió', val: summaryCounts.notAttended, icon: UserX, color: 'text-red-600' }
-        ].map(s => (
-            <Card key={s.label} className="shadow-sm">
-                <CardContent className="pt-6">
-                    <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] font-black uppercase text-muted-foreground">{s.label}</span>
-                        <s.icon className={cn("h-4 w-4", s.color)} />
-                    </div>
-                    <div className={cn("text-2xl font-black", s.color)}>{s.val}</div>
-                </CardContent>
-            </Card>
-        ))}
-      </div>
+        <CardContent className="p-0">
+          <Tabs defaultValue="agenda" className="w-full">
+             <div className="px-6 border-b bg-muted/10">
+                <TabsList className="bg-transparent h-14 w-full justify-start gap-6">
+                    <TabsTrigger value="agenda" className="data-[state=active]:bg-primary data-[state=active]:text-white font-black uppercase h-11 px-8 rounded-t-lg transition-all">
+                        <ClipboardList className="mr-2 h-4 w-4" /> Agenda del Día
+                    </TabsTrigger>
+                    <TabsTrigger value="config" className="data-[state=active]:bg-primary data-[state=active]:text-white font-black uppercase h-11 px-8 rounded-t-lg transition-all">
+                        <Settings className="mr-2 h-4 w-4" /> Parámetros del Servicio
+                    </TabsTrigger>
+                </TabsList>
+             </div>
 
-      <Card className="w-full shadow-lg border-none">
-        <CardHeader className="bg-muted/10">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-1 bg-background p-1 border rounded-lg">
-                <Button variant={activeFilter === 'today' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveFilter('today')}>Hoy</Button>
-                <Button variant={activeFilter === 'week' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveFilter('week')}>Semana</Button>
-                <Button variant={activeFilter === 'month' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveFilter('month')}>Mes</Button>
-            </div>
-            <div className="flex items-center gap-2 bg-background p-2 rounded-xl border border-dashed border-primary/20">
-                <div className="flex flex-col gap-1">
-                    <Label className="text-[9px] font-black uppercase text-primary h-3">Día/Mes</Label>
-                    <Input placeholder="11/07" value={manualDayMonth} onChange={e => {
-                        let v = e.target.value.replace(/\D/g, '');
-                        if (v.length > 2) v = v.substring(0,2) + '/' + v.substring(2,4);
-                        handleManualDateChange(v.substring(0,5), manualYear);
-                    }} className="h-8 w-20 text-center font-bold text-xs" maxLength={5} />
-                </div>
-                <div className="flex flex-col gap-1">
-                    <Label className="text-[9px] font-black uppercase text-primary h-3">Año</Label>
-                    <Input type="number" value={manualYear} onChange={e => handleManualDateChange(manualDayMonth, e.target.value.substring(0,4))} className="h-8 w-16 text-center font-bold text-xs" />
-                </div>
-            </div>
-            <Popover>
-                <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-10 min-w-[200px] border-primary/20"><CalendarIcon className="mr-2 h-4 w-4" /> {dateRange?.from ? (dateRange.to ? `${format(dateRange.from, 'dd/MM')} - ${format(dateRange.to, 'dd/MM')}` : format(dateRange.from, 'dd/MM')) : "Selector de Rango"}</Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start"><Calendar mode="range" selected={dateRange} onSelect={handleSetDateRange} numberOfMonths={2} locale={es} /></PopoverContent>
-            </Popover>
-            <div className="relative flex-1 min-w-[250px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Buscar por Nombre, Folio o CURP..." className="pl-9 h-11 border-primary/20" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-            </div>
-            <div className="flex gap-2">
-                <Button variant="outline" size="icon" onClick={fetchData} className="h-11 w-11"><RefreshCw className={cn("h-4 w-4", isDataLoading && "animate-spin")} /></Button>
-                <Button variant="outline" size="icon" onClick={handleDownload} className="h-11 w-11"><Download className="h-4 w-4" /></Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-6">
-            {isClinicReport ? (
-                <Tabs defaultValue="listado" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 max-w-md h-auto p-1 bg-muted/20 mb-6 rounded-lg">
-                        <TabsTrigger value="listado" className="py-2.5 font-bold data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md transition-all">Agenda del Consultorio</TabsTrigger>
-                        <TabsTrigger value="pacientes" className="py-2.5 font-bold data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md transition-all">Pacientes Atendidos</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="listado" className="mt-0">{renderAppointmentListContent()}</TabsContent>
-                    <TabsContent value="pacientes" className="mt-0">
-                        <div className="space-y-6">
-                            <div className="flex flex-col sm:flex-row gap-4 items-end">
-                                <div className="flex-1 space-y-2">
-                                    <Label className="text-xs font-bold uppercase opacity-60">Buscar en historial de {entity.name}</Label>
-                                    <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                        <Input placeholder="Nombre, CURP o Expediente..." className="pl-9 h-11" value={historySearchTerm} onChange={e => setHistorySearchTerm(e.target.value)} />
-                                    </div>
+             <TabsContent value="agenda" className="p-6 space-y-8 mt-0 animate-in fade-in duration-300">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[
+                        { label: 'Agenda Hoy', val: summaryCounts.total, icon: UserCheck, color: 'text-primary' },
+                        { label: 'Atendidos', val: summaryCounts.attended, icon: CheckCircle2, color: 'text-green-600' },
+                        { label: 'Pendientes', val: summaryCounts.pending, icon: Clock, color: 'text-yellow-600' },
+                        { label: 'No Asistió', val: summaryCounts.notAttended, icon: UserX, color: 'text-red-600' }
+                    ].map(s => (
+                        <Card key={s.label} className="shadow-sm border-muted">
+                            <CardContent className="pt-6">
+                                <div className="flex items-center justify-between mb-1">
+                                    <span className="text-[10px] font-black uppercase text-muted-foreground">{s.label}</span>
+                                    <s.icon className={cn("h-4 w-4", s.color)} />
                                 </div>
-                                <Button variant="outline" className="h-11" onClick={() => setIsSearchingArchive(!isSearchingArchive)}>
-                                    {isSearchingArchive ? <X className="mr-2 h-4 w-4" /> : <Search className="mr-2 h-4 w-4" />}
-                                    {isSearchingArchive ? 'Cerrar Búsqueda Global' : 'Buscar en Padrón General'}
-                                </Button>
+                                <div className={cn("text-2xl font-black", s.color)}>{s.val}</div>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+
+                <Card className="border-none shadow-none bg-muted/5 rounded-xl">
+                    <CardHeader className="pb-4">
+                        <div className="flex flex-wrap items-center gap-4">
+                            <div className="flex items-center gap-1 bg-background p-1 border rounded-lg shadow-sm">
+                                <Button variant={activeFilter === 'today' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveFilter('today')}>Hoy</Button>
+                                <Button variant={activeFilter === 'week' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveFilter('week')}>Semana</Button>
+                                <Button variant={activeFilter === 'month' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveFilter('month')}>Mes</Button>
                             </div>
-
-                            {isSearchingArchive && <GlobalArchiveSearch onSelectPatient={(p) => loadPatientHistory(p.id)} />}
-
-                            <div className="grid lg:grid-cols-12 gap-8">
-                                <div className="lg:col-span-4 border rounded-xl overflow-hidden bg-card">
-                                    <div className="p-4 bg-muted/30 border-b font-black text-[10px] uppercase tracking-widest text-primary flex items-center justify-between">
-                                        Lista de Pacientes Atendidos
-                                        <Badge className="bg-primary/10 text-primary">{filteredAttendedPatients.length}</Badge>
-                                    </div>
-                                    <ScrollArea className="h-[500px]">
-                                        {filteredAttendedPatients.map(p => (
-                                            <button 
-                                                key={p.id} 
-                                                onClick={() => loadPatientHistory(p.id)}
-                                                className={cn(
-                                                    "w-full text-left p-4 border-b hover:bg-primary/5 transition-all flex items-center justify-between group",
-                                                    selectedPatientId === p.id ? "bg-primary/10 border-r-4 border-r-primary" : ""
-                                                )}
-                                            >
-                                                <div>
-                                                    <p className="font-bold text-xs uppercase leading-tight group-hover:text-primary">{p.name} {p.paternalLastName}</p>
-                                                    <p className="text-[10px] text-muted-foreground font-mono mt-1">{p.curp}</p>
-                                                </div>
-                                                <ArrowRight className={cn("h-4 w-4 text-primary opacity-0 transition-opacity", selectedPatientId === p.id ? "opacity-100" : "group-hover:opacity-40")} />
-                                            </button>
-                                        ))}
-                                        {filteredAttendedPatients.length === 0 && <div className="p-10 text-center text-xs text-muted-foreground italic">No hay pacientes que coincidan con la búsqueda.</div>}
-                                    </ScrollArea>
+                            <div className="flex items-center gap-2 bg-background p-2 rounded-xl border border-dashed border-primary/20">
+                                <div className="flex flex-col gap-1">
+                                    <Label className="text-[9px] font-black uppercase text-primary h-3">Día/Mes</Label>
+                                    <Input placeholder="11/07" value={manualDayMonth} onChange={e => {
+                                        let v = e.target.value.replace(/\D/g, '');
+                                        if (v.length > 2) v = v.substring(0,2) + '/' + v.substring(2,4);
+                                        handleManualDateChange(v.substring(0,5), manualYear);
+                                    }} className="h-8 w-20 text-center font-bold text-xs" maxLength={5} />
                                 </div>
-
-                                <div className="lg:col-span-8">
-                                    {selectedPatientId ? (
-                                        <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-                                            <div className="flex items-center justify-between bg-primary/5 p-4 rounded-xl border border-primary/10">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="bg-primary/10 p-3 rounded-full"><UserRound className="h-6 w-6 text-primary" /></div>
-                                                    <div>
-                                                        <h3 className="font-black text-lg uppercase leading-none">
-                                                            {attendedPatients.find(p => p.id === selectedPatientId)?.name || 'PACIENTE'}
-                                                        </h3>
-                                                        <p className="text-xs text-muted-foreground font-bold mt-1 uppercase">Historial Clínico Consolidado</p>
-                                                    </div>
-                                                </div>
-                                                <Button className="font-bold bg-primary hover:bg-primary/90 h-11 px-6 shadow-lg" onClick={() => {
-                                                    const p = attendedPatients.find(x => x.id === selectedPatientId);
-                                                    if (p) {
-                                                        setSelectedPatientForPrescription(p);
-                                                        setEditingPrescription(null);
-                                                        setIsPrescriptionOpen(true);
-                                                    }
-                                                }}>
-                                                    <FileText className="mr-2 h-4 w-4" /> Nueva Receta Digital
-                                                </Button>
-                                            </div>
-
-                                            <Tabs defaultValue="notas" className="w-full">
-                                                <TabsList className="bg-muted/40 p-1 rounded-md mb-4 flex gap-2">
-                                                    <TabsTrigger value="notas" className="font-bold px-4 py-2 data-[state=active]:bg-background rounded-sm">Notas Médicas ({patientHistory.length})</TabsTrigger>
-                                                    <TabsTrigger value="recetas" className="font-bold px-4 py-2 data-[state=active]:bg-background rounded-sm">Recetas Generadas ({patientPrescriptions.length})</TabsTrigger>
-                                                </TabsList>
-                                                
-                                                <TabsContent value="notas" className="mt-0">
-                                                    {isLoadingHistory ? (
-                                                        <div className="py-20 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>
-                                                    ) : patientHistory.length > 0 ? (
-                                                        <div className="grid gap-4">
-                                                            {patientHistory.sort((a,b) => b.date.localeCompare(a.date)).map(note => (
-                                                                <Card key={note.id} className="hover:border-primary/30 transition-colors shadow-sm">
-                                                                    <CardContent className="p-5">
-                                                                        <div className="flex justify-between items-start mb-4">
-                                                                            <div className="flex items-center gap-3">
-                                                                                <div className="bg-blue-50 p-2 rounded-lg text-blue-600"><History className="h-4 w-4" /></div>
-                                                                                <div>
-                                                                                    <p className="text-[10px] font-black uppercase text-muted-foreground">{format(parseISO(note.date), "eeee dd 'de' MMMM, yyyy", { locale: es })}</p>
-                                                                                    <p className="font-bold text-sm text-primary uppercase">{note.diagnosis1}</p>
-                                                                                </div>
-                                                                            </div>
-                                                                            <Badge variant="outline" className="text-[10px] font-mono bg-muted/20">Dr. {note.doctorName}</Badge>
-                                                                        </div>
-                                                                        <div className="grid sm:grid-cols-3 gap-4 text-[10px] font-bold text-muted-foreground uppercase border-t pt-4">
-                                                                            <div className="flex items-center gap-2"><Activity className="h-3 w-3" /> IMC: <span className="text-foreground">{note.imc || 'N/A'}</span></div>
-                                                                            <div className="flex items-center gap-2"><Stethoscope className="h-3 w-3" /> SERVICIO: <span className="text-foreground">{note.service}</span></div>
-                                                                            <div className="flex items-center gap-2"><CheckCircle2 className="h-3 w-3" /> TIPO: <span className="text-foreground">{note.motiveRelation}</span></div>
-                                                                        </div>
-                                                                    </CardContent>
-                                                                </Card>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <div className="py-20 text-center border-2 border-dashed rounded-2xl opacity-40">Sin notas registradas.</div>
-                                                    )}
-                                                </TabsContent>
-
-                                                <TabsContent value="recetas" className="mt-0">
-                                                    {isLoadingHistory ? (
-                                                        <div className="py-20 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>
-                                                    ) : patientPrescriptions.length > 0 ? (
-                                                        <div className="grid gap-4">
-                                                            {patientPrescriptions.sort((a,b) => b.date.localeCompare(a.date)).map(rx => (
-                                                                <Card key={rx.id} className="hover:border-green-300 transition-colors shadow-sm">
-                                                                    <CardContent className="p-5 flex items-center justify-between">
-                                                                        <div className="flex items-center gap-4">
-                                                                            <div className="bg-green-50 p-3 rounded-xl text-green-600"><FileText className="h-5 w-5" /></div>
-                                                                            <div>
-                                                                                <p className="font-black text-sm text-green-700">{rx.folio}</p>
-                                                                                <p className="text-[10px] font-bold text-muted-foreground uppercase">{format(parseISO(rx.date), 'dd/MM/yyyy HH:mm')} hrs</p>
-                                                                                <div className="flex gap-1 mt-1">
-                                                                                    {rx.items.slice(0, 3).map((item, idx) => (
-                                                                                        <Badge key={idx} variant="outline" className="text-[8px] px-1 h-4">{item.name}</Badge>
-                                                                                    ))}
-                                                                                    {rx.items.length > 3 && <span className="text-[8px] font-bold">+{rx.items.length - 3} más</span>}
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                        <div className="flex gap-2">
-                                                                            <Button variant="outline" size="sm" className="h-9" onClick={() => {
-                                                                                setEditingPrescription(rx);
-                                                                                setSelectedPatientForPrescription(attendedPatients.find(p => p.id === selectedPatientId) || null);
-                                                                                setIsPrescriptionOpen(true);
-                                                                            }}>
-                                                                                <Pencil className="h-3 w-3 mr-1" /> Editar
-                                                                            </Button>
-                                                                            <AlertDialog>
-                                                                                <AlertDialogTrigger asChild>
-                                                                                    <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive"><Trash2 className="h-4 w-4" /></Button>
-                                                                                </AlertDialogTrigger>
-                                                                                <AlertDialogContent>
-                                                                                    <AlertDialogHeader>
-                                                                                        <AlertDialogTitle>¿Eliminar Receta?</AlertDialogTitle>
-                                                                                        <AlertDialogDescription>Esta acción cancelará el folio {rx.folio} y no podrá ser surtida en farmacia.</AlertDialogDescription>
-                                                                                    </AlertDialogHeader>
-                                                                                    <AlertDialogFooter>
-                                                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                                                        <AlertDialogAction className="bg-destructive" onClick={async () => {
-                                                                                            await deletePrescription(rx.id);
-                                                                                            loadPatientHistory(selectedPatientId!);
-                                                                                        }}>Eliminar Permanentemente</AlertDialogAction>
-                                                                                    </AlertDialogFooter>
-                                                                                </AlertDialogContent>
-                                                                            </AlertDialog>
-                                                                        </div>
-                                                                    </CardContent>
-                                                                </Card>
-                                                            ))}
-                                                        </div>
-                                                    ) : (
-                                                        <div className="py-20 text-center border-2 border-dashed rounded-2xl opacity-40">Sin recetas previas.</div>
-                                                    )}
-                                                </TabsContent>
-                                            </Tabs>
-                                        </div>
-                                    ) : (
-                                        <div className="h-full flex flex-col items-center justify-center border-2 border-dashed rounded-3xl opacity-30 p-20 text-center">
-                                            <History className="h-16 w-16 mb-4" />
-                                            <p className="font-black text-lg uppercase tracking-widest">Esperando Selección</p>
-                                            <p className="text-sm">Selecciona un paciente del listado izquierdo para ver su historial médico y recetas.</p>
-                                        </div>
-                                    )}
+                                <div className="flex flex-col gap-1">
+                                    <Label className="text-[9px] font-black uppercase text-primary h-3">Año</Label>
+                                    <Input type="number" value={manualYear} onChange={e => handleManualDateChange(manualDayMonth, e.target.value.substring(0,4))} className="h-8 w-16 text-center font-bold text-xs" />
                                 </div>
+                            </div>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" size="sm" className="h-10 min-w-[200px] border-primary/20"><CalendarIcon className="mr-2 h-4 w-4" /> {dateRange?.from ? (dateRange.to ? `${format(dateRange.from, 'dd/MM')} - ${format(dateRange.to, 'dd/MM')}` : format(dateRange.from, 'dd/MM')) : "Selector de Rango"}</Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start"><Calendar mode="range" selected={dateRange} onSelect={handleSetDateRange} numberOfMonths={2} locale={es} /></PopoverContent>
+                            </Popover>
+                            <div className="relative flex-1 min-w-[250px]">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input placeholder="Buscar por Nombre, Folio o CURP..." className="pl-9 h-11 border-primary/20 bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                            </div>
+                            <div className="flex gap-2">
+                                <Button variant="outline" size="icon" onClick={fetchData} className="h-11 w-11 bg-background"><RefreshCw className={cn("h-4 w-4", isDataLoading && "animate-spin")} /></Button>
+                                <Button variant="outline" size="icon" onClick={handleDownload} className="h-11 w-11 bg-background"><Download className="h-4 w-4" /></Button>
                             </div>
                         </div>
-                    </TabsContent>
-                </Tabs>
-            ) : (
-                <div className="animate-in fade-in duration-500">
-                    {renderAppointmentListContent()}
-                </div>
-            )}
+                    </CardHeader>
+                    <CardContent>
+                        {isClinicReport ? (
+                            <Tabs defaultValue="listado" className="w-full">
+                                <TabsList className="grid w-full grid-cols-2 max-w-md h-auto p-1 bg-muted/20 mb-6 rounded-lg">
+                                    <TabsTrigger value="listado" className="py-2.5 font-bold">Lista de Agenda</TabsTrigger>
+                                    <TabsTrigger value="pacientes" className="py-2.5 font-bold">Pacientes Atendidos</TabsTrigger>
+                                </TabsList>
+                                <TabsContent value="listado" className="mt-0">{renderAppointmentListContent()}</TabsContent>
+                                <TabsContent value="pacientes" className="mt-0">
+                                    <div className="space-y-6">
+                                        <div className="flex flex-col sm:flex-row gap-4 items-end">
+                                            <div className="flex-1 space-y-2">
+                                                <Label className="text-xs font-bold uppercase opacity-60">Buscar en historial de {entity.name}</Label>
+                                                <div className="relative">
+                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                                    <Input placeholder="Nombre, CURP o Expediente..." className="pl-9 h-11" value={historySearchTerm} onChange={e => setHistorySearchTerm(e.target.value)} />
+                                                </div>
+                                            </div>
+                                            <Button variant="outline" className="h-11" onClick={() => setIsSearchingArchive(!isSearchingArchive)}>
+                                                {isSearchingArchive ? <X className="mr-2 h-4 w-4" /> : <Search className="mr-2 h-4 w-4" />}
+                                                {isSearchingArchive ? 'Cerrar Búsqueda Global' : 'Buscar en Padrón General'}
+                                            </Button>
+                                        </div>
+
+                                        {isSearchingArchive && <GlobalArchiveSearch onSelectPatient={(p) => loadPatientHistory(p.id)} />}
+
+                                        <div className="grid lg:grid-cols-12 gap-8">
+                                            <div className="lg:col-span-4 border rounded-xl overflow-hidden bg-card">
+                                                <div className="p-4 bg-muted/30 border-b font-black text-[10px] uppercase tracking-widest text-primary flex items-center justify-between">
+                                                    Lista de Pacientes Atendidos
+                                                    <Badge className="bg-primary/10 text-primary">{filteredAttendedPatients.length}</Badge>
+                                                </div>
+                                                <ScrollArea className="h-[500px]">
+                                                    {filteredAttendedPatients.map(p => (
+                                                        <button 
+                                                            key={p.id} 
+                                                            onClick={() => loadPatientHistory(p.id)}
+                                                            className={cn(
+                                                                "w-full text-left p-4 border-b hover:bg-primary/5 transition-all flex items-center justify-between group",
+                                                                selectedPatientId === p.id ? "bg-primary/10 border-r-4 border-r-primary" : ""
+                                                            )}
+                                                        >
+                                                            <div>
+                                                                <p className="font-bold text-xs uppercase leading-tight group-hover:text-primary">{p.name} {p.paternalLastName}</p>
+                                                                <p className="text-[10px] text-muted-foreground font-mono mt-1">{p.curp}</p>
+                                                            </div>
+                                                            <ArrowRight className={cn("h-4 w-4 text-primary opacity-0 transition-opacity", selectedPatientId === p.id ? "opacity-100" : "group-hover:opacity-40")} />
+                                                        </button>
+                                                    ))}
+                                                    {filteredAttendedPatients.length === 0 && <div className="p-10 text-center text-xs text-muted-foreground italic">No hay pacientes que coincidan con la búsqueda.</div>}
+                                                </ScrollArea>
+                                            </div>
+
+                                            <div className="lg:col-span-8">
+                                                {selectedPatientId ? (
+                                                    <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                                                        <div className="flex items-center justify-between bg-primary/5 p-4 rounded-xl border border-primary/10">
+                                                            <div className="flex items-center gap-4">
+                                                                <div className="bg-primary/10 p-3 rounded-full"><UserRound className="h-6 w-6 text-primary" /></div>
+                                                                <div>
+                                                                    <h3 className="font-black text-lg uppercase leading-none">
+                                                                        {attendedPatients.find(p => p.id === selectedPatientId)?.name || 'PACIENTE'}
+                                                                    </h3>
+                                                                    <p className="text-xs text-muted-foreground font-bold mt-1 uppercase">Historial Clínico Consolidado</p>
+                                                                </div>
+                                                            </div>
+                                                            <Button className="font-bold bg-primary hover:bg-primary/90 h-11 px-6 shadow-lg" onClick={() => {
+                                                                const p = attendedPatients.find(x => x.id === selectedPatientId);
+                                                                if (p) {
+                                                                    setSelectedPatientForPrescription(p);
+                                                                    setEditingPrescription(null);
+                                                                    setIsPrescriptionOpen(true);
+                                                                }
+                                                            }}>
+                                                                <FileText className="mr-2 h-4 w-4" /> Nueva Receta Digital
+                                                            </Button>
+                                                        </div>
+
+                                                        <Tabs defaultValue="notas" className="w-full">
+                                                            <TabsList className="bg-muted/40 p-1 rounded-md mb-4 flex gap-2">
+                                                                <TabsTrigger value="notas" className="font-bold px-4 py-2 data-[state=active]:bg-background rounded-sm">Notas Médicas ({patientHistory.length})</TabsTrigger>
+                                                                <TabsTrigger value="recetas" className="font-bold px-4 py-2 data-[state=active]:bg-background rounded-sm">Recetas Generadas ({patientPrescriptions.length})</TabsTrigger>
+                                                            </TabsList>
+                                                            
+                                                            <TabsContent value="notas" className="mt-0">
+                                                                {isLoadingHistory ? (
+                                                                    <div className="py-20 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>
+                                                                ) : patientHistory.length > 0 ? (
+                                                                    <div className="grid gap-4">
+                                                                        {patientHistory.sort((a,b) => b.date.localeCompare(a.date)).map(note => (
+                                                                            <Card key={note.id} className="hover:border-primary/30 transition-colors shadow-sm">
+                                                                                <CardContent className="p-5">
+                                                                                    <div className="flex justify-between items-start mb-4">
+                                                                                        <div className="flex items-center gap-3">
+                                                                                            <div className="bg-blue-50 p-2 rounded-lg text-blue-600"><History className="h-4 w-4" /></div>
+                                                                                            <div>
+                                                                                                <p className="text-[10px] font-black uppercase text-muted-foreground">{format(parseISO(note.date), "eeee dd 'de' MMMM, yyyy", { locale: es })}</p>
+                                                                                                <p className="font-bold text-sm text-primary uppercase">{note.diagnosis1}</p>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                        <Badge variant="outline" className="text-[10px] font-mono bg-muted/20">Dr. {note.doctorName}</Badge>
+                                                                                    </div>
+                                                                                    <div className="grid sm:grid-cols-3 gap-4 text-[10px] font-bold text-muted-foreground uppercase border-t pt-4">
+                                                                                        <div className="flex items-center gap-2"><Activity className="h-3 w-3" /> IMC: <span className="text-foreground">{note.imc || 'N/A'}</span></div>
+                                                                                        <div className="flex items-center gap-2"><Stethoscope className="h-3 w-3" /> SERVICIO: <span className="text-foreground">{note.service}</span></div>
+                                                                                        <div className="flex items-center gap-2"><CheckCircle2 className="h-3 w-3" /> TIPO: <span className="text-foreground">{note.motiveRelation}</span></div>
+                                                                                    </div>
+                                                                                </CardContent>
+                                                                            </Card>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="py-20 text-center border-2 border-dashed rounded-2xl opacity-40">Sin notas registradas.</div>
+                                                                )}
+                                                            </TabsContent>
+
+                                                            <TabsContent value="recetas" className="mt-0">
+                                                                {isLoadingHistory ? (
+                                                                    <div className="py-20 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>
+                                                                ) : patientPrescriptions.length > 0 ? (
+                                                                    <div className="grid gap-4">
+                                                                        {patientPrescriptions.sort((a,b) => b.date.localeCompare(a.date)).map(rx => (
+                                                                            <Card key={rx.id} className="hover:border-green-300 transition-colors shadow-sm">
+                                                                                <CardContent className="p-5 flex items-center justify-between">
+                                                                                    <div className="flex items-center gap-4">
+                                                                                        <div className="bg-green-50 p-3 rounded-xl text-green-600"><FileText className="h-5 w-5" /></div>
+                                                                                        <div>
+                                                                                            <p className="font-black text-sm text-green-700">{rx.folio}</p>
+                                                                                            <p className="text-[10px] font-bold text-muted-foreground uppercase">{format(parseISO(rx.date), 'dd/MM/yyyy HH:mm')} hrs</p>
+                                                                                            <div className="flex gap-1 mt-1">
+                                                                                                {rx.items.slice(0, 3).map((item, idx) => (
+                                                                                                    <Badge key={idx} variant="outline" className="text-[8px] px-1 h-4">{item.name}</Badge>
+                                                                                                ))}
+                                                                                                {rx.items.length > 3 && <span className="text-[8px] font-bold">+{rx.items.length - 3} más</span>}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div className="flex gap-2">
+                                                                                        <Button variant="outline" size="sm" className="h-9" onClick={() => {
+                                                                                            setEditingPrescription(rx);
+                                                                                            setSelectedPatientForPrescription(attendedPatients.find(p => p.id === selectedPatientId) || null);
+                                                                                            setIsPrescriptionOpen(true);
+                                                                                        }}>
+                                                                                            <Pencil className="h-3 w-3 mr-1" /> Editar
+                                                                                        </Button>
+                                                                                        <AlertDialog>
+                                                                                            <AlertDialogTrigger asChild>
+                                                                                                <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                                                                                            </AlertDialogTrigger>
+                                                                                            <AlertDialogContent>
+                                                                                                <AlertDialogHeader>
+                                                                                                    <AlertDialogTitle>¿Eliminar Receta?</AlertDialogTitle>
+                                                                                                    <AlertDialogDescription>Esta acción cancelará el folio {rx.folio} y no podrá ser surtida en farmacia.</AlertDialogDescription>
+                                                                                                </AlertDialogHeader>
+                                                                                                <AlertDialogFooter>
+                                                                                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                                                    <AlertDialogAction className="bg-destructive" onClick={async () => {
+                                                                                                        await deletePrescription(rx.id);
+                                                                                                        loadPatientHistory(selectedPatientId!);
+                                                                                                    }}>Eliminar Permanentemente</AlertDialogAction>
+                                                                                                </AlertDialogFooter>
+                                                                                            </AlertDialogContent>
+                                                                                        </AlertDialog>
+                                                                                    </div>
+                                                                                </CardContent>
+                                                                            </Card>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="py-20 text-center border-2 border-dashed rounded-2xl opacity-40">Sin recetas previas.</div>
+                                                                )}
+                                                            </TabsContent>
+                                                        </Tabs>
+                                                    </div>
+                                                ) : (
+                                                    <div className="h-full flex flex-col items-center justify-center border-2 border-dashed rounded-3xl opacity-30 p-20 text-center">
+                                                        <History className="h-16 w-16 mb-4" />
+                                                        <p className="font-black text-lg uppercase tracking-widest">Esperando Selección</p>
+                                                        <p className="text-sm">Selecciona un paciente del listado izquierdo para ver su historial médico y recetas.</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </TabsContent>
+                            </Tabs>
+                        ) : (
+                            <div className="animate-in fade-in duration-500">
+                                {renderAppointmentListContent()}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+             </TabsContent>
+
+             <TabsContent value="config" className="p-6 mt-0 animate-in slide-in-from-right-4 duration-300">
+                 <div className="max-w-5xl mx-auto">
+                    {reportType === 'laboratorio' && <LabSettingsManager />}
+                    {reportType === 'x-ray' && <XRaySettingsManager />}
+                    {reportType === 'ultrasound' && <UltrasoundSettingsManager />}
+                    {reportType === 'vacunas' && <VaccineSettingsManager />}
+                    {reportType === 'clinic' && (
+                        <div className="py-20 text-center text-muted-foreground border-2 border-dashed rounded-2xl bg-muted/5 italic">
+                            <Settings className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                            Para configurar los parámetros de este consultorio, dirígete al Panel Administrativo Global.
+                        </div>
+                    )}
+                 </div>
+             </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
@@ -597,33 +625,6 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
       <AvailabilityViewerDialog isOpen={isAvailabilityDialogOpen} onClose={() => setIsAvailabilityDialogOpen(false)} reportType={reportType} entity={entity} />
       {isNewAppointmentOpen && <ScheduleAppointmentDialog isOpen={isNewAppointmentOpen} onClose={() => setIsNewAppointmentOpen(false)} patient={{} as any} clinics={isClinicReport ? [entity] : clinics} colonias={colonias} onBookingSuccess={fetchData} isDoctorBypass={true} />}
       {isPrescriptionOpen && <CreatePrescriptionDialog isOpen={isPrescriptionOpen} onClose={() => setIsPrescriptionOpen(false)} clinic={entity} initialPatient={selectedPatientForPrescription} initialPrescription={editingPrescription} onPrescriptionCreated={fetchData} />}
-      
-      {/* DIALOGO DE CONFIGURACIÓN DE PARÁMETROS */}
-      {isSettingsOpen && (
-          <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-              <DialogContent className="sm:max-w-4xl max-h-[95vh] flex flex-col p-0">
-                  <DialogHeader className="p-6 border-b bg-muted/10">
-                      <DialogTitle className="flex items-center gap-2 text-2xl font-black uppercase">
-                          <Settings className="h-6 w-6 text-primary" /> Parámetros Operativos: {reportType.toUpperCase()}
-                      </DialogTitle>
-                      <DialogDescription>Ajusta cupos, horarios y catálogos exclusivos de este servicio.</DialogDescription>
-                  </DialogHeader>
-                  <ScrollArea className="flex-1">
-                      <div className="p-6">
-                        {reportType === 'laboratorio' && <LabSettingsManager />}
-                        {reportType === 'x-ray' && <XRaySettingsManager />}
-                        {reportType === 'ultrasound' && <UltrasoundSettingsManager />}
-                        {reportType === 'vacunas' && <VaccineSettingsManager />}
-                        {reportType === 'clinic' && (
-                            <div className="p-10 text-center text-muted-foreground border-2 border-dashed rounded-2xl italic">
-                                Para configurar los parámetros de este consultorio, dirígete al Panel Administrativo Global.
-                            </div>
-                        )}
-                      </div>
-                  </ScrollArea>
-              </DialogContent>
-          </Dialog>
-      )}
     </div>
   );
 }
@@ -665,3 +666,15 @@ function GlobalArchiveSearch({ onSelectPatient }: { onSelectPatient: (p: Patient
         </Card>
     );
 }
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';

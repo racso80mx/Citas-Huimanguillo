@@ -355,7 +355,7 @@ export function VaccineSettingsManager() {
                     </div>
                 </CardContent>
                 <CardFooter className="bg-muted/5 border-t pt-6">
-                    <Button onClick={handleSave} disabled={isSaving} className="w-full h-12 font-black uppercase shadow-lg">
+                    <Button onClick={handleSave} disabled={isSaving} className="w-full h-12 font-black uppercase shadow-lg bg-primary hover:bg-primary/90 text-white">
                     {isSaving ? (
                         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                     ) : (
