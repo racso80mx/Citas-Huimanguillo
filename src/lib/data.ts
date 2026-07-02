@@ -84,32 +84,37 @@ function fuzzyMapInsumo(item: any) {
         return foundKey ? item[foundKey] : undefined;
     };
 
+    // Búsqueda exhaustiva de la columna de caducidad
     const cadVal = findValue([
         'caducidad', 'vencimiento', 'fechadecaducidad', 'vence', 'fecha', 'venc', 'f.caducidad', 
         'expiracion', 'vencimientolote', 'f_caducidad', 'vencimiento_lote', 'vence_lote', 
-        'caducidad_lote', 'fecha_vencimiento', 'fechavencimiento', 'caducidadlote'
+        'caducidad_lote', 'fecha_vencimiento', 'fechavencimiento', 'caducidadlote', 'f.venc', 'fechacaducidad'
     ]);
     
     let formattedCaducidad = 'SIN FECHA';
-    if (cadVal) {
+    if (cadVal !== undefined && cadVal !== null) {
         if (isDate(cadVal)) {
             formattedCaducidad = formatDateFns(cadVal as Date, 'dd/MM/yyyy');
         } else if (typeof cadVal === 'number' && cadVal > 30000) {
-            // Excel date handling
+            // Excel serial date handling
             const excelEpoch = new Date(1899, 11, 30);
             const d = new Date(excelEpoch.getTime() + cadVal * 86400000);
             if (isValid(d)) formattedCaducidad = formatDateFns(d, 'dd/MM/yyyy');
         } else if (typeof cadVal === 'string') {
             const s = cadVal.trim();
             if (s) {
-                // Try basic parsing
                 let d = new Date(s);
                 if (!isValid(d)) {
-                    // Try DD/MM/YYYY
                     d = parse(s, 'dd/MM/yyyy', new Date());
                 }
-                if (isValid(d)) formattedCaducidad = formatDateFns(d, 'dd/MM/yyyy');
-                else formattedCaducidad = s.toUpperCase();
+                if (!isValid(d)) {
+                    d = parse(s, 'yyyy-MM-dd', new Date());
+                }
+                if (isValid(d)) {
+                    formattedCaducidad = formatDateFns(d, 'dd/MM/yyyy');
+                } else {
+                    formattedCaducidad = s.toUpperCase();
+                }
             }
         }
     }
@@ -297,42 +302,6 @@ export async function getPatientByCURP(curp: string) {
     const q = query(collection(adminDb, 'patients'), where('curp', '==', curp.toUpperCase()), limit(1));
     const snap = await getDocs(q);
     return snap.empty ? { success: false } : { success: true, data: { ...serializeData(snap.docs[0].data()), id: snap.docs[0].id } };
-}
-
-export async function bulkInsertPatients(patients: any[]) {
-    const patientsCol = collection(adminDb, 'patients');
-    let added = 0; let updated = 0;
-    for (let i = 0; i < patients.length; i += 30) {
-        const chunk = patients.slice(i, i + 30);
-        const curps = chunk.map(p => String(p.CURP || p.curp || '').toUpperCase().trim()).filter(Boolean);
-        if (curps.length === 0) continue;
-        const q = query(patientsCol, where('curp', 'in', curps));
-        const snap = await getDocs(q);
-        const existingMap = new Map(snap.docs.map(d => [d.data().curp, d.ref]));
-        const batch = writeBatch(adminDb);
-        chunk.forEach(p => {
-            const curp = String(p.CURP || p.curp || '').toUpperCase().trim();
-            if (!curp) return;
-            const patientData = {
-                expediente: String(p['No.Expediente'] || p.expediente || ''),
-                name: String(p.Nombre || p.name || '').toUpperCase().trim(),
-                paternalLastName: String(p.Apaterno || p.paternalLastName || '').toUpperCase().trim(),
-                maternalLastName: String(p.Amaterno || p.maternalLastName || '').toUpperCase().trim(),
-                curp, birthDate: String(p.FNacimiento || p.birthDate || ''),
-                age: Number(p.Edad || p.age || 0), sex: String(p.Sexo || p.sex || 'Hombre') as 'Hombre' | 'Mujer',
-                birthState: String(p.Estado || p.birthState || 'TABASCO').toUpperCase(), address: String(p.Domicilio || p.address || '').toUpperCase(),
-                coloniaName: String(p.Colonia || p.coloniaName || '').toUpperCase(), phoneNumber: String(p.Telefono || p.phoneNumber || ''),
-                status: (p.Estatus || p.status || PatientStatus.Vigente) as PatientStatus,
-                registrationDate: String(p.FechaApertura || p.registrationDate || formatDateFns(new Date(), 'yyyy-MM-dd')),
-                derechoAbiencia: String(p.DerechoAbiencia || p.derechoAbiencia || '').toUpperCase() || null
-            };
-            const existingRef = existingMap.get(curp);
-            if (existingRef) { batch.update(existingRef, patientData); updated++; }
-            else { const nid = uuidv4(); batch.set(doc(adminDb, 'patients', nid), { ...patientData, id: nid }); added++; }
-        });
-        await batch.commit();
-    }
-    return { success: true, addedCount: added, updatedCount: updated, processedCount: patients.length };
 }
 
 export async function getAppointmentsData() {
