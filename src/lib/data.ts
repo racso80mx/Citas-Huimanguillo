@@ -87,14 +87,17 @@ function fuzzyMapInsumo(item: any) {
         return foundKey ? item[foundKey] : undefined;
     };
 
-    const cadVal = findValue(['caducidad', 'vencimiento', 'fechadecaducidad', 'vence', 'fecha', 'venc', 'f.caducidad', 'expiracion', 'vencimientolote', 'f_caducidad', 'vencimiento_lote', 'vence_lote', 'caducidad_lote']);
+    const cadVal = findValue([
+        'caducidad', 'vencimiento', 'fechadecaducidad', 'vence', 'fecha', 'venc', 'f.caducidad', 
+        'expiracion', 'vencimientolote', 'f_caducidad', 'vencimiento_lote', 'vence_lote', 
+        'caducidad_lote', 'fecha_vencimiento', 'fechavencimiento', 'caducidadlote'
+    ]);
     
     let formattedCaducidad = 'SIN FECHA';
     if (cadVal) {
         if (isDate(cadVal)) {
             formattedCaducidad = formatDateFns(cadVal as Date, 'dd/MM/yyyy');
         } else if (typeof cadVal === 'number' && cadVal > 30000) {
-            // Excel serial date
             const excelEpoch = new Date(1899, 11, 30);
             const d = new Date(excelEpoch.getTime() + cadVal * 86400000);
             if (isValid(d)) formattedCaducidad = formatDateFns(d, 'dd/MM/yyyy');
@@ -749,3 +752,8 @@ export async function updateAnnouncements(m: string[]) { await setDoc(doc(adminD
 
 export async function bulkInsertMedicationsAction(items: any[]) { return bulkInsertMedications(items); }
 export async function bulkInsertSuppliesAction(items: any[]) { return bulkInsertSupplies(items); }
+
+export async function getLabSettingsData() { return getLabSettings(); }
+export async function getXRaySettingsData() { return getXRaySettings(); }
+export async function getUltrasoundSettingsData() { return getUltrasoundSettings(); }
+export async function getVaccineSettingsData() { return getVaccineSettings(); }

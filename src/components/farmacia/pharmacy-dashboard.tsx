@@ -96,6 +96,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
     
     let expiryDate: Date | null = null;
     
+    // Attempt parsing multiple formats
     if (isDate(dateStr)) {
         expiryDate = dateStr as unknown as Date;
     } else if (dateStr.includes('/')) {

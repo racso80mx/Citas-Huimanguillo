@@ -1,6 +1,7 @@
+
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath } from 'revalidatePath';
 import * as data from './data';
 import type { 
     Patient, 
@@ -215,15 +216,10 @@ export async function scanDuplicates(criteria: any) { return data.scanDuplicates
 
 // --- CONFIGURACIONES ---
 export async function getArchiveSettings() { return data.getArchiveSettingsData(); }
-export async function getArchiveSettingsData() { return data.getArchiveSettingsData(); }
 export async function getPharmacySettings() { return data.getPharmacySettingsData(); }
-export async function getPharmacySettingsData() { return data.getPharmacySettingsData(); }
 export async function getWarehouseSettings() { return data.getWarehouseSettingsData(); }
-export async function getWarehouseSettingsData() { return data.getWarehouseSettingsData(); }
 export async function getBISettings() { return data.getBISettingsData(); }
-export async function getBISettingsData() { return data.getBISettingsData(); }
 export async function getAdminSettings() { return data.getAdminSettingsData(); }
-export async function getAdminSettingsData() { return data.getAdminSettingsData(); }
 
 export async function updateAdminSettings(settings: AdminSettings) { return data.updateAdminSettings(settings); }
 export async function updateArchiveSettings(settings: ArchiveSettings) { return data.updateArchiveSettings(settings); }
