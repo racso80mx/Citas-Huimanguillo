@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -54,7 +55,7 @@ import type {
 } from './definitions';
 import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
-import { format as formatDate, startOfMonth, startOfDay, endOfDay, subDays } from 'date-fns';
+import { format as formatDateFns, startOfMonth, startOfDay, endOfDay, subDays, isValid, parse, isDate } from 'date-fns';
 
 // --- UTILIDADES DE SERIALIZACIÓN ---
 export function serializeData(data: any): any {
@@ -86,11 +87,27 @@ function fuzzyMapInsumo(item: any) {
         return foundKey ? item[foundKey] : undefined;
     };
 
+    const cadVal = findValue(['caducidad', 'vencimiento', 'fechadecaducidad', 'vence', 'fecha', 'venc', 'f.caducidad', 'expiracion', 'vencimientolote', 'f_caducidad', 'vencimiento_lote', 'vence_lote', 'caducidad_lote']);
+    
+    let formattedCaducidad = 'SIN FECHA';
+    if (cadVal) {
+        if (isDate(cadVal)) {
+            formattedCaducidad = formatDateFns(cadVal as Date, 'dd/MM/yyyy');
+        } else if (typeof cadVal === 'number' && cadVal > 30000) {
+            // Excel serial date
+            const excelEpoch = new Date(1899, 11, 30);
+            const d = new Date(excelEpoch.getTime() + cadVal * 86400000);
+            if (isValid(d)) formattedCaducidad = formatDateFns(d, 'dd/MM/yyyy');
+        } else if (typeof cadVal === 'string') {
+            formattedCaducidad = cadVal.toUpperCase().trim();
+        }
+    }
+
     return {
         claveCuadroBasico: String(findValue(['clave', 'clavedecuadrobasico', 'articulo', 'codigo', 'cod', 'idinsumo', 'clv', 'clavebasica', 'cve', 'clave_articulo']) || 'S/C'),
         descripcion: String(findValue(['descripcion', 'nombre', 'insumo', 'producto', 'articulo', 'desc', 'sustancia', 'descripciondelarticulo', 'nombre_generico']) || 'SIN DESCRIPCIÓN').toUpperCase(),
         existencia: Number(findValue(['existencia', 'stock', 'cantidad', 'actual', 'total', 'cant', 'stockactual', 'disponible', 'existencias', 'entradas', 'salidas']) || 0),
-        fechaCaducidad: String(findValue(['caducidad', 'vencimiento', 'fechadecaducidad', 'vence', 'fecha', 'venc', 'f.caducidad', 'expiracion', 'vencimientolote', 'f_caducidad', 'vencimiento_lote', 'vence_lote']) || 'SIN FECHA'),
+        fechaCaducidad: formattedCaducidad,
         lote: String(findValue(['lote', 'numerodelote', 'loteo', 'n.lote', 'lot', 'num.lote', 'batch', 'lote_produccion']) || 'N/A').toUpperCase(),
         grupo: String(findValue(['grupo', 'categoria', 'familia', 'tipo', 'clasificacion']) || '').toUpperCase(),
         precioUnitario: Number(findValue(['precio', 'preciounitario', 'costo', 'valor']) || 0),
@@ -304,7 +321,7 @@ export async function bulkInsertPatients(patients: any[]) {
                 birthState: String(p.Estado || p.birthState || 'TABASCO').toUpperCase(), address: String(p.Domicilio || p.address || '').toUpperCase(),
                 coloniaName: String(p.Colonia || p.coloniaName || '').toUpperCase(), phoneNumber: String(p.Telefono || p.phoneNumber || ''),
                 status: (p.Estatus || p.status || PatientStatus.Vigente) as PatientStatus,
-                registrationDate: String(p.FechaApertura || p.registrationDate || formatDate(new Date(), 'yyyy-MM-dd')),
+                registrationDate: String(p.FechaApertura || p.registrationDate || formatDateFns(new Date(), 'yyyy-MM-dd')),
                 derechoAbiencia: String(p.DerechoAbiencia || p.derechoAbiencia || '').toUpperCase() || null
             };
             const existingRef = existingMap.get(curp);
@@ -350,7 +367,7 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
         else { pId = uuidv4(); batch.set(doc(adminDb, 'patients', pId), { ...patient, id: pId, lastAppointmentDate: appointment.date }); }
     }
     const aId = uuidv4();
-    const folio = `FOL-${Math.floor(1000 + Math.random() * 9000)}-${formatDate(new Date(), 'mmss')}`;
+    const folio = `FOL-${Math.floor(1000 + Math.random() * 9000)}-${formatDateFns(new Date(), 'mmss')}`;
     const newApp = { ...appointment, patientId: pId, appointmentNumber: folio, createdAt: new Date().toISOString(), id: aId, coloniaName: colonia || null };
     batch.set(doc(adminDb, 'appointments', aId), newApp);
     await batch.commit();
@@ -506,7 +523,7 @@ export async function getConsultationsByPatientId(pid: string) { const q = query
 export async function saveMedicalConsultation(c: any) { const id = c.id || uuidv4(); await setDoc(doc(adminDb, 'consultations', id), { ...c, id, createdAt: new Date().toISOString() }, { merge: true }); if (c.appointmentId) await updateDoc(doc(adminDb, 'appointments', c.appointmentId), { status: 'Atendido' }); return { success: true, id }; }
 export async function deleteMedicalConsultation(id: string) { await deleteDoc(doc(adminDb, 'consultations', id)); return { success: true }; }
 export async function getConsultationByAppointmentId(aid: string) { const q = query(collection(adminDb, 'consultations'), where('appointmentId', '==', aid), limit(1)); const snap = await getDocs(q); return snap.empty ? null : { ...serializeData(snap.docs[0].data()), id: snap.docs[0].id }; }
-export async function createPrescription(p: any) { const id = uuidv4(); const folio = `REC-${Math.floor(1000 + Math.random() * 9000)}-${formatDate(new Date(), 'mmss')}`; const expiresAt = new Date(Date.now() + 86400000).toISOString(); const data = { ...p, id, folio, expiresAt, status: 'pendiente', createdAt: new Date().toISOString() }; await setDoc(doc(adminDb, 'prescriptions', id), data); return { success: true, folio, prescription: data }; }
+export async function createPrescription(p: any) { const id = uuidv4(); const folio = `REC-${Math.floor(1000 + Math.random() * 9000)}-${formatDateFns(new Date(), 'mmss')}`; const expiresAt = new Date(Date.now() + 86400000).toISOString(); const data = { ...p, id, folio, expiresAt, status: 'pendiente', createdAt: new Date().toISOString() }; await setDoc(doc(adminDb, 'prescriptions', id), data); return { success: true, folio, prescription: data }; }
 export async function updatePrescription(id: string, p: any) { await updateDoc(doc(adminDb, 'prescriptions', id), p); return { success: true }; }
 export async function dispensePrescription(id: string, items: any[]) { const batch = writeBatch(adminDb); for (const item of items) { batch.update(doc(adminDb, 'medications', item.medicationId), { existencia: increment(-item.quantity) }); } batch.update(doc(adminDb, 'prescriptions', id), { status: 'surtida', dispensedAt: new Date().toISOString() }); await batch.commit(); return { success: true }; }
 export async function deletePrescription(id: string) { await deleteDoc(doc(adminDb, 'prescriptions', id)); return { success: true }; }
@@ -732,4 +749,3 @@ export async function updateAnnouncements(m: string[]) { await setDoc(doc(adminD
 
 export async function bulkInsertMedicationsAction(items: any[]) { return bulkInsertMedications(items); }
 export async function bulkInsertSuppliesAction(items: any[]) { return bulkInsertSupplies(items); }
-

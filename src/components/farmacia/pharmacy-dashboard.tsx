@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useTransition, useMemo } from 'react';
@@ -106,9 +107,6 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
         }
     } else if (dateStr.includes('-')) {
         expiryDate = new Date(dateStr);
-    } else if (!isNaN(Number(dateStr)) && dateStr.length === 5) {
-        const excelEpoch = new Date(1899, 11, 30);
-        expiryDate = new Date(excelEpoch.getTime() + Number(dateStr) * 86400000);
     } else {
         expiryDate = new Date(dateStr);
     }
