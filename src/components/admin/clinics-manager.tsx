@@ -200,7 +200,7 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
 
     return (
         <DialogContent className="sm:max-w-[90vw] h-[95vh] flex flex-col p-0 overflow-hidden text-foreground">
-            <DialogHeader className="p-6 shrink-0 border-b">
+            <DialogHeader className="p-6 shrink-0 border-b bg-muted/10">
                 <div className="flex items-center justify-between">
                     <div>
                         <DialogTitle className="text-2xl font-black uppercase">Configuración Avanzada de Unidad</DialogTitle>
