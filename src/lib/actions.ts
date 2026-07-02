@@ -82,6 +82,7 @@ export async function getLabAppointments() { return data.getLabAppointmentsData(
 export async function getXRayAppointments() { return data.getXRayAppointmentsData(); }
 export async function getUltrasoundAppointments() { return data.getUltrasoundAppointmentsData(); }
 export async function getVaccineAppointments() { return data.getVaccineAppointmentsData(); }
+
 export async function updateAppointmentStatus(id: string, s: string, t: any) { 
     const res = await data.updateAppointmentStatus(id, s, t);
     revalidatePath('/', 'layout');
@@ -99,6 +100,7 @@ export async function saveNewLabAppointment(a: any, p: any) { return data.saveNe
 export async function saveNewXRayAppointment(a: any, p: any) { return data.saveNewXRayAppointment(a, p); }
 export async function saveNewUltrasoundAppointment(a: any, p: any) { return data.saveNewUltrasoundAppointment(a, p); }
 export async function saveNewVaccineAppointment(a: any, p: any) { return data.saveNewVaccineAppointment(a, p); }
+export async function getAppointmentsForClinic(cid: string) { return data.getAppointmentsForClinic(cid); }
 
 // --- CLÍNICAS ---
 export async function getClinics() { return data.getClinicsData(); }

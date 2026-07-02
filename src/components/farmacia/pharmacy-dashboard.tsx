@@ -90,7 +90,9 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
     if (!dateStr || dateStr.toUpperCase() === 'SIN FECHA' || dateStr.trim() === '') return 'unknown';
     
     let expiryDate: Date | null = null;
-    if (dateStr.includes('/')) {
+    if (isDate(dateStr)) {
+        expiryDate = dateStr as unknown as Date;
+    } else if (dateStr.includes('/')) {
         expiryDate = parse(dateStr, 'dd/MM/yyyy', new Date());
     } else if (dateStr.includes('-')) {
         expiryDate = new Date(dateStr);
@@ -129,12 +131,12 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
         }
 
         const totalRecords = json.length;
-        setUploadStatus({ processed: 0, total: totalRecords, message: 'Sincronizando con BD...' });
+        setUploadStatus({ processed: 0, total: totalRecords, message: 'Sincronizando...' });
 
         const result = await bulkInsertMedications(JSON.parse(JSON.stringify(json)));
 
         if (result.success) {
-            toast({ title: 'Carga Completada', description: `${result.processedCount} registros actualizados.` });
+            toast({ title: 'Carga Exitosa', description: `${result.processedCount} registros procesados.` });
             loadMedications();
         } else {
             throw new Error(result.message);
@@ -161,32 +163,26 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
   };
 
   const stats = useMemo(() => {
-    const counts = { red: 0, yellow: 0, green: 0, total: medications.length };
+    const counts = { red: 0, yellow: 0, green: 0, unknown: 0, total: medications.length };
     medications.forEach(m => {
         const status = getExpirationStatus(m.fechaCaducidad);
         if (status === 'red') counts.red++;
         else if (status === 'yellow') counts.yellow++;
         else if (status === 'green') counts.green++;
+        else counts.unknown++;
     });
     return counts;
   }, [medications]);
 
   const filtered = useMemo(() => {
     let result = [...medications];
-
     if (statusFilter) {
       result = result.filter(m => getExpirationStatus(m.fechaCaducidad) === statusFilter);
     }
-
     if (searchTerm) {
       const term = searchTerm.toUpperCase();
-      result = result.filter(m => 
-        m.descripcion.includes(term) || 
-        m.claveCuadroBasico.includes(term) ||
-        m.lote.includes(term)
-      );
+      result = result.filter(m => m.descripcion.includes(term) || m.claveCuadroBasico.includes(term));
     }
-
     if (sortConfig) {
       result.sort((a, b) => {
         const valA = a[sortConfig.key];
@@ -197,7 +193,6 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
         return sortConfig.direction === 'asc' ? (valA < valB ? -1 : 1) : (valA > valB ? -1 : 1);
       });
     }
-
     return result;
   }, [medications, searchTerm, statusFilter, sortConfig]);
 
@@ -236,7 +231,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
-                            <Label>Archivo Excel (.xlsx)</Label>
+                            <Label>Seleccionar archivo (.xlsx)</Label>
                             <Input type="file" accept=".xlsx" onChange={handleFileUpload} disabled={isUploading} />
                         </div>
                         {isUploading && <Progress value={100} className="h-2 animate-pulse" />}
@@ -263,54 +258,26 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                 <Card className="md:col-span-2 shadow-sm border-primary/10">
                 <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2"><CalendarClock className="h-5 w-5 text-primary" /> Semáforo de Caducidades</CardTitle>
-                    <CardDescription>Haz clic en las categorías para filtrar la tabla inferior.</CardDescription>
+                    <CardDescription>Haz clic en las categorías para filtrar la tabla.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <button 
-                        onClick={() => setStatusFilter(statusFilter === 'red' ? null : 'red')}
-                        className={cn(
-                            "bg-red-50 border p-4 rounded-xl text-center transition-all",
-                            statusFilter === 'red' ? "border-red-500 ring-2 ring-red-200 shadow-md scale-105" : "border-red-100 opacity-70 hover:opacity-100"
-                        )}
-                    >
-                        <div className="text-[10px] text-red-600 uppercase font-black mb-1">Crítico (&lt; 6m)</div>
-                        <div className="text-3xl font-black text-red-700">{stats.red}</div>
-                        <div className="text-[10px] text-red-500 mt-1 flex items-center justify-center gap-1"><AlertTriangle className="h-3 w-3"/> Ver lista</div>
-                    </button>
-                    <button 
-                        onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')}
-                        className={cn(
-                            "bg-yellow-50 border p-4 rounded-xl text-center transition-all",
-                            statusFilter === 'yellow' ? "border-yellow-500 ring-2 ring-yellow-200 shadow-md scale-105" : "border-yellow-100 opacity-70 hover:opacity-100"
-                        )}
-                    >
-                        <div className="text-[10px] text-yellow-600 uppercase font-black mb-1">Preventivo (6m-1a)</div>
-                        <div className="text-3xl font-black text-yellow-700">{stats.yellow}</div>
-                        <div className="text-[10px] text-yellow-500 mt-1 flex items-center justify-center gap-1"><CalendarClock className="h-3 w-3"/> Ver lista</div>
-                    </button>
-                    <button 
-                        onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')}
-                        className={cn(
-                            "bg-green-50 border p-4 rounded-xl text-center transition-all",
-                            statusFilter === 'green' ? "border-green-500 ring-2 ring-green-200 shadow-md scale-105" : "border-green-100 opacity-70 hover:opacity-100"
-                        )}
-                    >
-                        <div className="text-[10px] text-green-600 uppercase font-black mb-1">Óptimo (&gt; 1a)</div>
-                        <div className="text-3xl font-black text-green-700">{stats.green}</div>
-                        <div className="text-[10px] text-green-500 mt-1 flex items-center justify-center gap-1"><CheckCircle2 className="h-3 w-3"/> Ver lista</div>
-                    </button>
-                    <button 
-                        onClick={() => setStatusFilter(null)}
-                        className={cn(
-                            "bg-muted/30 border p-4 rounded-xl text-center transition-all",
-                            !statusFilter ? "border-primary ring-2 ring-primary/10 shadow-md scale-105" : "border-transparent opacity-70 hover:opacity-100"
-                        )}
-                    >
-                        <div className="text-[10px] text-muted-foreground uppercase font-black mb-1">Total Registros</div>
-                        <div className="text-3xl font-black">{stats.total}</div>
-                        <div className="text-[10px] text-muted-foreground mt-1">Ver todos</div>
-                    </button>
+                        <button onClick={() => setStatusFilter(statusFilter === 'red' ? null : 'red')} className={cn("bg-red-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'red' ? "border-red-500 ring-2 ring-red-200" : "border-red-100 opacity-70")}>
+                            <div className="text-[10px] text-red-600 uppercase font-black mb-1">Crítico (&lt; 6m)</div>
+                            <div className="text-3xl font-black text-red-700">{stats.red}</div>
+                        </button>
+                        <button onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')} className={cn("bg-yellow-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'yellow' ? "border-yellow-500 ring-2 ring-yellow-200" : "border-yellow-100 opacity-70")}>
+                            <div className="text-[10px] text-yellow-600 uppercase font-black mb-1">Preventivo (6m-1a)</div>
+                            <div className="text-3xl font-black text-yellow-700">{stats.yellow}</div>
+                        </button>
+                        <button onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')} className={cn("bg-green-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'green' ? "border-green-500 ring-2 ring-green-200" : "border-green-100 opacity-70")}>
+                            <div className="text-[10px] text-green-600 uppercase font-black mb-1">Óptimo (&gt; 1a)</div>
+                            <div className="text-3xl font-black text-green-700">{stats.green}</div>
+                        </button>
+                        <button onClick={() => setStatusFilter(null)} className={cn("bg-muted/30 border p-4 rounded-xl text-center transition-all", !statusFilter ? "border-primary ring-2 ring-primary/10" : "border-transparent opacity-70")}>
+                            <div className="text-[10px] text-muted-foreground uppercase font-black mb-1">Total Registros</div>
+                            <div className="text-3xl font-black">{stats.total}</div>
+                        </button>
                     </div>
                 </CardContent>
                 </Card>
@@ -360,16 +327,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                                     <Badge variant={item.existencia > 0 ? 'secondary' : 'destructive'} className="font-black">{item.existencia}</Badge>
                                 </TableCell>
                                 <TableCell>
-                                    <Badge 
-                                        variant="outline"
-                                        className={cn(
-                                            "font-black text-[10px] px-3 uppercase tracking-tighter border-2",
-                                            expiryStatus === 'red' && "bg-red-50 text-red-700 border-red-200",
-                                            expiryStatus === 'yellow' && "bg-yellow-50 text-yellow-700 border-yellow-200",
-                                            expiryStatus === 'green' && "bg-green-50 text-green-700 border-green-200",
-                                            expiryStatus === 'unknown' && "bg-gray-100 text-gray-500"
-                                        )}
-                                    >
+                                    <Badge variant="outline" className={cn("font-black text-[10px] px-3 uppercase border-2", expiryStatus === 'red' && "bg-red-50 text-red-700 border-red-200", expiryStatus === 'yellow' && "bg-yellow-50 text-yellow-700 border-yellow-200", expiryStatus === 'green' && "bg-green-50 text-green-700 border-green-200", expiryStatus === 'unknown' && "bg-gray-100 text-gray-500")}>
                                     {item.fechaCaducidad || 'SIN FECHA'}
                                     </Badge>
                                 </TableCell>
@@ -378,15 +336,10 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                             );
                             })
                         ) : (
-                            <TableRow><TableCell colSpan={5} className="text-center py-20 italic">No se encontraron registros coincidentes.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={5} className="text-center py-20 italic">No se encontraron registros.</TableCell></TableRow>
                         )}
                         </TableBody>
                     </Table>
-                    {filtered.length > 500 && (
-                        <div className="p-4 text-center text-xs text-muted-foreground border-t italic">
-                            Mostrando primeros 500 de {filtered.length} registros. Usa el buscador para filtrar más resultados.
-                        </div>
-                    )}
                     </div>
                 )}
                 </CardContent>

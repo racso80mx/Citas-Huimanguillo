@@ -1,4 +1,3 @@
-'use server';
 import React from 'react';
 import PageContent from './page-content';
 import { getModuleSettings } from '@/lib/data';
