@@ -95,7 +95,14 @@ function fuzzyMapInsumo(item: any) {
         lote: String(findValue(['lote', 'numerodelote', 'loteo', 'n.lote', 'lot', 'num.lote', 'batch']) || 'N/A').toUpperCase(),
         grupo: String(findValue(['grupo', 'categoria', 'familia', 'tipo', 'clasificacion']) || '').toUpperCase(),
         precioUnitario: Number(findValue(['precio', 'preciounitario', 'costo', 'valor']) || 0),
-        almacen: String(findValue(['almacen', 'deposito', 'bodega', 'unidad']) || '').toUpperCase()
+        almacen: String(findValue(['almacen', 'deposito', 'bodega', 'unidad']) || '').toUpperCase(),
+        totalImporte: 0,
+        proveedor: '',
+        rfcProveedor: '',
+        fuenteFinanciamiento: '',
+        ordenSuministro: '',
+        tipoInsumo: '',
+        numeroContrato: ''
     };
 }
 
@@ -144,11 +151,9 @@ export async function logActivity(action: string, details: string) {
 
 export async function getLogsData() {
   const colRef = collection(adminDb, 'activityLog');
-  const q = query(colRef, limit(500));
+  const q = query(colRef, orderBy('timestamp', 'desc'), limit(500));
   const snap = await getDocs(q);
-  return snap.docs
-    .map(d => ({ ...serializeData(d.data()), id: d.id }))
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
 }
 
 // --- MÓDULOS Y SEGURIDAD ---
@@ -211,9 +216,9 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     if (words.length === 0) return [];
 
     const firstWord = words[0];
-    const q1 = query(colRef, where('paternalLastName', '>=', firstWord), where('paternalLastName', '<=', firstWord + '\uf8ff'), limit(2000));
-    const q2 = query(colRef, where('name', '>=', firstWord), where('name', '<=', firstWord + '\uf8ff'), limit(2000));
-    const q3 = query(colRef, where('maternalLastName', '>=', firstWord), where('maternalLastName', '<=', firstWord + '\uf8ff'), limit(2000));
+    const q1 = query(colRef, where('paternalLastName', '>=', firstWord), where('paternalLastName', '<=', firstWord + '\uf8ff'), limit(1500));
+    const q2 = query(colRef, where('name', '>=', firstWord), where('name', '<=', firstWord + '\uf8ff'), limit(1500));
+    const q3 = query(colRef, where('maternalLastName', '>=', firstWord), where('maternalLastName', '<=', firstWord + '\uf8ff'), limit(1500));
     
     const [snap1, snap2, snap3] = await Promise.all([getDocs(q1), getDocs(q2), getDocs(q3)]);
     
@@ -311,7 +316,7 @@ export async function bulkInsertPatients(patients: any[]) {
     return { success: true, addedCount: added, updatedCount: updated, processedCount: patients.length };
 }
 
-// --- CITAS ---
+// --- CITAS (OPTIMIZADAS PARA EVITAR ERRORES DE ÍNDICE) ---
 export async function getAppointmentsData() {
     const apps = await getRawCollection('appointments', 10000); 
     const pats = await getPatientsForApps(apps);
@@ -339,6 +344,7 @@ export async function getAppointmentsForClinic(clinicId: string) {
     const clinics = await getClinicsData();
     const target = clinics.find(c => c.id === clinicId);
     const pats = await getPatientsForApps(apps);
+    // Filtrado en memoria para evitar errores de índice compuesto
     return apps.filter(a => a.clinicId === clinicId || (target && (a.clinicName || '').toUpperCase() === target.name.toUpperCase()))
                .map(a => ({ ...a, patient: pats.find(p => p.id === a.patientId), clinicName: target?.name || a.clinicName }));
 }
@@ -365,7 +371,7 @@ export async function saveNewLabAppointment(appointment: any, patient: any) {
     const snap = await getDocs(q); let pId = snap.empty ? uuidv4() : snap.docs[0].id;
     batch.set(doc(adminDb, 'patients', pId), { ...patient, id: pId }, { merge: true });
     const aId = uuidv4(); batch.set(doc(adminDb, 'labAppointments', aId), { ...appointment, id: aId, patientId: pId, createdAt: new Date().toISOString() });
-    await batch.commit(); return { success: true, data: { ...appointment, patient } };
+    await batch.commit(); return { success: true, data: { ...appointment, patient, appointmentNumber: appointment.appointmentNumber } };
 }
 
 export async function saveNewXRayAppointment(appointment: any, patient: any) {
@@ -389,7 +395,7 @@ export async function saveNewVaccineAppointment(appointment: any, patient: any) 
     const snap = await getDocs(q); let pId = snap.empty ? uuidv4() : snap.docs[0].id;
     batch.set(doc(adminDb, 'patients', pId), { ...patient, id: pId }, { merge: true });
     const aId = uuidv4(); batch.set(doc(adminDb, 'vaccineAppointments', aId), { ...appointment, id: aId, patientId: pId, createdAt: new Date().toISOString() });
-    await batch.commit(); return { success: true, data: { ...appointment, patient } };
+    await batch.commit(); return { success: true, data: { ...appointment, patient, appointmentNumber: appointment.appointmentNumber } };
 }
 
 // --- CLÍNICAS ---
@@ -404,7 +410,12 @@ export async function updateClinics(clinics: Clinic[]) {
     clinics.forEach(c => {
         const { id, unavailableDates, customSchedules, daysOfAction, password, ...baseInfo } = c;
         batch.set(doc(adminDb, 'clinics', id), { ...baseInfo, id }, { merge: true });
-        batch.set(doc(adminDb, 'clinic_settings', id), { unavailableDates: unavailableDates || [], customSchedules: customSchedules || [], daysOfAction: daysOfAction || [], password: password || '123' }, { merge: true });
+        batch.set(doc(adminDb, 'clinic_settings', id), { 
+            unavailableDates: unavailableDates || [], 
+            customSchedules: customSchedules || [], 
+            daysOfAction: daysOfAction || [], 
+            password: password || '123' 
+        }, { merge: true });
     });
     await batch.commit(); return { success: true }; 
 }
@@ -522,8 +533,29 @@ export async function getPrescriptionsByPatientId(pid: string) { const q = query
 export async function getPatientPrescriptionsCountTodayAction(pid: string) { const start = startOfDay(new Date()).toISOString(); const q = query(collection(adminDb, 'prescriptions'), where('patientId', '==', pid), where('date', '>=', start)); const snap = await getCountFromServer(q); return snap.data().count; }
 
 // --- MANTENIMIENTO ---
-export async function getAppointmentCountOnDate(cid: string, d: string) { const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), where('date', '>=', startOfDay(new Date(d + 'T00:00:00')).toISOString()), where('date', '<=', endOfDay(new Date(d + 'T23:59:59')).toISOString())); const snap = await getCountFromServer(q); return snap.data().count; }
-export async function getAttendedPatientsForClinic(cid: string) { const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), where('status', '==', 'Atendido'), limit(100)); const snap = await getDocs(q); const pIds = Array.from(new Set(snap.docs.map(d => d.data().patientId))); if (pIds.length === 0) return []; const pats: any[] = []; for (let i = 0; i < pIds.length; i += 30) { const chunk = pIds.slice(i, i + 30); const pq = query(collection(adminDb, 'patients'), where('__name__', 'in', chunk)); const psnap = await getDocs(pq); pats.push(...psnap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }))); } return pats; }
+// OPTIMIZADO: In-memory filter para evitar FAILED_PRECONDITION (composite index required)
+export async function getAppointmentCountOnDate(cid: string, d: string) { 
+    const apps = await getRawCollection('appointments', 10000);
+    const dateOnly = d; // Esperado YYYY-MM-DD
+    return apps.filter(a => a.clinicId === cid && a.date.split('T')[0] === dateOnly).length;
+}
+
+// OPTIMIZADO: In-memory filter para evitar errores de índice
+export async function getAttendedPatientsForClinic(cid: string) { 
+    const apps = await getRawCollection('appointments', 10000);
+    const attendedIds = Array.from(new Set(apps.filter(a => a.clinicId === cid && a.status === 'Atendido').map(a => a.patientId)));
+    if (attendedIds.length === 0) return [];
+    
+    const pats: any[] = [];
+    for (let i = 0; i < attendedIds.length; i += 30) {
+        const chunk = attendedIds.slice(i, i + 30);
+        const q = query(collection(adminDb, 'patients'), where('__name__', 'in', chunk));
+        const snap = await getDocs(q);
+        pats.push(...snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
+    }
+    return pats;
+}
+
 export async function rescheduleAppointment(id: string, date: string, type: string) { const coll = type === 'medical' ? 'appointments' : type === 'lab' ? 'labAppointments' : type === 'xray' ? 'xrayAppointments' : type === 'ultrasound' ? 'ultrasoundAppointments' : 'vaccineAppointments'; await updateDoc(doc(adminDb, coll, id), { date }); return { success: true, message: 'Fecha actualizada correctamente.' }; }
 export async function cloneAppointment(id: string, date: string, type: string, time?: string) { const coll = type === 'medical' ? 'appointments' : type === 'lab' ? 'labAppointments' : type === 'xray' ? 'xrayAppointments' : type === 'ultrasound' ? 'ultrasoundAppointments' : 'vaccineAppointments'; const snap = await getDoc(doc(adminDb, coll, id)); if (!snap.exists()) return { success: false, message: 'Cita original no encontrada.' }; const old = snap.data(); const nid = uuidv4(); const folio = `FOL-${Math.floor(1000 + Math.random() * 9000)}-CLON`; await setDoc(doc(adminDb, coll, nid), { ...old, id: nid, date, appointmentNumber: folio, status: 'Agendada', createdAt: new Date().toISOString(), time: time || old.time }); return { success: true, message: `Nueva cita asignada con folio ${folio}` }; }
 export async function cleanupOldRecords() { const prevMonth = startOfMonth(new Date(Date.now() - 30 * 86400000)).toISOString(); const collections = ['appointments', 'labAppointments', 'xrayAppointments', 'ultrasoundAppointments', 'vaccineAppointments', 'activityLog']; let total = 0; for (const coll of collections) { const q = query(collection(adminDb, coll), where('date', '<', prevMonth)); const snap = await getDocs(q); const batch = writeBatch(adminDb); snap.docs.forEach(d => { batch.delete(d.ref); total++; }); await batch.commit(); } return { success: true, deletedCount: total }; }
