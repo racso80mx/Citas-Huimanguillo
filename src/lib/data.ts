@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -18,9 +17,7 @@ import {
   getCountFromServer,
   DocumentData,
   Query,
-  orderBy,
-  startAt,
-  endAt
+  orderBy
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -98,11 +95,22 @@ function fuzzyMapInsumo(item: any) {
         if (isDate(cadVal)) {
             formattedCaducidad = formatDateFns(cadVal as Date, 'dd/MM/yyyy');
         } else if (typeof cadVal === 'number' && cadVal > 30000) {
+            // Excel date handling
             const excelEpoch = new Date(1899, 11, 30);
             const d = new Date(excelEpoch.getTime() + cadVal * 86400000);
             if (isValid(d)) formattedCaducidad = formatDateFns(d, 'dd/MM/yyyy');
         } else if (typeof cadVal === 'string') {
-            formattedCaducidad = cadVal.toUpperCase().trim();
+            const s = cadVal.trim();
+            if (s) {
+                // Try basic parsing
+                let d = new Date(s);
+                if (!isValid(d)) {
+                    // Try DD/MM/YYYY
+                    d = parse(s, 'dd/MM/yyyy', new Date());
+                }
+                if (isValid(d)) formattedCaducidad = formatDateFns(d, 'dd/MM/yyyy');
+                else formattedCaducidad = s.toUpperCase();
+            }
         }
     }
 
@@ -142,9 +150,8 @@ async function getPatientsForApps(apps: any[]) {
     const pIds = Array.from(new Set(apps.map(a => a.patientId).filter(id => !!id)));
     if (pIds.length === 0) return [];
     const pats: any[] = [];
-    const topIds = pIds.slice(0, 100); 
-    for (let i = 0; i < topIds.length; i += 30) {
-        const chunk = topIds.slice(i, i + 30);
+    for (let i = 0; i < pIds.length; i += 30) {
+        const chunk = pIds.slice(i, i + 30);
         const q = query(collection(adminDb, 'patients'), where('__name__', 'in', chunk));
         const snap = await getDocs(q);
         pats.push(...snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
@@ -234,24 +241,16 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     if (words.length === 0) return [];
     
     const firstWord = words[0];
-    const q1 = query(colRef, where('paternalLastName', '>=', firstWord), where('paternalLastName', '<=', firstWord + '\uf8ff'), limit(150));
-    const q2 = query(colRef, where('name', '>=', firstWord), where('name', '<=', firstWord + '\uf8ff'), limit(150));
+    const q = query(colRef, where('paternalLastName', '>=', firstWord), where('paternalLastName', '<=', firstWord + '\uf8ff'), limit(150));
+    const snap = await getDocs(q);
     
-    const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-    
-    const resultsMap = new Map<string, Patient>();
-    [...snap1.docs, ...snap2.docs].forEach(d => {
-        const data = { ...serializeData(d.data()), id: d.id } as Patient;
-        resultsMap.set(d.id, data);
-    });
-    
-    let results = Array.from(resultsMap.values());
+    let results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id } as Patient));
     results = results.filter(p => {
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         return words.every((word: string) => fullName.includes(word));
     });
 
-    return results.sort((a,b) => (a.paternalLastName || '').localeCompare(b.paternalLastName || '')).slice(0, 100);
+    return results.sort((a,b) => (a.paternalLastName || '').localeCompare(b.paternalLastName || '')).slice(0, 50);
   }
 
   let q: Query<DocumentData> = colRef;
@@ -338,7 +337,7 @@ export async function bulkInsertPatients(patients: any[]) {
 
 export async function getAppointmentsData() {
     const recentDate = subDays(new Date(), 30).toISOString();
-    const q = query(collection(adminDb, 'appointments'), where('date', '>=', recentDate), limit(1000));
+    const q = query(collection(adminDb, 'appointments'), where('date', '>=', recentDate), limit(500));
     const snap = await getDocs(q);
     const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
     const pats = await getPatientsForApps(apps);
@@ -352,7 +351,7 @@ export async function getUltrasoundAppointmentsData() { const apps = await getRa
 export async function getVaccineAppointmentsData() { const apps = await getRawCollection('vaccineAppointments', 500); const pats = await getPatientsForApps(apps); return apps.map(a => ({ ...a, patient: pats.find(p => p.id === a.patientId) })); }
 
 export async function getAppointmentsForClinic(clinicId: string) {
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId), limit(1000));
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId), limit(500));
     const snap = await getDocs(q);
     const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
     const pats = await getPatientsForApps(apps);
@@ -479,6 +478,7 @@ export async function updateVaccines(v: Vaccine[]) { const batch = writeBatch(ad
 
 export async function getMedications() { return getRawCollection('medications', 1000); }
 export async function getSupplies() { return getRawCollection('supplies', 1000); }
+
 export async function bulkInsertMedications(items: any[]) {
     const batch = writeBatch(adminDb);
     items.forEach(item => {
@@ -541,18 +541,17 @@ export async function deleteXRayAppointment(id: string) { await deleteDoc(doc(ad
 export async function deleteUltrasoundAppointment(id: string) { await deleteDoc(doc(adminDb, 'ultrasoundAppointments', id)); return { success: true }; }
 export async function deleteVaccineAppointment(id: string) { await deleteDoc(doc(adminDb, 'vaccineAppointments', id)); return { success: true }; }
 
-export async function getAppointmentCountOnDate(cid: string, d: string) { 
-    const dateOnly = d.split('T')[0];
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), where('date', '>=', dateOnly), where('date', '<=', dateOnly + 'T23:59:59'));
+export async function getAppointmentCountOnDate(clinicId: string, date: string) { 
+    const dateOnly = date.split('T')[0];
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId), where('date', '>=', dateOnly), where('date', '<=', dateOnly + 'T23:59:59'));
     const snap = await getCountFromServer(q);
     return snap.data().count;
 }
 
 export async function getAttendedPatientsForClinic(clinicId: string) { 
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId), where('status', '==', 'Atendido'), orderBy('date', 'desc'), limit(50));
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId), where('status', '==', 'Atendido'), limit(500));
     const snap = await getDocs(q);
-    const apps = snap.docs.map(d => d.data());
-    const attendedIds = Array.from(new Set(apps.map(a => a.patientId)));
+    const attendedIds = Array.from(new Set(snap.docs.map(d => d.data().patientId)));
     if (attendedIds.length === 0) return [];
     const pats: any[] = [];
     for (let i = 0; i < attendedIds.length; i += 30) {
@@ -603,9 +602,9 @@ export async function cleanupOldRecords() {
 
 export async function downloadBackupAction() {
     const [appointments, labAppointments, xRayAppointments, ultrasoundAppointments, vaccineAppointments, patients, clinics] = await Promise.all([
-        getRawCollection('appointments', 1000), getRawCollection('labAppointments', 1000), 
-        getRawCollection('xrayAppointments', 1000), getRawCollection('ultrasoundAppointments', 1000), 
-        getRawCollection('vaccineAppointments', 1000), getRawCollection('patients', 2000), 
+        getRawCollection('appointments', 1000), getRawCollection('labAppointments', 500), 
+        getRawCollection('xrayAppointments', 500), getRawCollection('ultrasoundAppointments', 500), 
+        getRawCollection('vaccineAppointments', 500), getRawCollection('patients', 1000), 
         getRawCollection('clinics', 100)
     ]);
     return { success: true, data: { appointments, labAppointments, xRayAppointments, ultrasoundAppointments, vaccineAppointments, patients, clinics } };
@@ -668,19 +667,13 @@ export async function applyStatusUpdateChunk(expedientes: string[], status: Pati
         const q = query(colRef, where('expediente', '==', exp), limit(1));
         const snap = await getDocs(q);
         if (!snap.empty) { batch.update(snap.docs[0].ref, { status }); updatedCount++; }
-        else {
-            const withZero = exp.startsWith('0') ? exp : '0' + exp;
-            const q2 = query(colRef, where('expediente', '==', withZero), limit(1));
-            const snap2 = await getDocs(q2);
-            if (!snap2.empty) { batch.update(snap2.docs[0].ref, { status }); updatedCount++; }
-        }
     }
     await batch.commit();
     return { success: true, count: updatedCount };
 }
 
 export async function scanDuplicates(criteria: 'expediente' | 'curp' | 'name') {
-    const patients = await getRawCollection('patients', 2000);
+    const patients = await getRawCollection('patients', 1000);
     const groups = new Map<string, Patient[]>();
     patients.forEach(p => {
         let key = '';
@@ -695,7 +688,7 @@ export async function scanDuplicates(criteria: 'expediente' | 'curp' | 'name') {
 }
 
 export async function normalizeExpedientesAction() {
-    const patients = await getRawCollection('patients', 2000);
+    const patients = await getRawCollection('patients', 1000);
     const batch = writeBatch(adminDb);
     let count = 0;
     patients.forEach(p => {
@@ -749,11 +742,3 @@ export async function getAnnouncementsData() {
     return snap.exists() ? snap.data().messages : [];
 }
 export async function updateAnnouncements(m: string[]) { await setDoc(doc(adminDb, 'settings', 'announcements'), { messages: m }); return { success: true }; }
-
-export async function bulkInsertMedicationsAction(items: any[]) { return bulkInsertMedications(items); }
-export async function bulkInsertSuppliesAction(items: any[]) { return bulkInsertSupplies(items); }
-
-export async function getLabSettingsData() { return getLabSettings(); }
-export async function getXRaySettingsData() { return getXRaySettings(); }
-export async function getUltrasoundSettingsData() { return getUltrasoundSettings(); }
-export async function getVaccineSettingsData() { return getVaccineSettings(); }

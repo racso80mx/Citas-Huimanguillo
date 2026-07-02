@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -50,7 +51,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { differenceInMonths, parse, isValid } from 'date-fns';
+import { differenceInMonths, parse, isValid, isDate } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
@@ -87,21 +88,26 @@ export function WarehouseDashboard({ onLogout }: { onLogout?: () => void }) {
   }, []);
 
   const getExpirationStatus = (dateStr: string): ExpirationStatus => {
-    if (!dateStr) return 'unknown';
+    if (!dateStr || dateStr.toUpperCase() === 'SIN FECHA' || dateStr.trim() === '') return 'unknown';
     
-    let expiryDate: Date;
-    if (dateStr.includes('/')) {
+    let expiryDate: Date | null = null;
+    if (isDate(dateStr)) {
+        expiryDate = dateStr as unknown as Date;
+    } else if (dateStr.includes('/')) {
         expiryDate = parse(dateStr, 'dd/MM/yyyy', new Date());
+    } else if (dateStr.includes('-')) {
+        expiryDate = new Date(dateStr);
     } else {
         expiryDate = new Date(dateStr);
     }
 
-    if (!isValid(expiryDate)) return 'unknown';
+    if (!expiryDate || !isValid(expiryDate)) return 'unknown';
 
-    const monthsUntilExpiry = differenceInMonths(expiryDate, new Date());
+    const now = new Date();
+    const monthsUntilExpiry = differenceInMonths(expiryDate, now);
 
     if (monthsUntilExpiry < 6) return 'red';
-    if (monthsUntilExpiry >= 6 && monthsUntilExpiry < 12) return 'yellow';
+    if (monthsUntilExpiry < 12) return 'yellow';
     return 'green';
   };
 
@@ -116,7 +122,7 @@ export function WarehouseDashboard({ onLogout }: { onLogout?: () => void }) {
       try {
         const xlsx = await import('xlsx');
         const buffer = await file.arrayBuffer();
-        const workbook = xlsx.read(buffer);
+        const workbook = xlsx.read(buffer, { cellDates: true });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = xlsx.utils.sheet_to_json(sheet);
 
@@ -133,32 +139,29 @@ export function WarehouseDashboard({ onLogout }: { onLogout?: () => void }) {
 
         for (let i = 0; i < totalRecords; i += CHUNK_SIZE) {
           const chunk = json.slice(i, i + CHUNK_SIZE);
-          const plainChunk = JSON.parse(JSON.stringify(chunk));
-          const result = await bulkInsertSupplies(plainChunk);
+          const result = await bulkInsertSupplies(JSON.parse(JSON.stringify(chunk)));
 
           if (result.success) {
             processedCount += result.processedCount || 0;
-            const currentProgress = Math.round((processedCount / totalRecords) * 100);
-            setProgress(currentProgress);
+            setProgress(Math.round((processedCount / totalRecords) * 100));
             setUploadStatus({ 
               processed: processedCount, 
               total: totalRecords, 
-              message: `Cargando: ${processedCount} de ${totalRecords} registros...` 
+              message: `Cargando: ${processedCount} de ${totalRecords}...` 
             });
           } else {
-            toast({ title: 'Error durante la carga', description: result.message, variant: 'destructive' });
-            return;
+            throw new Error(result.message);
           }
         }
 
-        toast({ title: 'Inventario de almacén actualizado', description: `Se procesaron ${processedCount} registros.` });
+        toast({ title: 'Almacén actualizado con éxito' });
         loadSupplies();
       } catch (error: any) {
         toast({ title: 'Error al procesar Excel', description: error.message, variant: 'destructive' });
       } finally {
         setUploadStatus({ processed: 0, total: 0, message: '' });
         setProgress(0);
-        event.target.value = '';
+        if (event.target) event.target.value = '';
       }
     });
   };
@@ -182,23 +185,22 @@ export function WarehouseDashboard({ onLogout }: { onLogout?: () => void }) {
     setSortConfig({ key, direction });
   };
 
-  const toggleSearchField = (field: string) => {
-    setSearchFields(prev => 
-        prev.includes(field) 
-            ? (prev.length > 1 ? prev.filter(f => f !== field) : prev) 
-            : [...prev, field]
-    );
-  };
+  const stats = useMemo(() => {
+    const counts = { red: 0, yellow: 0, green: 0, unknown: 0 };
+    supplies.forEach(m => {
+        const status = getExpirationStatus(m.fechaCaducidad);
+        counts[status]++;
+    });
+    return counts;
+  }, [supplies]);
 
   const filteredAndSortedSupplies = useMemo(() => {
     let result = [...supplies];
 
-    // Status filter
     if (statusFilter) {
       result = result.filter(m => getExpirationStatus(m.fechaCaducidad) === statusFilter);
     }
 
-    // Text search
     if (searchTerm) {
       const term = searchTerm.toUpperCase();
       result = result.filter(m => {
@@ -216,23 +218,12 @@ export function WarehouseDashboard({ onLogout }: { onLogout?: () => void }) {
         if (valA === valB) return 0;
         if (valA === undefined) return 1;
         if (valB === undefined) return -1;
-        return sortConfig.direction === 'asc' 
-          ? (valA < valB ? -1 : 1) 
-          : (valA > valB ? -1 : 1);
+        return sortConfig.direction === 'asc' ? (valA < valB ? -1 : 1) : (valA > valB ? -1 : 1);
       });
     }
 
     return result;
   }, [supplies, searchTerm, searchFields, statusFilter, sortConfig]);
-
-  const stats = useMemo(() => {
-    const counts = { red: 0, yellow: 0, green: 0, unknown: 0 };
-    supplies.forEach(m => {
-        const status = getExpirationStatus(m.fechaCaducidad);
-        counts[status]++;
-    });
-    return counts;
-  }, [supplies]);
 
   return (
     <div className="space-y-6">
@@ -245,7 +236,7 @@ export function WarehouseDashboard({ onLogout }: { onLogout?: () => void }) {
         </div>
         <div className="flex items-center gap-2">
             <Button variant="outline" onClick={loadSupplies} disabled={isLoading}>
-                <RefreshCw className={isLoading ? "animate-spin" : ""} />
+                <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
             </Button>
             {onLogout && (
                 <Button variant="outline" onClick={onLogout}>
@@ -256,61 +247,48 @@ export function WarehouseDashboard({ onLogout }: { onLogout?: () => void }) {
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">
-        <Card className="md:col-span-1">
+        <Card className="md:col-span-1 shadow-sm border-primary/10">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg"><Upload className="h-5 w-5" /> Cargar Insumos</CardTitle>
-            <CardDescription>
-              Carga masiva de inventario para Almacén.
-            </CardDescription>
+            <CardTitle className="text-lg">Cargar Insumos</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Input 
-                type="file" 
-                accept=".xlsx, .xls" 
-                onChange={handleFileUpload} 
-                disabled={isUploading}
-              />
+            <div className="space-y-2">
+                <Label>Archivo Excel (.xlsx)</Label>
+                <Input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} disabled={isUploading} />
             </div>
             {isUploading && (
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs font-medium">
+              <div className="space-y-2 pt-2">
+                <div className="flex justify-between text-[10px] font-black uppercase text-primary">
                   <span>{uploadStatus.message}</span>
                   <span>{progress}%</span>
                 </div>
                 <Progress value={progress} className="h-2" />
               </div>
             )}
-            <div className="flex gap-2 pt-2">
-               <AlertDialog>
+            <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive" size="sm" className="w-full" disabled={isDeleting || supplies.length === 0}>
-                    <Trash2 className="h-4 w-4 mr-2" /> Vaciar Inventario de Almacén
+                  <Button variant="destructive" size="sm" className="w-full h-11 font-bold" disabled={isDeleting || supplies.length === 0}>
+                    <Trash2 className="h-4 w-4 mr-2" /> Vaciar Almacén
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>¿Vaciar todo el almacén?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Esta acción eliminará todos los registros de insumos actuales. No se puede deshacer.
-                    </AlertDialogDescription>
+                    <AlertDialogDescription>Esta acción eliminará todos los registros actuales de Insumos.</AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleDeleteAll} className="bg-destructive hover:bg-destructive/90">
-                      Sí, vaciar todo
-                    </AlertDialogAction>
+                    <AlertDialogAction onClick={handleDeleteAll} className="bg-destructive hover:bg-destructive/90">Confirmar</AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
-              </AlertDialog>
-            </div>
+            </AlertDialog>
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg"><CalendarClock className="h-5 w-5" /> Insumos por Caducar</CardTitle>
-            <CardDescription>Haz clic en una alerta para filtrar la lista automáticamente.</CardDescription>
+        <Card className="md:col-span-2 shadow-sm border-primary/10">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2"><CalendarClock className="h-5 w-5 text-primary" /> Semáforo de Caducidades</CardTitle>
+            <CardDescription>Usa los botones para filtrar la tabla.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -318,90 +296,59 @@ export function WarehouseDashboard({ onLogout }: { onLogout?: () => void }) {
                 onClick={() => setStatusFilter(statusFilter === 'red' ? null : 'red')}
                 className={cn(
                     "bg-red-50 border p-4 rounded-xl text-center transition-all",
-                    statusFilter === 'red' ? "border-red-500 ring-2 ring-red-200 shadow-md scale-105" : "border-red-100 opacity-70 hover:opacity-100"
+                    statusFilter === 'red' ? "border-red-500 ring-2 ring-red-200" : "border-red-100 opacity-70 hover:opacity-100"
                 )}
               >
-                <div className="text-[10px] text-red-600 uppercase font-black mb-1">Cerca (&lt; 6 meses)</div>
+                <div className="text-[10px] text-red-600 uppercase font-black mb-1">Crítico (&lt; 6m)</div>
                 <div className="text-3xl font-black text-red-700">{stats.red}</div>
-                <div className="text-[10px] text-red-500 mt-1 flex items-center justify-center gap-1"><AlertTriangle className="h-3 w-3"/> Crítico</div>
               </button>
               <button 
                 onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')}
                 className={cn(
                     "bg-yellow-50 border p-4 rounded-xl text-center transition-all",
-                    statusFilter === 'yellow' ? "border-yellow-500 ring-2 ring-yellow-200 shadow-md scale-105" : "border-yellow-100 opacity-70 hover:opacity-100"
+                    statusFilter === 'yellow' ? "border-yellow-500 ring-2 ring-yellow-200" : "border-yellow-100 opacity-70 hover:opacity-100"
                 )}
               >
-                <div className="text-[10px] text-yellow-600 uppercase font-black mb-1">Medio (6m - 1 año)</div>
+                <div className="text-[10px] text-yellow-600 uppercase font-black mb-1">Preventivo (6m-1a)</div>
                 <div className="text-3xl font-black text-yellow-700">{stats.yellow}</div>
-                <div className="text-[10px] text-yellow-500 mt-1 flex items-center justify-center gap-1"><CalendarClock className="h-3 w-3"/> Preventivo</div>
               </button>
               <button 
                 onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')}
                 className={cn(
                     "bg-green-50 border p-4 rounded-xl text-center transition-all",
-                    statusFilter === 'green' ? "border-green-500 ring-2 ring-green-200 shadow-md scale-105" : "border-green-100 opacity-70 hover:opacity-100"
+                    statusFilter === 'green' ? "border-green-500 ring-2 ring-green-200" : "border-green-100 opacity-70 hover:opacity-100"
                 )}
               >
-                <div className="text-[10px] text-green-600 uppercase font-black mb-1">Óptimo (&gt; 1 año)</div>
+                <div className="text-[10px] text-green-600 uppercase font-black mb-1">Óptimo (&gt; 1a)</div>
                 <div className="text-3xl font-black text-green-700">{stats.green}</div>
-                <div className="text-[10px] text-green-500 mt-1 flex items-center justify-center gap-1"><CheckCircle2 className="h-3 w-3"/> Seguro</div>
               </button>
               <button 
                 onClick={() => setStatusFilter(null)}
                 className={cn(
                     "bg-muted/30 border p-4 rounded-xl text-center transition-all",
-                    !statusFilter ? "border-primary ring-2 ring-primary/10 shadow-md scale-105" : "border-transparent opacity-70 hover:opacity-100"
+                    !statusFilter ? "border-primary ring-2 ring-primary/10" : "border-transparent opacity-70 hover:opacity-100"
                 )}
               >
-                <div className="text-[10px] text-muted-foreground uppercase font-black mb-1">Total Registros</div>
+                <div className="text-[10px] text-muted-foreground uppercase font-black mb-1">Total Insumos</div>
                 <div className="text-3xl font-black">{supplies.length}</div>
-                <div className="text-[10px] text-muted-foreground mt-1">Insumos totales</div>
               </button>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
+      <Card className="shadow-md border-primary/10">
         <CardHeader className="pb-3 border-b bg-muted/10">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <CardTitle>Inventario de Almacén</CardTitle>
+            <CardTitle>Listado de Insumos</CardTitle>
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                 <div className="relative w-full sm:w-96">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                        placeholder="Escribe para buscar..." 
-                        className="pl-9 h-11"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
+                    <Input placeholder="Escribe para buscar..." className="pl-9 h-11" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 </div>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="h-11 gap-2">
-                            <Filter className="h-4 w-4" /> 
-                            Campos: {searchFields.length === 3 ? 'Todos' : searchFields.length}
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                        <DropdownMenuLabel>Buscar en:</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuCheckboxItem checked={searchFields.includes('claveCuadroBasico')} onCheckedChange={() => toggleSearchField('claveCuadroBasico')}>
-                            Clave de Cuadro Básico
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem checked={searchFields.includes('descripcion')} onCheckedChange={() => toggleSearchField('descripcion')}>
-                            Descripción
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem checked={searchFields.includes('lote')} onCheckedChange={() => toggleSearchField('lote')}>
-                            Lote
-                        </DropdownMenuCheckboxItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
                 {statusFilter && (
-                    <Badge variant="secondary" className="h-11 px-4 gap-2 text-sm font-bold animate-in zoom-in">
-                        Filtro Activo
-                        <X className="h-4 w-4 cursor-pointer hover:text-destructive" onClick={() => setStatusFilter(null)} />
+                    <Badge variant="secondary" className="h-11 px-4 gap-2 text-sm font-bold border-primary/20 bg-primary/5 text-primary">
+                        Filtro Activo <X className="h-4 w-4 cursor-pointer" onClick={() => setStatusFilter(null)} />
                     </Badge>
                 )}
             </div>
@@ -409,72 +356,53 @@ export function WarehouseDashboard({ onLogout }: { onLogout?: () => void }) {
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="flex justify-center py-20">
-              <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            </div>
+            <div className="flex justify-center py-40"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader>
+                <TableHeader className="bg-muted/50">
                   <TableRow>
-                    <TableHead onClick={() => handleSort('claveCuadroBasico')} className="cursor-pointer hover:bg-accent whitespace-nowrap">
-                      Clave {sortConfig?.key === 'claveCuadroBasico' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
-                    </TableHead>
-                    <TableHead onClick={() => handleSort('descripcion')} className="cursor-pointer hover:bg-accent">
-                      Descripción {sortConfig?.key === 'descripcion' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
-                    </TableHead>
-                    <TableHead onClick={() => handleSort('existencia')} className="cursor-pointer hover:bg-accent text-right">
-                      Stock {sortConfig?.key === 'existencia' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
-                    </TableHead>
-                    <TableHead onClick={() => handleSort('fechaCaducidad')} className="cursor-pointer hover:bg-accent">
-                      Caducidad {sortConfig?.key === 'fechaCaducidad' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
-                    </TableHead>
-                    <TableHead>Lote</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase">Clave</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase">Descripción</TableHead>
+                    <TableHead className="text-right font-black text-[10px] uppercase">Stock</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase">Caducidad</TableHead>
+                    <TableHead className="font-black text-[10px] uppercase">Lote</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredAndSortedSupplies.length > 0 ? (
-                    filteredAndSortedSupplies.slice(0, 300).map((med) => {
-                      const expiryStatus = getExpirationStatus(med.fechaCaducidad);
+                    filteredAndSortedSupplies.slice(0, 500).map((item) => {
+                      const expiryStatus = getExpirationStatus(item.fechaCaducidad);
                       return (
-                        <TableRow key={med.id} className="hover:bg-muted/50">
-                          <TableCell className="font-mono text-[11px] font-bold">{med.claveCuadroBasico}</TableCell>
-                          <TableCell className="text-[11px] max-w-xs">{med.descripcion}</TableCell>
-                          <TableCell className={`text-right font-black text-sm ${med.existencia <= 0 ? 'text-red-600' : 'text-foreground'}`}>
-                            {med.existencia}
+                        <TableRow key={item.id} className="hover:bg-muted/50">
+                          <TableCell className="font-mono text-[11px] font-bold">{item.claveCuadroBasico}</TableCell>
+                          <TableCell className="text-[11px] font-medium uppercase leading-tight">{item.descripcion}</TableCell>
+                          <TableCell className="text-right">
+                              <Badge variant={item.existencia > 0 ? 'secondary' : 'destructive'} className="font-black">{item.existencia}</Badge>
                           </TableCell>
                           <TableCell>
                             <Badge 
                                 variant="outline"
                                 className={cn(
-                                    "font-bold text-[10px] px-2 py-0",
-                                    expiryStatus === 'red' && "bg-red-100 text-red-700 border-red-200",
-                                    expiryStatus === 'yellow' && "bg-yellow-100 text-yellow-700 border-yellow-200",
-                                    expiryStatus === 'green' && "bg-green-100 text-green-700 border-green-200",
-                                    expiryStatus === 'unknown' && "bg-gray-100 text-gray-600"
+                                    "font-black text-[10px] px-3 uppercase tracking-tighter border-2",
+                                    expiryStatus === 'red' && "bg-red-50 text-red-700 border-red-200",
+                                    expiryStatus === 'yellow' && "bg-yellow-50 text-yellow-700 border-yellow-200",
+                                    expiryStatus === 'green' && "bg-green-50 text-green-700 border-green-200",
+                                    expiryStatus === 'unknown' && "bg-gray-100 text-gray-500"
                                 )}
                             >
-                              {med.fechaCaducidad || 'SIN FECHA'}
+                              {item.fechaCaducidad || 'SIN FECHA'}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-[10px] font-mono">{med.lote}</TableCell>
+                          <TableCell className="text-[10px] font-mono font-bold text-primary">{item.lote}</TableCell>
                         </TableRow>
                       );
                     })
                   ) : (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
-                        No se encontraron registros en el inventario que coincidan con los filtros.
-                      </TableCell>
-                    </TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">No se encontraron registros.</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
-              {filteredAndSortedSupplies.length > 300 && (
-                <div className="p-4 text-center text-xs text-muted-foreground bg-muted/20 border-t font-medium italic">
-                  Mostrando los primeros 300 resultados de {filteredAndSortedSupplies.length}.
-                </div>
-              )}
             </div>
           )}
         </CardContent>

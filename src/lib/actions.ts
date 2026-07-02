@@ -1,7 +1,6 @@
-
 'use server';
 
-import { revalidatePath } from 'revalidatePath';
+import { revalidatePath } from 'next/cache';
 import * as data from './data';
 import type { 
     Patient, 
@@ -313,7 +312,7 @@ export async function updateVaccineSettings(s: VaccineSettings) {
 export async function getLabStudies() { return data.getLabStudies(); }
 export async function getXRayStudies() { return data.getRawCollection('xrayStudies'); }
 export async function getUltrasoundStudies() { return data.getRawCollection('ultrasoundStudies'); }
-export async function getVaccines() { return data.getVaccines(); }
+export async function getVaccines() { return data.getRawCollection('vaccines', 500); }
 export async function getMedications() { return data.getMedications(); }
 export async function getSupplies() { return data.getSupplies(); }
 export async function updateLabStudies(s: LabStudy[]) { 
@@ -336,10 +335,26 @@ export async function updateVaccines(v: Vaccine[]) {
     revalidatePath('/', 'layout');
     return res;
 }
-export async function bulkInsertMedications(p: any[]) { return data.bulkInsertMedications(p); }
-export async function bulkInsertSupplies(p: any[]) { return data.bulkInsertSupplies(p); }
-export async function deleteAllMedications() { return data.deleteAllMedications(); }
-export async function deleteAllSupplies() { return data.deleteAllSupplies(); }
+export async function bulkInsertMedications(p: any[]) { 
+    const res = await data.bulkInsertMedications(p);
+    revalidatePath('/', 'layout');
+    return res;
+}
+export async function bulkInsertSupplies(p: any[]) { 
+    const res = await data.bulkInsertSupplies(p);
+    revalidatePath('/', 'layout');
+    return res;
+}
+export async function deleteAllMedications() { 
+    const res = await data.deleteAllMedications();
+    revalidatePath('/', 'layout');
+    return res;
+}
+export async function deleteAllSupplies() { 
+    const res = await data.deleteAllSupplies();
+    revalidatePath('/', 'layout');
+    return res;
+}
 export async function searchCie10(t: string) { return data.searchCie10(t); }
 export async function getBIData() { return data.getBIData(); }
 export async function getAvailableSlotsForDate(cid: string, date: string) { return data.getAvailableSlotsForDate(cid, date); }
