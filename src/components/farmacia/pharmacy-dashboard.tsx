@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useTransition, useMemo } from 'react';
@@ -90,21 +91,32 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
   }, []);
 
   const getExpirationStatus = (dateStr: string): ExpirationStatus => {
-    if (!dateStr) return 'unknown';
+    if (!dateStr || dateStr.toUpperCase() === 'SIN FECHA' || dateStr.toUpperCase() === 'N/A' || dateStr.trim() === '') return 'unknown';
     
-    let expiryDate: Date;
+    let expiryDate: Date | null = null;
+    
     if (dateStr.includes('/')) {
-        expiryDate = parse(dateStr, 'dd/MM/yyyy', new Date());
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+            expiryDate = parse(dateStr, 'dd/MM/yyyy', new Date());
+        } else if (parts.length === 2) {
+            expiryDate = parse(dateStr, 'MM/yyyy', new Date());
+        } else {
+            expiryDate = new Date(dateStr);
+        }
+    } else if (dateStr.includes('-')) {
+        expiryDate = new Date(dateStr);
     } else {
         expiryDate = new Date(dateStr);
     }
 
-    if (!isValid(expiryDate)) return 'unknown';
+    if (!expiryDate || !isValid(expiryDate)) return 'unknown';
 
-    const monthsUntilExpiry = differenceInMonths(expiryDate, new Date());
+    const now = new Date();
+    const monthsUntilExpiry = differenceInMonths(expiryDate, now);
 
     if (monthsUntilExpiry < 6) return 'red';
-    if (monthsUntilExpiry >= 6 && monthsUntilExpiry < 12) return 'yellow';
+    if (monthsUntilExpiry < 12) return 'yellow';
     return 'green';
   };
 
@@ -161,7 +173,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
       } finally {
         setUploadStatus({ processed: 0, total: 0, message: '' });
         setProgress(0);
-        event.target.value = '';
+        if (event.target) event.target.value = '';
       }
     });
   };
@@ -193,10 +205,19 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
     );
   };
 
+  const stats = useMemo(() => {
+    const counts = { red: 0, yellow: 0, green: 0, unknown: 0 };
+    medications.forEach(m => {
+        const status = getExpirationStatus(m.fechaCaducidad);
+        counts[status]++;
+    });
+    return counts;
+  }, [medications]);
+
   const filteredAndSortedMedications = useMemo(() => {
     let result = [...medications];
 
-    // Status filter
+    // Status filter (Semáforo)
     if (statusFilter) {
       result = result.filter(m => getExpirationStatus(m.fechaCaducidad) === statusFilter);
     }
@@ -227,15 +248,6 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
 
     return result;
   }, [medications, searchTerm, searchFields, statusFilter, sortConfig]);
-
-  const stats = useMemo(() => {
-    const counts = { red: 0, yellow: 0, green: 0, unknown: 0 };
-    medications.forEach(m => {
-        const status = getExpirationStatus(m.fechaCaducidad);
-        counts[status]++;
-    });
-    return counts;
-  }, [medications]);
 
   return (
     <div className="space-y-6">
@@ -321,7 +333,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
 
                 <Card className="md:col-span-2">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg"><CalendarClock className="h-5 w-5" /> Estado de Caducidades</CardTitle>
+                    <CardTitle className="flex items-center gap-2 text-lg"><CalendarClock className="h-5 w-5" /> Semáforo de Caducidades</CardTitle>
                     <CardDescription>Haz clic en una alerta para filtrar la lista automáticamente.</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -333,9 +345,9 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                             statusFilter === 'red' ? "border-red-500 ring-2 ring-red-200 shadow-md scale-105" : "border-red-100 opacity-70 hover:opacity-100"
                         )}
                     >
-                        <div className="text-[10px] text-red-600 uppercase font-black mb-1">Cerca (&lt; 6 meses)</div>
+                        <div className="text-[10px] text-red-600 uppercase font-black mb-1">CRÍTICO (&lt; 6 meses)</div>
                         <div className="text-3xl font-black text-red-700">{stats.red}</div>
-                        <div className="text-[10px] text-red-500 mt-1 flex items-center justify-center gap-1"><AlertTriangle className="h-3 w-3"/> Crítico</div>
+                        <div className="text-[10px] text-red-500 mt-1 flex items-center justify-center gap-1"><AlertTriangle className="h-3 w-3"/> Ver Lista</div>
                     </button>
                     <button 
                         onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')}
@@ -344,9 +356,9 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                             statusFilter === 'yellow' ? "border-yellow-500 ring-2 ring-yellow-200 shadow-md scale-105" : "border-yellow-100 opacity-70 hover:opacity-100"
                         )}
                     >
-                        <div className="text-[10px] text-yellow-600 uppercase font-black mb-1">Medio (6m - 1 año)</div>
+                        <div className="text-[10px] text-yellow-600 uppercase font-black mb-1">PREVENTIVO (6m - 1a)</div>
                         <div className="text-3xl font-black text-yellow-700">{stats.yellow}</div>
-                        <div className="text-[10px] text-yellow-500 mt-1 flex items-center justify-center gap-1"><CalendarClock className="h-3 w-3"/> Preventivo</div>
+                        <div className="text-[10px] text-yellow-500 mt-1 flex items-center justify-center gap-1"><CalendarClock className="h-3 w-3"/> Ver Lista</div>
                     </button>
                     <button 
                         onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')}
@@ -355,9 +367,9 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                             statusFilter === 'green' ? "border-green-500 ring-2 ring-green-200 shadow-md scale-105" : "border-green-100 opacity-70 hover:opacity-100"
                         )}
                     >
-                        <div className="text-[10px] text-green-600 uppercase font-black mb-1">Óptimo (&gt; 1 año)</div>
+                        <div className="text-[10px] text-green-600 uppercase font-black mb-1">SEGURO (&gt; 1 año)</div>
                         <div className="text-3xl font-black text-green-700">{stats.green}</div>
-                        <div className="text-[10px] text-green-500 mt-1 flex items-center justify-center gap-1"><CheckCircle2 className="h-3 w-3"/> Seguro</div>
+                        <div className="text-[10px] text-green-500 mt-1 flex items-center justify-center gap-1"><CheckCircle2 className="h-3 w-3"/> Ver Lista</div>
                     </button>
                     <button 
                         onClick={() => setStatusFilter(null)}
@@ -368,7 +380,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                     >
                         <div className="text-[10px] text-muted-foreground uppercase font-black mb-1">Total Registros</div>
                         <div className="text-3xl font-black">{medications.length}</div>
-                        <div className="text-[10px] text-muted-foreground mt-1">Insumos totales</div>
+                        <div className="text-[10px] text-muted-foreground mt-1">Ver Todos</div>
                     </button>
                     </div>
                 </CardContent>
@@ -476,7 +488,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                         ) : (
                             <TableRow>
                             <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
-                                No se encontraron registros en el inventario que coincidan con los filtros.
+                                No se encontraron registros que coincidan con los filtros.
                             </TableCell>
                             </TableRow>
                         )}
