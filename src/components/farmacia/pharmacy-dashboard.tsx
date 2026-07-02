@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useTransition, useMemo } from 'react';
@@ -50,7 +51,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { differenceInMonths, parse, isValid, isDate } from 'date-fns';
+import { differenceInMonths, isValid, parse, isDate } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PrescriptionDispenser } from './prescription-dispenser';
@@ -90,12 +91,12 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
     if (!dateStr || dateStr.toUpperCase() === 'SIN FECHA' || dateStr.trim() === '') return 'unknown';
     
     let expiryDate: Date | null = null;
-    if (isDate(dateStr)) {
-        expiryDate = dateStr as unknown as Date;
-    } else if (dateStr.includes('/')) {
-        expiryDate = parse(dateStr, 'dd/MM/yyyy', new Date());
-    } else if (dateStr.includes('-')) {
-        expiryDate = new Date(dateStr);
+    
+    if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+            expiryDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        }
     } else {
         expiryDate = new Date(dateStr);
     }
@@ -116,7 +117,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
 
     startUploadTransition(async () => {
       setProgress(0);
-      setUploadStatus({ processed: 0, total: 0, message: 'Procesando archivo...' });
+      setUploadStatus({ processed: 0, total: 0, message: 'Leyendo archivo...' });
 
       try {
         const xlsx = await import('xlsx');
@@ -181,7 +182,11 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
     }
     if (searchTerm) {
       const term = searchTerm.toUpperCase();
-      result = result.filter(m => m.descripcion.includes(term) || m.claveCuadroBasico.includes(term));
+      result = result.filter(m => 
+        (m.descripcion || '').includes(term) || 
+        (m.claveCuadroBasico || '').includes(term) ||
+        (m.lote || '').includes(term)
+      );
     }
     if (sortConfig) {
       result.sort((a, b) => {
@@ -234,7 +239,15 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                             <Label>Seleccionar archivo (.xlsx)</Label>
                             <Input type="file" accept=".xlsx" onChange={handleFileUpload} disabled={isUploading} />
                         </div>
-                        {isUploading && <Progress value={100} className="h-2 animate-pulse" />}
+                        {isUploading && (
+                            <div className="space-y-2 pt-2">
+                                <div className="flex justify-between text-[10px] font-black uppercase text-primary">
+                                    <span>{uploadStatus.message}</span>
+                                    <span>{progress}%</span>
+                                </div>
+                                <Progress value={progress} className="h-2" />
+                            </div>
+                        )}
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
                             <Button variant="destructive" size="sm" className="w-full h-11 font-bold" disabled={isDeleting || medications.length === 0}>
@@ -262,19 +275,19 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <button onClick={() => setStatusFilter(statusFilter === 'red' ? null : 'red')} className={cn("bg-red-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'red' ? "border-red-500 ring-2 ring-red-200" : "border-red-100 opacity-70")}>
+                        <button onClick={() => setStatusFilter(statusFilter === 'red' ? null : 'red')} className={cn("bg-red-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'red' ? "border-red-500 ring-2 ring-red-200 shadow-md" : "border-red-100 opacity-70")}>
                             <div className="text-[10px] text-red-600 uppercase font-black mb-1">Crítico (&lt; 6m)</div>
                             <div className="text-3xl font-black text-red-700">{stats.red}</div>
                         </button>
-                        <button onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')} className={cn("bg-yellow-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'yellow' ? "border-yellow-500 ring-2 ring-yellow-200" : "border-yellow-100 opacity-70")}>
+                        <button onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')} className={cn("bg-yellow-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'yellow' ? "border-yellow-500 ring-2 ring-yellow-200 shadow-md" : "border-yellow-100 opacity-70")}>
                             <div className="text-[10px] text-yellow-600 uppercase font-black mb-1">Preventivo (6m-1a)</div>
                             <div className="text-3xl font-black text-yellow-700">{stats.yellow}</div>
                         </button>
-                        <button onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')} className={cn("bg-green-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'green' ? "border-green-500 ring-2 ring-green-200" : "border-green-100 opacity-70")}>
+                        <button onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')} className={cn("bg-green-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'green' ? "border-green-500 ring-2 ring-green-200 shadow-md" : "border-green-100 opacity-70")}>
                             <div className="text-[10px] text-green-600 uppercase font-black mb-1">Óptimo (&gt; 1a)</div>
                             <div className="text-3xl font-black text-green-700">{stats.green}</div>
                         </button>
-                        <button onClick={() => setStatusFilter(null)} className={cn("bg-muted/30 border p-4 rounded-xl text-center transition-all", !statusFilter ? "border-primary ring-2 ring-primary/10" : "border-transparent opacity-70")}>
+                        <button onClick={() => setStatusFilter(null)} className={cn("bg-muted/30 border p-4 rounded-xl text-center transition-all", !statusFilter ? "border-primary ring-2 ring-primary/10 shadow-md" : "border-transparent opacity-70")}>
                             <div className="text-[10px] text-muted-foreground uppercase font-black mb-1">Total Registros</div>
                             <div className="text-3xl font-black">{stats.total}</div>
                         </button>
