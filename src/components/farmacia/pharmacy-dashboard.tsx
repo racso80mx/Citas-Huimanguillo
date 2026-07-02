@@ -132,16 +132,31 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
         }
 
         const totalRecords = json.length;
-        setUploadStatus({ processed: 0, total: totalRecords, message: 'Sincronizando...' });
+        setUploadStatus({ processed: 0, total: totalRecords, message: 'Iniciando carga...' });
 
-        const result = await bulkInsertMedications(JSON.parse(JSON.stringify(json)));
+        const CHUNK_SIZE = 400;
+        let processedCount = 0;
 
-        if (result.success) {
-            toast({ title: 'Carga Exitosa', description: `${result.processedCount} registros procesados.` });
-            loadMedications();
-        } else {
+        for (let i = 0; i < totalRecords; i += CHUNK_SIZE) {
+          const chunk = json.slice(i, i + CHUNK_SIZE);
+          const result = await bulkInsertMedications(JSON.parse(JSON.stringify(chunk)));
+
+          if (result.success) {
+            processedCount += result.processedCount || 0;
+            const currentProgress = Math.round((processedCount / totalRecords) * 100);
+            setProgress(currentProgress);
+            setUploadStatus({ 
+              processed: processedCount, 
+              total: totalRecords, 
+              message: `Cargando: ${processedCount} de ${totalRecords}...` 
+            });
+          } else {
             throw new Error(result.message);
+          }
         }
+
+        toast({ title: 'Farmacia actualizada con éxito' });
+        loadMedications();
       } catch (error: any) {
         toast({ title: 'Error al procesar Excel', description: error.message, variant: 'destructive' });
       } finally {

@@ -192,3 +192,8 @@ export async function getAvailableSlotsForDate(c: string, d: string) { return da
 export async function getAppointmentCountOnDate(c: string, d: string) { return data.getAppointmentCountOnDate(c, d); }
 export async function getAttendedPatientsForClinic(c: string) { return data.getAttendedPatientsForClinic(c); }
 export async function getPatientPrescriptionsCountTodayAction(p: string) { return data.getPatientPrescriptionsCountTodayAction(p); }
+
+export async function bulkInsertCie10Glossary(d: any[]) { return data.bulkInsertCie10Glossary(d); }
+export async function bulkInsertCie10Catalog(d: any[]) { return data.bulkInsertCie10Catalog(d); }
+export async function deleteAllCie10Glossary() { return data.deleteAllCie10Glossary(); }
+export async function deleteAllCie10Catalog() { return data.deleteAllCie10Catalog(); }

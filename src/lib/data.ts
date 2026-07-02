@@ -105,21 +105,21 @@ function fuzzyMapInsumo(item: any) {
     }
 
     return {
-        claveCuadroBasico: String(findValue('CLAVE DE CUADRO BASICO') || findValue('CLAVE') || 'S/C'),
-        descripcion: String(findValue('DESCRIPCIÓN') || findValue('DESCRIPCION') || 'SIN DESCRIPCIÓN').toUpperCase(),
-        grupo: String(findValue('GRUPO') || '').toUpperCase(),
+        claveCuadroBasico: String(findValue('CLAVE DE CUADRO BASICO') || findValue('CLAVE') || 'S/C').trim(),
+        descripcion: String(findValue('DESCRIPCIÓN') || findValue('DESCRIPCION') || 'SIN DESCRIPCIÓN').toUpperCase().trim(),
+        grupo: String(findValue('GRUPO') || '').toUpperCase().trim(),
         existencia: Number(findValue('EXISTENCIA') || 0),
         precioUnitario: Number(findValue('PRECIO UNITARIO') || 0),
         totalImporte: Number(findValue('TOTAL IMPORTE') || 0),
-        lote: String(findValue('LOTE') || 'N/A').toUpperCase(),
-        proveedor: String(findValue('PROVEEDOR') || '').toUpperCase(),
-        rfcProveedor: String(findValue('RFC PROVEEDOR') || '').toUpperCase(),
-        almacen: String(findValue('ALMACEN') || '').toUpperCase(),
-        fuenteFinanciamiento: String(findValue('FUENTE FINANCIAMIENTO') || '').toUpperCase(),
+        lote: String(findValue('LOTE') || 'N/A').toUpperCase().trim(),
+        proveedor: String(findValue('PROVEEDOR') || '').toUpperCase().trim(),
+        rfcProveedor: String(findValue('RFC PROVEEDOR') || '').toUpperCase().trim(),
+        almacen: String(findValue('ALMACEN') || '').toUpperCase().trim(),
+        fuenteFinanciamiento: String(findValue('FUENTE FINANCIAMIENTO') || '').toUpperCase().trim(),
         fechaCaducidad: formattedCaducidad,
-        ordenSuministro: String(findValue('ORDEN SUMINISTRO') || '').toUpperCase(),
-        tipoInsumo: String(findValue('TIPO_INSUMO') || '').toUpperCase(),
-        numeroContrato: String(findValue('NUMERO DE CONTRATO') || '').toUpperCase()
+        ordenSuministro: String(findValue('ORDEN SUMINISTRO') || '').toUpperCase().trim(),
+        tipoInsumo: String(findValue('TIPO_INSUMO') || '').toUpperCase().trim(),
+        numeroContrato: String(findValue('NUMERO DE CONTRATO') || '').toUpperCase().trim()
     };
 }
 
@@ -270,8 +270,9 @@ export async function bulkInsertMedications(json: any[]) {
     let count = 0;
     json.forEach(item => {
         const med = fuzzyMapInsumo(item);
-        const id = med.claveCuadroBasico + '_' + med.lote;
-        b.set(doc(adminDb, 'medications', id), { ...med, id, updatedAt: new Date().toISOString() }, { merge: true });
+        // SANITIZACIÓN DE ID: Reemplazamos / por - para evitar errores de Firestore
+        const sanitizedId = (med.claveCuadroBasico + '_' + med.lote).replace(/\//g, '-');
+        b.set(doc(adminDb, 'medications', sanitizedId), { ...med, id: sanitizedId, updatedAt: new Date().toISOString() }, { merge: true });
         count++;
     });
     await b.commit();
@@ -283,8 +284,9 @@ export async function bulkInsertSupplies(json: any[]) {
     let count = 0;
     json.forEach(item => {
         const med = fuzzyMapInsumo(item);
-        const id = med.claveCuadroBasico + '_' + med.lote;
-        b.set(doc(adminDb, 'supplies', id), { ...med, id, updatedAt: new Date().toISOString() }, { merge: true });
+        // SANITIZACIÓN DE ID: Reemplazamos / por - para evitar errores de Firestore
+        const sanitizedId = (med.claveCuadroBasico + '_' + med.lote).replace(/\//g, '-');
+        b.set(doc(adminDb, 'supplies', sanitizedId), { ...med, id: sanitizedId, updatedAt: new Date().toISOString() }, { merge: true });
         count++;
     });
     await b.commit();
@@ -387,3 +389,8 @@ export async function downloadBackupAction() { const [p, c, a] = await Promise.a
 export async function normalizeExpedientesAction() { const s = await getDocs(query(collection(adminDb, 'patients'), limit(500))); const b = writeBatch(adminDb); let count = 0; s.docs.forEach(d => { const e = String(d.data().expediente || ''); if (e && !e.startsWith('0')) { b.update(d.ref, { expediente: '0' + e }); count++; } }); await b.commit(); return { success: true, count }; }
 export async function scanDuplicates(criteria: string) { const p = await getDocs(query(collection(adminDb, 'patients'), limit(1000))); const g = new Map<string, Patient[]>(); p.docs.forEach(d => { const x = d.data(); let k = criteria === 'expediente' ? String(x.expediente || '') : criteria === 'curp' ? String(x.curp || '') : `${x.name} ${x.paternalLastName}`.toUpperCase(); if (!k) return; if (!g.has(k)) g.set(k, []); g.get(k)!.push(x as Patient); }); return Array.from(g.values()).filter(x => x.length > 1); }
 export async function applyStatusUpdateChunk(exps: string[], s: PatientStatus) { const b = writeBatch(adminDb); let count = 0; for (const e of exps) { const q = query(collection(adminDb, 'patients'), where('expediente', '==', e), limit(1)); const snap = await getDocs(q); if (!snap.empty) { b.update(snap.docs[0].ref, { status: s }); count++; } } await b.commit(); return { success: true, count }; }
+
+export async function bulkInsertCie10Glossary(d: any[]) { const b = writeBatch(adminDb); d.forEach(x => b.set(doc(adminDb, 'cie10Glossary', uuidv4()), x)); await b.commit(); return { success: true, processedCount: d.length }; }
+export async function bulkInsertCie10Catalog(d: any[]) { const b = writeBatch(adminDb); d.forEach(x => b.set(doc(adminDb, 'cie10Catalog', uuidv4()), x)); await b.commit(); return { success: true, processedCount: d.length }; }
+export async function deleteAllCie10Glossary() { const s = await getDocs(collection(adminDb, 'cie10Glossary')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
+export async function deleteAllCie10Catalog() { const s = await getDocs(collection(adminDb, 'cie10Catalog')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
