@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect, useTransition, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
@@ -190,7 +191,6 @@ export function LabSettingsManager() {
     if (!settings) return;
 
     startSavingTransition(async () => {
-      const validStudies = studies.filter(s => s.name.trim() !== '' && s.section.trim() !== '');
       const results = await Promise.all([
           updateLabSettings(settings),
           updateLabStudies(studies)

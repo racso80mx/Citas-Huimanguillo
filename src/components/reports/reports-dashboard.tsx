@@ -1,3 +1,4 @@
+
 'use client';
 import React, { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
 import type { Appointment, Clinic, LabAppointment, XRayAppointment, UltrasoundAppointment, VaccineAppointment, Patient, MedicalConsultation, Prescription, Colonia } from '@/lib/definitions';
@@ -522,7 +523,7 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
                                                                 ) : (
                                                                     <div className="py-20 text-center border-2 border-dashed rounded-2xl opacity-40">Sin notas registradas.</div>
                                                                 )}
-                                                            </TabsContent>
+                              </TabsContent>
 
                                                             <TabsContent value="recetas" className="mt-0">
                                                                 {isLoadingHistory ? (
@@ -666,15 +667,3 @@ function GlobalArchiveSearch({ onSelectPatient }: { onSelectPatient: (p: Patient
         </Card>
     );
 }
-
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';

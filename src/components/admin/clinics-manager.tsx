@@ -128,7 +128,7 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
             return;
         }
 
-        // Solo activar verificación si se está agregando una fecha nueva
+        // Solo activar verificación si se está agregando una fecha nueva para evitar bloqueo al abrir
         if (dates.length > prevDates.length) {
             const newDate = dates.find(d => !prevDates.includes(format(d, 'yyyy-MM-dd')));
             if (newDate) {
