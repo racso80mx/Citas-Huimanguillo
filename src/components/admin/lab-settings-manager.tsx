@@ -121,11 +121,6 @@ export function LabSettingsManager() {
       setStudies(studiesData);
     } catch (error) {
       console.error('Failed to fetch lab settings:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudo cargar la configuración del laboratorio.',
-        variant: 'destructive',
-      });
     } finally {
       setIsLoading(false);
     }
@@ -196,190 +191,124 @@ export function LabSettingsManager() {
 
     startSavingTransition(async () => {
       const validStudies = studies.filter(s => s.name.trim() !== '' && s.section.trim() !== '');
-       if (validStudies.length !== studies.length) {
-          toast({
-              title: 'Campos Requeridos',
-              description: 'El nombre y la sección del estudio no pueden estar vacíos.',
-              variant: 'destructive',
-          });
-          return;
-      }
-
       const results = await Promise.all([
           updateLabSettings(settings),
           updateLabStudies(studies)
       ]);
 
-      const settingsResult = results[0];
-      const studiesResult = results[1];
-
-      if (settingsResult.success && studiesResult.success) {
-        toast({
-          title: 'Configuración Guardada',
-          description: 'La configuración del laboratorio ha sido actualizada exitosamente.',
-          className: 'bg-accent text-accent-foreground',
-        });
+      if (results[0].success && results[1].success) {
+        toast({ title: 'Configuración Guardada' });
         await fetchData();
-      } else {
-        toast({
-          title: 'Error',
-          description: settingsResult.message || studiesResult.message ||'No se pudo guardar la configuración.',
-          variant: 'destructive',
-        });
       }
     });
   };
 
-  if (isLoading || !settings) {
-    return (
-      <Card className="shadow-lg border-primary/10">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings /> Configuración de Laboratorio
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex justify-center items-center h-24">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </CardContent>
-      </Card>
-    );
-  }
+  if (isLoading || !settings) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>;
 
   return (
     <>
         <div className="space-y-8">
-            <Card className="shadow-lg border-primary/10">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                    <Settings className="text-primary" /> Parámetros de Operación
+            <Card className="shadow-lg border-primary/10 overflow-hidden h-full flex flex-col">
+                <CardHeader className="bg-muted/5 border-b shrink-0">
+                    <CardTitle className="flex items-center gap-2 uppercase font-black text-primary">
+                    <Settings className="h-5 w-5" /> Parámetros de Operación - Laboratorio
                     </CardTitle>
-                    <CardDescription>
-                    Gestiona los horarios y el catálogo de estudios.
-                    </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-8 p-6">
-                    <div className="space-y-6">
-                        <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><CalendarClock className="h-5 w-5"/> Citas y Horarios</h3>
-                        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className='space-y-2'>
-                                <Label htmlFor="lab-slots">Citas por día</Label>
-                                <Input
-                                id="lab-slots"
-                                type="number"
-                                value={settings.dailySlots}
-                                onChange={(e) => handleSettingsChange('dailySlots', parseInt(e.target.value,10) || 0)}
-                                />
+                <ScrollArea className="flex-1">
+                    <CardContent className="space-y-8 p-6">
+                        <div className="space-y-6">
+                            <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><CalendarClock className="h-5 w-5"/> Citas y Horarios</h3>
+                            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div className='space-y-2'>
+                                    <Label htmlFor="lab-slots">Citas por día</Label>
+                                    <Input id="lab-slots" type="number" value={settings.dailySlots} onChange={(e) => handleSettingsChange('dailySlots', parseInt(e.target.value,10) || 0)} />
+                                </div>
+                                <div className='space-y-2'>
+                                    <Label htmlFor="lab-waitlist">Lista de Espera</Label>
+                                    <Input id="lab-waitlist" type="number" value={settings.waitlistSlots || 0} onChange={(e) => handleSettingsChange('waitlistSlots', parseInt(e.target.value,10) || 0)} />
+                                </div>
+                                <div className='space-y-2'>
+                                    <Label htmlFor="lab-start">Hora Inicio</Label>
+                                    <Select value={settings.startTime} onValueChange={(value) => handleSettingsChange('startTime', value)}>
+                                        <SelectTrigger id="lab-start"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`start-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className='space-y-2'>
+                                    <Label htmlFor="lab-end">Hora Fin</Label>
+                                    <Select value={settings.endTime} onValueChange={(value) => handleSettingsChange('endTime', value)}>
+                                        <SelectTrigger id="lab-end"><SelectValue /></SelectTrigger>
+                                        <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`end-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
                             </div>
-                            <div className='space-y-2'>
-                                <Label htmlFor="lab-waitlist">Lista de Espera</Label>
-                                <Input
-                                id="lab-waitlist"
-                                type="number"
-                                value={settings.waitlistSlots || 0}
-                                onChange={(e) => handleSettingsChange('waitlistSlots', parseInt(e.target.value,10) || 0)}
-                                placeholder="Ej. 5"
-                                />
-                            </div>
-                            <div className='space-y-2'>
-                                <Label htmlFor="lab-start">Hora Inicio</Label>
-                                <Select value={settings.startTime} onValueChange={(value) => handleSettingsChange('startTime', value)}>
-                                    <SelectTrigger id="lab-start"><SelectValue /></SelectTrigger>
-                                    <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`start-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
-                                </Select>
-                            </div>
-                            <div className='space-y-2'>
-                                <Label htmlFor="lab-end">Hora Fin</Label>
-                                <Select value={settings.endTime} onValueChange={(value) => handleSettingsChange('endTime', value)}>
-                                    <SelectTrigger id="lab-end"><SelectValue /></SelectTrigger>
-                                    <SelectContent>{timeSlots30Min.map(slot => <SelectItem key={`end-${slot.value}`} value={slot.value}>{slot.label}</SelectItem>)}</SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                        <div className="grid sm:grid-cols-2 gap-4">
-                            <div className='space-y-2'>
-                                <Label htmlFor="lab-break">Tiempo de Descanso</Label>
-                                <Select value={settings.breakTime || ''} onValueChange={(value) => handleSettingsChange('breakTime', value === 'none' ? '' : value)}>
-                                    <SelectTrigger id="lab-break"><SelectValue placeholder="Seleccionar descanso..." /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">Sin Descanso</SelectItem>
-                                        {dynamicBreakSlots.map(slot => (
-                                            <SelectItem key={`break-${slot}`} value={slot}>{slot}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="flex items-center space-x-2 pt-8">
-                                <Switch 
-                                id="lab-weekend"
-                                checked={settings.weekendBookingEnabled}
-                                onCheckedChange={(checked) => handleSettingsChange('weekendBookingEnabled', checked)}
-                                />
-                                <Label htmlFor="lab-weekend">Permitir citas en fin de semana</Label>
+                            <div className="grid sm:grid-cols-2 gap-4">
+                                <div className='space-y-2'>
+                                    <Label htmlFor="lab-break">Tiempo de Descanso</Label>
+                                    <Select value={settings.breakTime || ''} onValueChange={(value) => handleSettingsChange('breakTime', value === 'none' ? '' : value)}>
+                                        <SelectTrigger id="lab-break"><SelectValue placeholder="Seleccionar descanso..." /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">Sin Descanso</SelectItem>
+                                            {dynamicBreakSlots.map(slot => (<SelectItem key={`break-${slot}`} value={slot}>{slot}</SelectItem>))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex items-center space-x-2 pt-8">
+                                    <Switch id="lab-weekend" checked={settings.weekendBookingEnabled} onCheckedChange={(checked) => handleSettingsChange('weekendBookingEnabled', checked)} />
+                                    <Label htmlFor="lab-weekend">Permitir citas en fin de semana</Label>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <Separator />
+                        <Separator />
 
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                            <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><FlaskConical className="h-5 w-5"/> Gestionar Catálogo</h3>
-                            <Button onClick={handleAddNewClick} size="sm" className="bg-primary hover:bg-primary/90"><PlusCircle className="mr-2 h-4 w-4" />Agregar Estudio</Button>
-                        </div>
-                        <div className="border rounded-xl bg-card shadow-inner overflow-hidden">
-                            <ScrollArea className="h-[400px]">
-                                <Table>
-                                    <TableHeader className="bg-muted/50 sticky top-0 z-10">
-                                        <TableRow>
-                                            <TableHead>Código</TableHead>
-                                            <TableHead>Estudio</TableHead>
-                                            <TableHead>Sección</TableHead>
-                                            <TableHead>Estado</TableHead>
-                                            <TableHead className="text-right">Acciones</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {studies.map(study => (
-                                            <TableRow key={study.id} className="hover:bg-muted/30">
-                                                <TableCell className="font-mono text-xs font-bold">{study.code || '---'}</TableCell>
-                                                <TableCell className="font-medium text-xs uppercase">{study.name}</TableCell>
-                                                <TableCell className="text-xs uppercase text-muted-foreground">{study.section}</TableCell>
-                                                <TableCell>
-                                                    <Badge variant={study.available ? 'secondary' : 'outline'} className="text-[10px] font-black uppercase">
-                                                        {study.available ? 'Activo' : 'Inactivo'}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell className="text-right">
-                                                    <div className="flex justify-end gap-1">
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleEditClick(study)}>
-                                                            <Pencil className="h-3.5 w-3.5" />
-                                                        </Button>
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeStudy(study.id)}>
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                                <h3 className="font-semibold text-lg flex items-center gap-2 text-primary"><FlaskConical className="h-5 w-5"/> Gestionar Catálogo</h3>
+                                <Button onClick={handleAddNewClick} size="sm" className="bg-primary hover:bg-primary/90"><PlusCircle className="mr-2 h-4 w-4" />Agregar Estudio</Button>
+                            </div>
+                            <div className="border rounded-xl bg-card shadow-inner overflow-hidden">
+                                <ScrollArea className="h-[300px]">
+                                    <Table>
+                                        <TableHeader className="bg-muted/50 sticky top-0 z-10">
+                                            <TableRow>
+                                                <TableHead>Código</TableHead>
+                                                <TableHead>Estudio</TableHead>
+                                                <TableHead>Sección</TableHead>
+                                                <TableHead>Estado</TableHead>
+                                                <TableHead className="text-right">Acciones</TableHead>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                                {studies.length === 0 && (
-                                    <div className="text-center py-20 text-muted-foreground italic">
-                                        No hay estudios definidos. Agrega uno para comenzar.
-                                    </div>
-                                )}
-                            </ScrollArea>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {studies.map(study => (
+                                                <TableRow key={study.id} className="hover:bg-muted/30">
+                                                    <TableCell className="font-mono text-xs font-bold">{study.code || '---'}</TableCell>
+                                                    <TableCell className="font-medium text-xs uppercase">{study.name}</TableCell>
+                                                    <TableCell className="text-xs uppercase text-muted-foreground">{study.section}</TableCell>
+                                                    <TableCell>
+                                                        <Badge variant={study.available ? 'secondary' : 'outline'} className="text-[10px] font-black uppercase">
+                                                            {study.available ? 'Activo' : 'Inactivo'}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        <div className="flex justify-end gap-1">
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleEditClick(study)}><Pencil className="h-3.5 w-3.5" /></Button>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeStudy(study.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </ScrollArea>
+                            </div>
                         </div>
-                    </div>
-                </CardContent>
-                <CardFooter className="bg-muted/5 border-t pt-6">
-                    <Button onClick={handleSave} disabled={isSaving} className="w-full h-12 font-black uppercase shadow-lg bg-primary hover:bg-primary/90 text-white">
-                    {isSaving ? (
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    ) : (
-                        <Save className="mr-2 h-5 w-5" />
-                    )}
-                    {isSaving ? 'Actualizando...' : 'SINCRONIZAR CATÁLOGO DE LABORATORIO'}
+                    </CardContent>
+                </ScrollArea>
+                <CardFooter className="bg-muted/5 border-t pt-6 shrink-0">
+                    <Button onClick={handleSave} disabled={isSaving} className="w-full h-14 font-black uppercase shadow-lg bg-primary hover:bg-primary/90 text-white">
+                        {isSaving ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
+                        GUARDAR CONFIGURACIÓN DE LABORATORIO
                     </Button>
                 </CardFooter>
             </Card>

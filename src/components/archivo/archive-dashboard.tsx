@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -136,7 +137,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
   const [selectedClinicType, setSelectedClinicType] = useState<string | 'all'>('Consulta Externa Especializada');
   const [dateFilter, setDateFilter] = useState<DateFilterType>('today');
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
-  const [searchTerm, setSearchTerm] = useState(''); // DEFINICIÓN DE SEARCHTERM
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Manual jump to date
   const [manualDayMonth, setManualDayMonth] = useState('');
@@ -153,7 +154,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
     setCurrentPage(1); 
     
     try {
-      // Configuramos las opciones de búsqueda para que el servidor use índices directos y búsqueda multi-campo
       const searchOptions = { 
           status: statusFilter, 
           searchName: searchName.trim() || undefined,
@@ -179,11 +179,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
       setColonias(coloniasData || []);
     } catch (error: any) {
       console.error("Dashboard error:", error);
-      toast({
-        title: 'Error de Consulta',
-        description: 'No se pudieron recuperar los registros.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error de Consulta', variant: 'destructive' });
     } finally {
       setIsDataLoading(false);
     }
@@ -309,7 +305,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
   const appointmentsToDisplay = useMemo(() => {
     let filtered = [...allAppointments];
     
-    // 1. Filtrado por tipo de clínica (Especialista por defecto)
     if (selectedClinicType !== 'all') {
         const clinicsOfType = clinics.filter(c => {
             const sType = serviceTypes.find(st => st.id === c.serviceTypeId || st.name === c.serviceTypeId);
@@ -318,50 +313,37 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
         filtered = filtered.filter(app => clinicsOfType.includes(app.clinicId));
     }
     
-    // 2. Filtrado por clínicas seleccionadas manualmente
     if (selectedClinics.length > 0) {
         filtered = filtered.filter(app => selectedClinics.includes(app.clinicId));
     }
     
-    // 3. Filtrado por fecha
     const now = new Date();
     let filterFn: (app: any) => boolean;
     switch (dateFilter) {
       case 'tomorrow':
-        const tomorrowStart = startOfDay(addDays(now, 1));
-        const tomorrowEnd = endOfDay(addDays(now, 1));
-        filterFn = (app) => isWithinInterval(parseISO(app.date), { start: tomorrowStart, end: tomorrowEnd });
+        filterFn = (app) => isWithinInterval(parseISO(app.date), { start: startOfDay(addDays(now, 1)), end: endOfDay(addDays(now, 1)) });
         break;
       case 'week':
-        const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-        const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
-        filterFn = (app) => isWithinInterval(parseISO(app.date), { start: weekStart, end: weekEnd });
+        filterFn = (app) => isWithinInterval(parseISO(app.date), { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) });
         break;
       case 'month':
-        const monthStart = startOfMonth(now);
-        const monthEnd = endOfMonth(now);
-        filterFn = (app) => isWithinInterval(parseISO(app.date), { start: monthStart, end: monthEnd });
+        filterFn = (app) => isWithinInterval(parseISO(app.date), { start: startOfMonth(now), end: endOfMonth(now) });
         break;
       case 'range':
         if (dateRange?.from) {
-          const rangeStart = startOfDay(dateRange.from);
-          const rangeEnd = endOfDay(dateRange.to || dateRange.from);
           filterFn = (app) => {
             const appDate = parseISO(app.date);
-            return appDate >= rangeStart && appDate <= rangeEnd;
+            return appDate >= startOfDay(dateRange.from!) && appDate <= endOfDay(dateRange.to || dateRange.from!);
           };
         } else filterFn = () => true;
         break;
       case 'today':
       default:
-        const todayStart = startOfDay(now);
-        const todayEnd = endOfDay(now);
-        filterFn = (app) => isWithinInterval(parseISO(app.date), { start: todayStart, end: todayEnd });
+        filterFn = (app) => isWithinInterval(parseISO(app.date), { start: startOfDay(now), end: endOfDay(now) });
         break;
     }
     filtered = filtered.filter(filterFn);
 
-    // 4. Filtrado por término de búsqueda (Nombre, CURP, Folio)
     if (searchTerm) {
         const term = searchTerm.toUpperCase();
         filtered = filtered.filter(a => {
@@ -475,11 +457,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                             onKeyDown={e => e.key === 'Enter' && loadData()}
                             className="pl-9 pr-9 h-11"
                         />
-                        {searchName && (
-                            <button onClick={() => setSearchName('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                                <XCircle className="h-4 w-4" />
-                            </button>
-                        )}
                     </div>
                     <div className="relative group">
                         <Input 
@@ -490,11 +467,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                             className="h-11 pr-9"
                             maxLength={18}
                         />
-                        {searchCurp && (
-                            <button onClick={() => setSearchCurp('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                                <XCircle className="h-4 w-4" />
-                            </button>
-                        )}
                     </div>
                     <div className="relative group">
                         <Input 
@@ -504,11 +476,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                             onKeyDown={e => e.key === 'Enter' && loadData()}
                             className="h-11 pr-9"
                         />
-                        {searchExpediente && (
-                            <button onClick={() => setSearchExpediente('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                                <XCircle className="h-4 w-4" />
-                            </button>
-                        )}
                     </div>
                     <div className="flex gap-2">
                         <Button onClick={loadData} className="h-11 flex-1 font-bold" disabled={isDataLoading}>

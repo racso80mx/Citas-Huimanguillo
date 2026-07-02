@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect, useTransition, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
@@ -121,22 +122,27 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
     };
 
     const handleDateSelection = async (dates: Date[] | undefined) => {
+        const prevDates = editedClinic.unavailableDates || [];
         if (!dates || dates.length === 0) {
             handleFieldChange('unavailableDates', []);
             return;
         }
-        const currentDateStrings = editedClinic.unavailableDates || [];
-        const newDate = dates.find(d => !currentDateStrings.includes(format(d, 'yyyy-MM-dd')));
-        if (newDate) {
-            const dateStr = format(newDate, 'yyyy-MM-dd');
-            const count = await getAppointmentCountOnDate(editedClinic.id, dateStr);
-            if (count > 0) {
-                setConflictInfo({ date: format(newDate, 'dd/MM/yyyy'), count });
-                setPendingDates(dates);
-                setIsConfirmingBlock(true);
-                return;
+
+        // Solo activar verificación si se está agregando una fecha nueva
+        if (dates.length > prevDates.length) {
+            const newDate = dates.find(d => !prevDates.includes(format(d, 'yyyy-MM-dd')));
+            if (newDate) {
+                const dateStr = format(newDate, 'yyyy-MM-dd');
+                const count = await getAppointmentCountOnDate(editedClinic.id, dateStr);
+                if (count > 0) {
+                    setConflictInfo({ date: format(newDate, 'dd/MM/yyyy'), count });
+                    setPendingDates(dates);
+                    setIsConfirmingBlock(true);
+                    return;
+                }
             }
         }
+
         const newDateStrings = Array.from(new Set(dates.map(d => format(d, 'yyyy-MM-dd'))));
         handleFieldChange('unavailableDates', newDateStrings);
     };
@@ -329,11 +335,11 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
             <DialogFooter className="p-6 border-t bg-muted/10 shrink-0"><Button onClick={() => onSave(editedClinic)} className="h-14 px-12 text-lg font-black uppercase shadow-2xl bg-primary hover:bg-primary/90 rounded-2xl"><Save className="mr-2 h-6 w-6" /> GUARDAR TODA LA CONFIGURACIÓN</Button></DialogFooter>
 
             <AlertDialog open={isConfirmingBlock} onOpenChange={setIsConfirmingBlock}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-destructive">
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-destructive">
                             <AlertTriangle className="h-6 w-6" /> ADVERTENCIA: CITAS EXISTENTES
-                        </DialogTitle>
+                        </AlertDialogTitle>
                         <div className="space-y-4 pt-2 text-sm text-muted-foreground">
                             <div className="font-bold text-foreground">
                                 Se han detectado <span className="text-primary text-lg">{conflictInfo?.count}</span> pacientes agendados para el día <span className="text-primary">{conflictInfo?.date}</span>.
@@ -342,12 +348,12 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
                                 Si bloqueas este día, las citas actuales permanecerán registradas pero no se permitirán nuevas reservas.
                             </div>
                         </div>
-                    </DialogHeader>
-                    <DialogFooter>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
                         <Button variant="outline" onClick={() => { setIsConfirmingBlock(false); setConflictInfo(null); setPendingDates(undefined); }}>No, elegir otra fecha</Button>
                         <Button onClick={confirmBlockage} className="bg-destructive hover:bg-destructive/90 font-bold">SÍ, ASIGNAR BLOQUEO</Button>
-                    </DialogFooter>
-                </DialogContent>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
             </AlertDialog>
         </DialogContent>
     );
