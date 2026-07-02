@@ -401,13 +401,21 @@ export async function updateAppointmentStatus(aid: string, s: string, type: stri
     return { success: true };
 }
 
-export async function getAppointmentsForClinic(cid: string) {
+export async function getAppointmentsForClinic(clinicId: string) {
     const apps = await getRawCollection('appointments', 10000);
     const clinics = await getClinicsData();
-    const target = clinics.find(c => c.id === cid);
+    const target = clinics.find(c => c.id === clinicId);
+    
+    // We fetch associated patients
     const pats = await getPatientsForApps(apps);
-    return apps.filter(a => a.clinicId === cid || (target && (a.clinicName || '').toUpperCase() === target.name.toUpperCase()))
-               .map(a => ({ ...a, patient: pats.find(p => p.id === a.patientId) }));
+    
+    // Filter by ID or Name to avoid losing data if catalog is updated
+    return apps.filter(a => a.clinicId === clinicId || (target && (a.clinicName || '').toUpperCase() === target.name.toUpperCase()))
+               .map(a => ({ 
+                   ...a, 
+                   patient: pats.find(p => p.id === a.patientId),
+                   clinicName: target?.name || a.clinicName
+               }));
 }
 
 export async function saveNewAppointment(appointment: any, patient: any, isDouble: boolean, colonia?: string) {

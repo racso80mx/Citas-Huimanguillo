@@ -136,7 +136,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
   const [selectedClinicType, setSelectedClinicType] = useState<string | 'all'>('Consulta Externa Especializada');
   const [dateFilter, setDateFilter] = useState<DateFilterType>('today');
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(''); // DEFINICIÓN DE SEARCHTERM
 
   // Manual jump to date
   const [manualDayMonth, setManualDayMonth] = useState('');
