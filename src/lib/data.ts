@@ -88,15 +88,15 @@ function fuzzyMapInsumo(item: any) {
     const cadVal = findValue([
         'caducidad', 'vencimiento', 'fechadecaducidad', 'vence', 'fecha', 'venc', 'f.caducidad', 
         'expiracion', 'vencimientolote', 'f_caducidad', 'vencimiento_lote', 'vence_lote', 
-        'caducidad_lote', 'fecha_vencimiento', 'fechavencimiento', 'caducidadlote', 'f.venc', 'fechacaducidad'
+        'caducidad_lote', 'fecha_vencimiento', 'fechavencimiento', 'caducidadlote', 'f.venc', 'fechacaducidad',
+        'vencimiento lote', 'vence lote', 'cad'
     ]);
     
     let formattedCaducidad = 'SIN FECHA';
     if (cadVal !== undefined && cadVal !== null) {
-        if (isDate(cadVal)) {
+        if (Object.prototype.toString.call(cadVal) === '[object Date]') {
             formattedCaducidad = formatDateFns(cadVal as Date, 'dd/MM/yyyy');
         } else if (typeof cadVal === 'number' && cadVal > 30000) {
-            // Excel serial date handling
             const excelEpoch = new Date(1899, 11, 30);
             const d = new Date(excelEpoch.getTime() + cadVal * 86400000);
             if (isValid(d)) formattedCaducidad = formatDateFns(d, 'dd/MM/yyyy');
@@ -104,12 +104,10 @@ function fuzzyMapInsumo(item: any) {
             const s = cadVal.trim();
             if (s) {
                 let d = new Date(s);
-                if (!isValid(d)) {
-                    d = parse(s, 'dd/MM/yyyy', new Date());
-                }
-                if (!isValid(d)) {
-                    d = parse(s, 'yyyy-MM-dd', new Date());
-                }
+                if (!isValid(d)) d = parse(s, 'dd/MM/yyyy', new Date());
+                if (!isValid(d)) d = parse(s, 'yyyy-MM-dd', new Date());
+                if (!isValid(d)) d = parse(s, 'MM/yyyy', new Date());
+                
                 if (isValid(d)) {
                     formattedCaducidad = formatDateFns(d, 'dd/MM/yyyy');
                 } else {
@@ -417,6 +415,41 @@ export async function bulkInsertDoctors(doctors: any[]) {
     await batch.commit(); return { success: true, processedCount: doctors.length }; 
 }
 
+export async function bulkInsertPatients(patients: any[]) {
+    const batch = writeBatch(adminDb);
+    let processed = 0;
+    
+    for (const p of patients) {
+        const keys = Object.keys(p);
+        const findVal = (opts: string[]) => {
+            const k = keys.find(key => opts.some(opt => key.toLowerCase().includes(opt.toLowerCase())));
+            return k ? p[k] : undefined;
+        };
+
+        const curp = String(findVal(['curp']) || '').toUpperCase().trim();
+        if (!curp) continue;
+
+        const patientData = {
+            id: curp,
+            curp,
+            name: String(findVal(['nombre']) || '').toUpperCase().trim(),
+            paternalLastName: String(findVal(['paternal', 'paterno', 'apellido1']) || '').toUpperCase().trim(),
+            maternalLastName: String(findVal(['maternal', 'materno', 'apellido2']) || '').toUpperCase().trim(),
+            expediente: String(findVal(['expediente', 'no.exp', 'id_paciente']) || '').trim(),
+            status: PatientStatus.Vigente,
+            phoneNumber: String(findVal(['telefono', 'tel', 'celular']) || '').trim(),
+            address: String(findVal(['domicilio', 'direccion', 'calle']) || '').toUpperCase().trim(),
+            coloniaName: String(findVal(['colonia', 'municipio', 'localidad']) || '').toUpperCase().trim(),
+        };
+        
+        batch.set(doc(adminDb, 'patients', curp), patientData, { merge: true });
+        processed++;
+    }
+    
+    await batch.commit();
+    return { success: true, processedCount: processed, addedCount: processed, updatedCount: 0 };
+}
+
 export async function getServiceTypesData() { return getRawCollection('serviceTypes'); }
 export async function updateServiceTypes(t: any[]) { const batch = writeBatch(adminDb); t.forEach(x => batch.set(doc(adminDb, 'serviceTypes', x.id), x)); await batch.commit(); return { success: true }; }
 export async function getSpecialtiesData() { return getRawCollection('specialties'); }
@@ -504,12 +537,6 @@ export async function getPrescriptionHistory(f: any) { let q = query(collection(
 export async function getPrescriptionsByPatientId(pid: string) { const q = query(collection(adminDb, 'prescriptions'), where('patientId', '==', pid), limit(20)); const snap = await getDocs(q); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Prescription[]; }
 export async function getPatientPrescriptionsCountTodayAction(pid: string) { const start = startOfDay(new Date()).toISOString(); const q = query(collection(adminDb, 'prescriptions'), where('patientId', '==', pid), where('date', '>=', start)); const snap = await getCountFromServer(q); return snap.data().count; }
 
-export async function deleteAppointment(id: string) { await deleteDoc(doc(adminDb, 'appointments', id)); return { success: true }; }
-export async function deleteLabAppointment(id: string) { await deleteDoc(doc(adminDb, 'labAppointments', id)); return { success: true }; }
-export async function deleteXRayAppointment(id: string) { await deleteDoc(doc(adminDb, 'xrayAppointments', id)); return { success: true }; }
-export async function deleteUltrasoundAppointment(id: string) { await deleteDoc(doc(adminDb, 'ultrasoundAppointments', id)); return { success: true }; }
-export async function deleteVaccineAppointment(id: string) { await deleteDoc(doc(adminDb, 'vaccineAppointments', id)); return { success: true }; }
-
 export async function getAppointmentCountOnDate(clinicId: string, date: string) { 
     const dateOnly = date.split('T')[0];
     const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId), where('date', '>=', dateOnly), where('date', '<=', dateOnly + 'T23:59:59'));
@@ -537,6 +564,12 @@ export async function updateAppointmentStatus(id: string, s: string, type: strin
     await updateDoc(doc(adminDb, coll, id), { status: s });
     return { success: true };
 }
+
+export async function deleteAppointment(id: string) { await deleteDoc(doc(adminDb, 'appointments', id)); return { success: true }; }
+export async function deleteLabAppointment(id: string) { await deleteDoc(doc(adminDb, 'labAppointments', id)); return { success: true }; }
+export async function deleteXRayAppointment(id: string) { await deleteDoc(doc(adminDb, 'xrayAppointments', id)); return { success: true }; }
+export async function deleteUltrasoundAppointment(id: string) { await deleteDoc(doc(adminDb, 'ultrasoundAppointments', id)); return { success: true }; }
+export async function deleteVaccineAppointment(id: string) { await deleteDoc(doc(adminDb, 'vaccineAppointments', id)); return { success: true }; }
 
 export async function rescheduleAppointment(id: string, date: string, type: string) { 
     const coll = type === 'medical' ? 'appointments' : type === 'lab' ? 'labAppointments' : type === 'xray' ? 'xrayAppointments' : type === 'ultrasound' ? 'ultrasoundAppointments' : 'vaccineAppointments';

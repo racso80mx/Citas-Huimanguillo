@@ -95,9 +95,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
     
     let expiryDate: Date | null = null;
     
-    if (isDate(dateStr)) {
-        expiryDate = dateStr as unknown as Date;
-    } else if (dateStr.includes('/')) {
+    if (dateStr.includes('/')) {
         const parts = dateStr.split('/');
         if (parts.length === 3) {
             expiryDate = parse(dateStr, 'dd/MM/yyyy', new Date());
@@ -264,7 +262,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
-                            <Label>Archivo Excel (.xlsx)</Label>
+                            <Label>Seleccionar archivo (.xlsx)</Label>
                             <Input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} disabled={isUploading} />
                         </div>
                         {isUploading && (
@@ -299,7 +297,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                 <Card className="md:col-span-2 shadow-sm border-primary/10">
                     <CardHeader className="pb-3">
                         <CardTitle className="text-lg flex items-center gap-2"><CalendarClock className="h-5 w-5 text-primary" /> Semáforo de Caducidades</CardTitle>
-                        <CardDescription>Haz clic en una tarjeta para filtrar la lista.</CardDescription>
+                        <CardDescription>Haz clic en una tarjeta para filtrar la lista por riesgo.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -307,7 +305,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                                 onClick={() => setStatusFilter(statusFilter === 'red' ? null : 'red')}
                                 className={cn(
                                     "bg-red-50 border p-4 rounded-xl text-center transition-all",
-                                    statusFilter === 'red' ? "border-red-500 ring-2 ring-red-200" : "border-red-100 opacity-70 hover:opacity-100"
+                                    statusFilter === 'red' ? "border-red-500 ring-2 ring-red-200 shadow-md scale-105" : "border-red-100 opacity-70 hover:opacity-100"
                                 )}
                             >
                                 <div className="text-[10px] text-red-600 uppercase font-black mb-1">Crítico (&lt; 6m)</div>
@@ -317,7 +315,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                                 onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')}
                                 className={cn(
                                     "bg-yellow-50 border p-4 rounded-xl text-center transition-all",
-                                    statusFilter === 'yellow' ? "border-yellow-500 ring-2 ring-yellow-200" : "border-yellow-100 opacity-70 hover:opacity-100"
+                                    statusFilter === 'yellow' ? "border-yellow-500 ring-2 ring-yellow-200 shadow-md scale-105" : "border-yellow-100 opacity-70 hover:opacity-100"
                                 )}
                             >
                                 <div className="text-[10px] text-yellow-600 uppercase font-black mb-1">Preventivo (6m-1a)</div>
@@ -327,7 +325,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                                 onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')}
                                 className={cn(
                                     "bg-green-50 border p-4 rounded-xl text-center transition-all",
-                                    statusFilter === 'green' ? "border-green-500 ring-2 ring-green-200" : "border-green-100 opacity-70 hover:opacity-100"
+                                    statusFilter === 'green' ? "border-green-500 ring-2 ring-green-200 shadow-md scale-105" : "border-green-100 opacity-70 hover:opacity-100"
                                 )}
                             >
                                 <div className="text-[10px] text-green-600 uppercase font-black mb-1">Óptimo (&gt; 1a)</div>
@@ -337,7 +335,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                                 onClick={() => setStatusFilter(null)}
                                 className={cn(
                                     "bg-muted/30 border p-4 rounded-xl text-center transition-all",
-                                    !statusFilter ? "border-primary ring-2 ring-primary/10" : "border-transparent opacity-70 hover:opacity-100"
+                                    !statusFilter ? "border-primary ring-2 ring-primary/10 shadow-md scale-105" : "border-transparent opacity-70 hover:opacity-100"
                                 )}
                             >
                                 <div className="text-[10px] text-muted-foreground uppercase font-black mb-1">Total Insumos</div>
@@ -351,11 +349,11 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
             <Card className="shadow-md border-primary/10">
                 <CardHeader className="pb-3 border-b bg-muted/10">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <CardTitle>Inventario</CardTitle>
+                        <CardTitle>Listado de Medicamentos</CardTitle>
                         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                             <div className="relative w-full sm:w-96">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <Input placeholder="Escribe para buscar..." className="pl-9 h-11" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                                <Input placeholder="Buscar por Nombre, Clave o Lote..." className="pl-9 h-11" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                             </div>
                             {statusFilter && (
                                 <Badge variant="secondary" className="h-11 px-4 gap-2 text-sm font-bold border-primary/20 bg-primary/5 text-primary">
@@ -410,7 +408,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                                             );
                                         })
                                     ) : (
-                                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">No se encontraron resultados.</TableCell></TableRow>
+                                        <TableRow><TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">No se encontraron medicamentos.</TableCell></TableRow>
                                     )}
                                 </TableBody>
                             </Table>
