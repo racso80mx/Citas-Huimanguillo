@@ -52,7 +52,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { differenceInMonths, parse, isValid } from 'date-fns';
+import { differenceInMonths, parse, isValid, isDate } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -95,17 +95,22 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
     
     let expiryDate: Date | null = null;
     
-    if (dateStr.includes('/')) {
+    // Si ya es un objeto Date
+    if (isDate(dateStr)) {
+        expiryDate = dateStr as unknown as Date;
+    } else if (dateStr.includes('/')) {
         const parts = dateStr.split('/');
         if (parts.length === 3) {
             expiryDate = parse(dateStr, 'dd/MM/yyyy', new Date());
         } else if (parts.length === 2) {
             expiryDate = parse(dateStr, 'MM/yyyy', new Date());
-        } else {
-            expiryDate = new Date(dateStr);
         }
     } else if (dateStr.includes('-')) {
         expiryDate = new Date(dateStr);
+    } else if (!isNaN(Number(dateStr)) && dateStr.length === 5) {
+        // Handle Excel numeric date serials if they arrive as strings
+        const excelEpoch = new Date(1899, 11, 30);
+        expiryDate = new Date(excelEpoch.getTime() + Number(dateStr) * 86400000);
     } else {
         expiryDate = new Date(dateStr);
     }
@@ -131,7 +136,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
       try {
         const xlsx = await import('xlsx');
         const buffer = await file.arrayBuffer();
-        const workbook = xlsx.read(buffer);
+        const workbook = xlsx.read(buffer, { cellDates: true });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = xlsx.utils.sheet_to_json(sheet);
 
@@ -217,12 +222,10 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
   const filteredAndSortedMedications = useMemo(() => {
     let result = [...medications];
 
-    // Status filter (Semáforo)
     if (statusFilter) {
       result = result.filter(m => getExpirationStatus(m.fechaCaducidad) === statusFilter);
     }
 
-    // Text search
     if (searchTerm) {
       const term = searchTerm.toUpperCase();
       result = result.filter(m => {
@@ -260,7 +263,8 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
         </div>
         <div className="flex items-center gap-2">
             <Button variant="outline" onClick={loadMedications} disabled={isLoading}>
-                <RefreshCw className={isLoading ? "animate-spin" : ""} />
+                <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
+                Sincronizar
             </Button>
             {onLogout && (
                 <Button variant="outline" onClick={onLogout}>
@@ -272,33 +276,33 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
 
       <Tabs defaultValue="inventario" className="w-full">
         <TabsList className="grid w-full grid-cols-2 max-w-md">
-            <TabsTrigger value="inventario">Inventario</TabsTrigger>
-            <TabsTrigger value="recetas" className="flex items-center gap-2">
+            <TabsTrigger value="inventario" className="font-bold">Inventario</TabsTrigger>
+            <TabsTrigger value="recetas" className="flex items-center gap-2 font-bold">
                 <FileText className="h-4 w-4" /> Surtir Recetas
             </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="inventario" className="space-y-6 pt-6">
+        <TabsContent value="inventario" className="space-y-6 pt-6 animate-in fade-in duration-300">
             <div className="grid md:grid-cols-3 gap-6">
-                <Card className="md:col-span-1">
+                <Card className="md:col-span-1 shadow-sm border-primary/10">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-lg"><Upload className="h-5 w-5" /> Cargar Inventario</CardTitle>
-                    <CardDescription>
-                    Actualiza el stock mediante archivo Excel.
-                    </CardDescription>
+                    <CardDescription>Actualiza el stock mediante archivo Excel.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="flex items-center gap-2">
-                    <Input 
-                        type="file" 
-                        accept=".xlsx, .xls" 
-                        onChange={handleFileUpload} 
-                        disabled={isUploading}
-                    />
+                    <div className="space-y-2">
+                        <Label>Seleccionar archivo (.xlsx)</Label>
+                        <Input 
+                            type="file" 
+                            accept=".xlsx, .xls" 
+                            onChange={handleFileUpload} 
+                            disabled={isUploading}
+                            className="h-11"
+                        />
                     </div>
                     {isUploading && (
-                    <div className="space-y-2">
-                        <div className="flex justify-between text-xs font-medium">
+                    <div className="space-y-2 pt-2">
+                        <div className="flex justify-between text-[10px] font-black uppercase text-primary">
                         <span>{uploadStatus.message}</span>
                         <span>{progress}%</span>
                         </div>
@@ -308,22 +312,18 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                     <div className="flex gap-2 pt-2">
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm" className="w-full" disabled={isDeleting || medications.length === 0}>
+                        <Button variant="destructive" size="sm" className="w-full h-11 font-bold" disabled={isDeleting || medications.length === 0}>
                             <Trash2 className="h-4 w-4 mr-2" /> Vaciar Inventario
                         </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                         <AlertDialogHeader>
                             <AlertDialogTitle>¿Vaciar todo el inventario?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                            Esta acción eliminará todos los registros actuales. No se puede deshacer.
-                            </AlertDialogDescription>
+                            <AlertDialogDescription>Esta acción eliminará todos los registros actuales del sistema de Farmacia.</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction onClick={handleDeleteAll} className="bg-destructive hover:bg-destructive/90">
-                            Sí, vaciar todo
-                            </AlertDialogAction>
+                            <AlertDialogAction onClick={handleDeleteAll} className="bg-destructive hover:bg-destructive/90">Confirmar</AlertDialogAction>
                         </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>
@@ -331,91 +331,91 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                 </CardContent>
                 </Card>
 
-                <Card className="md:col-span-2">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg"><CalendarClock className="h-5 w-5" /> Semáforo de Caducidades</CardTitle>
-                    <CardDescription>Haz clic en una alerta para filtrar la lista automáticamente.</CardDescription>
+                <Card className="md:col-span-2 shadow-sm border-primary/10">
+                <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-lg"><CalendarClock className="h-5 w-5 text-primary" /> Semáforo de Caducidades</CardTitle>
+                    <CardDescription>Usa los botones para filtrar la tabla por estado de vencimiento.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <button 
-                        onClick={() => setStatusFilter(statusFilter === 'red' ? null : 'red')}
-                        className={cn(
-                            "bg-red-50 border p-4 rounded-xl text-center transition-all",
-                            statusFilter === 'red' ? "border-red-500 ring-2 ring-red-200 shadow-md scale-105" : "border-red-100 opacity-70 hover:opacity-100"
-                        )}
-                    >
-                        <div className="text-[10px] text-red-600 uppercase font-black mb-1">CRÍTICO (&lt; 6 meses)</div>
-                        <div className="text-3xl font-black text-red-700">{stats.red}</div>
-                        <div className="text-[10px] text-red-500 mt-1 flex items-center justify-center gap-1"><AlertTriangle className="h-3 w-3"/> Ver Lista</div>
-                    </button>
-                    <button 
-                        onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')}
-                        className={cn(
-                            "bg-yellow-50 border p-4 rounded-xl text-center transition-all",
-                            statusFilter === 'yellow' ? "border-yellow-500 ring-2 ring-yellow-200 shadow-md scale-105" : "border-yellow-100 opacity-70 hover:opacity-100"
-                        )}
-                    >
-                        <div className="text-[10px] text-yellow-600 uppercase font-black mb-1">PREVENTIVO (6m - 1a)</div>
-                        <div className="text-3xl font-black text-yellow-700">{stats.yellow}</div>
-                        <div className="text-[10px] text-yellow-500 mt-1 flex items-center justify-center gap-1"><CalendarClock className="h-3 w-3"/> Ver Lista</div>
-                    </button>
-                    <button 
-                        onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')}
-                        className={cn(
-                            "bg-green-50 border p-4 rounded-xl text-center transition-all",
-                            statusFilter === 'green' ? "border-green-500 ring-2 ring-green-200 shadow-md scale-105" : "border-green-100 opacity-70 hover:opacity-100"
-                        )}
-                    >
-                        <div className="text-[10px] text-green-600 uppercase font-black mb-1">SEGURO (&gt; 1 año)</div>
-                        <div className="text-3xl font-black text-green-700">{stats.green}</div>
-                        <div className="text-[10px] text-green-500 mt-1 flex items-center justify-center gap-1"><CheckCircle2 className="h-3 w-3"/> Ver Lista</div>
-                    </button>
-                    <button 
-                        onClick={() => setStatusFilter(null)}
-                        className={cn(
-                            "bg-muted/30 border p-4 rounded-xl text-center transition-all",
-                            !statusFilter ? "border-primary ring-2 ring-primary/10 shadow-md scale-105" : "border-transparent opacity-70 hover:opacity-100"
-                        )}
-                    >
-                        <div className="text-[10px] text-muted-foreground uppercase font-black mb-1">Total Registros</div>
-                        <div className="text-3xl font-black">{medications.length}</div>
-                        <div className="text-[10px] text-muted-foreground mt-1">Ver Todos</div>
-                    </button>
+                        <button 
+                            onClick={() => setStatusFilter(statusFilter === 'red' ? null : 'red')}
+                            className={cn(
+                                "bg-red-50 border p-4 rounded-xl text-center transition-all group",
+                                statusFilter === 'red' ? "border-red-500 ring-2 ring-red-200 shadow-md scale-105" : "border-red-100 opacity-70 hover:opacity-100"
+                            )}
+                        >
+                            <div className="text-[10px] text-red-600 uppercase font-black mb-1">Crítico (&lt; 6m)</div>
+                            <div className="text-3xl font-black text-red-700">{stats.red}</div>
+                            <div className="text-[10px] text-red-500 mt-1 flex items-center justify-center gap-1"><AlertTriangle className="h-3 w-3"/> Ver lista</div>
+                        </button>
+                        <button 
+                            onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')}
+                            className={cn(
+                                "bg-yellow-50 border p-4 rounded-xl text-center transition-all group",
+                                statusFilter === 'yellow' ? "border-yellow-500 ring-2 ring-yellow-200 shadow-md scale-105" : "border-yellow-100 opacity-70 hover:opacity-100"
+                            )}
+                        >
+                            <div className="text-[10px] text-yellow-600 uppercase font-black mb-1">Preventivo (6m-1a)</div>
+                            <div className="text-3xl font-black text-yellow-700">{stats.yellow}</div>
+                            <div className="text-[10px] text-yellow-500 mt-1 flex items-center justify-center gap-1"><CalendarClock className="h-3 w-3"/> Ver lista</div>
+                        </button>
+                        <button 
+                            onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')}
+                            className={cn(
+                                "bg-green-50 border p-4 rounded-xl text-center transition-all group",
+                                statusFilter === 'green' ? "border-green-500 ring-2 ring-green-200 shadow-md scale-105" : "border-green-100 opacity-70 hover:opacity-100"
+                            )}
+                        >
+                            <div className="text-[10px] text-green-600 uppercase font-black mb-1">Seguro (&gt; 1a)</div>
+                            <div className="text-3xl font-black text-green-700">{stats.green}</div>
+                            <div className="text-[10px] text-green-500 mt-1 flex items-center justify-center gap-1"><CheckCircle2 className="h-3 w-3"/> Ver lista</div>
+                        </button>
+                        <button 
+                            onClick={() => setStatusFilter(null)}
+                            className={cn(
+                                "bg-muted/30 border p-4 rounded-xl text-center transition-all",
+                                !statusFilter ? "border-primary ring-2 ring-primary/10 shadow-md scale-105" : "border-transparent opacity-70 hover:opacity-100"
+                            )}
+                        >
+                            <div className="text-[10px] text-muted-foreground uppercase font-black mb-1">Total Registros</div>
+                            <div className="text-3xl font-black">{medications.length}</div>
+                            <div className="text-[10px] text-muted-foreground mt-1">Ver todos</div>
+                        </button>
                     </div>
                 </CardContent>
                 </Card>
             </div>
 
-            <Card>
+            <Card className="shadow-md border-primary/10">
                 <CardHeader className="pb-3 border-b bg-muted/10">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <CardTitle>Inventario de Medicamentos</CardTitle>
+                    <CardTitle className="text-xl font-headline font-bold">Inventario de Medicamentos</CardTitle>
                     <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                         <div className="relative w-full sm:w-96">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input 
-                                placeholder="Escribe para buscar..." 
-                                className="pl-9 h-11"
+                                placeholder="Escribe descripción, clave o lote para filtrar..." 
+                                className="pl-9 h-11 border-primary/20 bg-background"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="h-11 gap-2">
+                                <Button variant="outline" className="h-11 gap-2 border-primary/20">
                                     <Filter className="h-4 w-4" /> 
-                                    Campos: {searchFields.length === 3 ? 'Todos' : searchFields.length}
+                                    Campos: {searchFields.length}
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56">
-                                <DropdownMenuLabel>Buscar en:</DropdownMenuLabel>
+                                <DropdownMenuLabel>Buscar por:</DropdownMenuLabel>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuCheckboxItem checked={searchFields.includes('claveCuadroBasico')} onCheckedChange={() => toggleSearchField('claveCuadroBasico')}>
-                                    Clave de Cuadro Básico
+                                    Clave Básica
                                 </DropdownMenuCheckboxItem>
                                 <DropdownMenuCheckboxItem checked={searchFields.includes('descripcion')} onCheckedChange={() => toggleSearchField('descripcion')}>
-                                    Descripción
+                                    Descripción / Nombre
                                 </DropdownMenuCheckboxItem>
                                 <DropdownMenuCheckboxItem checked={searchFields.includes('lote')} onCheckedChange={() => toggleSearchField('lote')}>
                                     Lote
@@ -423,8 +423,8 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                             </DropdownMenuContent>
                         </DropdownMenu>
                         {statusFilter && (
-                            <Badge variant="secondary" className="h-11 px-4 gap-2 text-sm font-bold animate-in zoom-in">
-                                Filtro Activo
+                            <Badge variant="secondary" className="h-11 px-4 gap-2 text-sm font-bold animate-in zoom-in border-primary/20 bg-primary/5 text-primary">
+                                Filtro Semáforo Activo
                                 <X className="h-4 w-4 cursor-pointer hover:text-destructive" onClick={() => setStatusFilter(null)} />
                             </Badge>
                         )}
@@ -433,70 +433,73 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                 </CardHeader>
                 <CardContent className="p-0">
                 {isLoading ? (
-                    <div className="flex justify-center py-20">
-                    <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                    <div className="flex flex-col items-center justify-center py-40 gap-4">
+                        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                        <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground animate-pulse">Sincronizando Almacén...</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
                     <Table>
-                        <TableHeader>
+                        <TableHeader className="bg-muted/50">
                         <TableRow>
-                            <TableHead onClick={() => handleSort('claveCuadroBasico')} className="cursor-pointer hover:bg-accent whitespace-nowrap">
-                            Clave {sortConfig?.key === 'claveCuadroBasico' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
+                            <TableHead onClick={() => handleSort('claveCuadroBasico')} className="cursor-pointer hover:bg-accent whitespace-nowrap font-black text-[10px] uppercase">
+                                <div className="flex items-center">Clave {sortConfig?.key === 'claveCuadroBasico' && (sortConfig.direction === 'asc' ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />)}</div>
                             </TableHead>
-                            <TableHead onClick={() => handleSort('descripcion')} className="cursor-pointer hover:bg-accent">
-                            Descripción {sortConfig?.key === 'descripcion' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
+                            <TableHead onClick={() => handleSort('descripcion')} className="cursor-pointer hover:bg-accent font-black text-[10px] uppercase">
+                                <div className="flex items-center">Descripción {sortConfig?.key === 'descripcion' && (sortConfig.direction === 'asc' ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />)}</div>
                             </TableHead>
-                            <TableHead onClick={() => handleSort('existencia')} className="cursor-pointer hover:bg-accent text-right">
-                            Stock {sortConfig?.key === 'existencia' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
+                            <TableHead onClick={() => handleSort('existencia')} className="cursor-pointer hover:bg-accent text-right font-black text-[10px] uppercase w-[100px]">
+                                <div className="flex items-center justify-end">Stock {sortConfig?.key === 'existencia' && (sortConfig.direction === 'asc' ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />)}</div>
                             </TableHead>
-                            <TableHead onClick={() => handleSort('fechaCaducidad')} className="cursor-pointer hover:bg-accent">
-                            Caducidad {sortConfig?.key === 'fechaCaducidad' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
+                            <TableHead onClick={() => handleSort('fechaCaducidad')} className="cursor-pointer hover:bg-accent font-black text-[10px] uppercase w-[140px]">
+                                <div className="flex items-center">Caducidad {sortConfig?.key === 'fechaCaducidad' && (sortConfig.direction === 'asc' ? <ArrowUp className="ml-1 h-3 w-3" /> : <ArrowDown className="ml-1 h-3 w-3" />)}</div>
                             </TableHead>
-                            <TableHead>Lote</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase w-[120px]">Lote</TableHead>
                         </TableRow>
                         </TableHeader>
                         <TableBody>
                         {filteredAndSortedMedications.length > 0 ? (
-                            filteredAndSortedMedications.slice(0, 300).map((med) => {
+                            filteredAndSortedMedications.slice(0, 500).map((med) => {
                             const expiryStatus = getExpirationStatus(med.fechaCaducidad);
                             return (
-                                <TableRow key={med.id} className="hover:bg-muted/50">
-                                <TableCell className="font-mono text-[11px] font-bold">{med.claveCuadroBasico}</TableCell>
-                                <TableCell className="text-[11px] max-w-xs">{med.descripcion}</TableCell>
-                                <TableCell className={`text-right font-black text-sm ${med.existencia <= 0 ? 'text-red-600' : 'text-foreground'}`}>
-                                    {med.existencia}
+                                <TableRow key={med.id} className="hover:bg-muted/30 transition-colors">
+                                <TableCell className="font-mono text-[11px] font-bold text-muted-foreground">{med.claveCuadroBasico}</TableCell>
+                                <TableCell className="text-[11px] font-medium uppercase leading-tight max-w-sm">{med.descripcion}</TableCell>
+                                <TableCell className="text-right">
+                                    <Badge variant={med.existencia > 0 ? 'secondary' : 'destructive'} className={cn(med.existencia > 10 ? 'bg-green-100 text-green-800' : '', "font-black text-sm px-3")}>
+                                        {med.existencia}
+                                    </Badge>
                                 </TableCell>
                                 <TableCell>
                                     <Badge 
                                         variant="outline"
                                         className={cn(
-                                            "font-bold text-[10px] px-2 py-0",
-                                            expiryStatus === 'red' && "bg-red-100 text-red-700 border-red-200",
-                                            expiryStatus === 'yellow' && "bg-yellow-100 text-yellow-700 border-yellow-200",
-                                            expiryStatus === 'green' && "bg-green-100 text-green-700 border-green-200",
-                                            expiryStatus === 'unknown' && "bg-gray-100 text-gray-600"
+                                            "font-black text-[10px] px-3 py-1 uppercase tracking-tighter border-2",
+                                            expiryStatus === 'red' && "bg-red-50 text-red-700 border-red-200",
+                                            expiryStatus === 'yellow' && "bg-yellow-50 text-yellow-700 border-yellow-200",
+                                            expiryStatus === 'green' && "bg-green-50 text-green-700 border-green-200",
+                                            expiryStatus === 'unknown' && "bg-gray-100 text-gray-500 border-gray-200"
                                         )}
                                     >
-                                    {med.fechaCaducidad || 'SIN FECHA'}
+                                        {med.fechaCaducidad || 'SIN FECHA'}
                                     </Badge>
                                 </TableCell>
-                                <TableCell className="text-[10px] font-mono">{med.lote}</TableCell>
+                                <TableCell className="text-[10px] font-mono font-bold text-primary">{med.lote}</TableCell>
                                 </TableRow>
                             );
                             })
                         ) : (
                             <TableRow>
-                            <TableCell colSpan={5} className="text-center py-20 text-muted-foreground">
-                                No se encontraron registros que coincidan con los filtros.
+                            <TableCell colSpan={5} className="text-center py-20 text-muted-foreground italic">
+                                No se encontraron registros que coincidan con los filtros aplicados.
                             </TableCell>
                             </TableRow>
                         )}
                         </TableBody>
                     </Table>
-                    {filteredAndSortedMedications.length > 300 && (
-                        <div className="p-4 text-center text-xs text-muted-foreground bg-muted/20 border-t font-medium italic">
-                        Mostrando los primeros 300 resultados de {filteredAndSortedMedications.length}.
+                    {filteredAndSortedMedications.length > 500 && (
+                        <div className="p-4 text-center text-xs text-muted-foreground bg-muted/5 border-t font-medium italic">
+                            Mostrando los primeros 500 resultados de {filteredAndSortedMedications.length}. Utiliza el buscador para mayor precisión.
                         </div>
                     )}
                     </div>
@@ -505,7 +508,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
             </Card>
         </TabsContent>
 
-        <TabsContent value="recetas" className="pt-6">
+        <TabsContent value="recetas" className="pt-6 animate-in slide-in-from-right-4 duration-300">
             <PrescriptionDispenser />
         </TabsContent>
       </Tabs>

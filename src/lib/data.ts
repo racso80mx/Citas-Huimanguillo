@@ -133,7 +133,7 @@ async function getPatientsForApps(apps: any[]) {
     return pats;
 }
 
-async function getPasswordFromStore(id: string, defaultPass: string): Promise<string> {
+export async function getPasswordFromStore(id: string, defaultPass: string): Promise<string> {
     try {
         const snap = await getDoc(doc(adminDb, 'module_passwords', id));
         return snap.exists() ? snap.data().password : defaultPass;
@@ -214,7 +214,6 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     const words = term.split(' ').filter((w: string) => w.length > 0);
     if (words.length === 0) return [];
     
-    // Optimización de costos: Buscar candidatos por apellido paterno (prefijo)
     const firstWord = words[0];
     const q1 = query(colRef, where('paternalLastName', '>=', firstWord), where('paternalLastName', '<=', firstWord + '\uf8ff'), limit(150));
     const q2 = query(colRef, where('name', '>=', firstWord), where('name', '<=', firstWord + '\uf8ff'), limit(150));
@@ -228,8 +227,6 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     });
     
     let results = Array.from(resultsMap.values());
-    
-    // Filtrado de coincidencia total en memoria
     results = results.filter(p => {
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         return words.every((word: string) => fullName.includes(word));
@@ -250,7 +247,6 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
 
 export async function getPatientCounts(): Promise<ArchiveCounts> {
   const colRef = collection(adminDb, 'patients');
-  // Usar getCountFromServer para reducir costos de lectura drásticamente
   const [totalSnap, vigenteSnap, bajaSnap, bajaDefSnap] = await Promise.all([
     getCountFromServer(colRef),
     getCountFromServer(query(colRef, where('status', '==', PatientStatus.Vigente))),
@@ -527,7 +523,6 @@ export async function deleteUltrasoundAppointment(id: string) { await deleteDoc(
 export async function deleteVaccineAppointment(id: string) { await deleteDoc(doc(adminDb, 'vaccineAppointments', id)); return { success: true }; }
 
 export async function getAppointmentCountOnDate(cid: string, d: string) { 
-    // Optimización de costos: Usar count en lugar de docs
     const dateOnly = d.split('T')[0];
     const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), where('date', '>=', dateOnly), where('date', '<=', dateOnly + 'T23:59:59'));
     const snap = await getCountFromServer(q);
@@ -735,3 +730,6 @@ export async function getAnnouncementsData() {
     return snap.exists() ? snap.data().messages : [];
 }
 export async function updateAnnouncements(m: string[]) { await setDoc(doc(adminDb, 'settings', 'announcements'), { messages: m }); return { success: true }; }
+
+export async function bulkInsertMedicationsAction(items: any[]) { return bulkInsertMedications(items); }
+export async function bulkInsertSuppliesAction(items: any[]) { return bulkInsertSupplies(items); }
