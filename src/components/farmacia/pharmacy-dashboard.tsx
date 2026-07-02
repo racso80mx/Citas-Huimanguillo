@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useTransition, useMemo } from 'react';
@@ -11,6 +10,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -95,7 +95,6 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
     
     let expiryDate: Date | null = null;
     
-    // Si ya es un objeto Date
     if (isDate(dateStr)) {
         expiryDate = dateStr as unknown as Date;
     } else if (dateStr.includes('/')) {
@@ -108,7 +107,6 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
     } else if (dateStr.includes('-')) {
         expiryDate = new Date(dateStr);
     } else if (!isNaN(Number(dateStr)) && dateStr.length === 5) {
-        // Handle Excel numeric date serials if they arrive as strings
         const excelEpoch = new Date(1899, 11, 30);
         expiryDate = new Date(excelEpoch.getTime() + Number(dateStr) * 86400000);
     } else {
