@@ -133,33 +133,42 @@ export async function getLogsData() {
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     
-    // Obtenemos todos los CURPS únicos de la lista de citas
-    const curpsToFetch = Array.from(new Set(appointments.map(a => a.patientId).filter(id => !!id)));
+    // Identificar CURPs que necesitan datos (priorizamos IDs de documento)
+    const patientIdsToFetch = Array.from(new Set(appointments.map(a => a.patientId).filter(id => !!id)));
     const patientsMap: Record<string, any> = {};
 
-    // Consultamos los pacientes por lotes de 30 (límite de "in" en Firestore)
-    for (let i = 0; i < curpsToFetch.length; i += 30) {
-        const chunk = curpsToFetch.slice(i, i + 30);
-        const q = query(collection(adminDb, 'patients'), where('curp', 'in', chunk));
-        const snap = await getDocs(q);
-        snap.forEach(d => {
-            const data = d.data();
-            patientsMap[data.curp] = serializeData({ ...data, id: d.id });
+    // Consultamos por lotes de 30
+    for (let i = 0; i < patientIdsToFetch.length; i += 30) {
+        const chunk = patientIdsToFetch.slice(i, i + 30);
+        
+        // Intento 1: Buscar por ID de documento
+        const qById = query(collection(adminDb, 'patients'), where(documentId(), 'in', chunk));
+        const snapById = await getDocs(qById);
+        snapById.forEach(d => {
+            patientsMap[d.id] = serializeData({ ...d.data(), id: d.id });
+        });
+
+        // Intento 2: Buscar por campo 'curp' para redundancia
+        const qByCurp = query(collection(adminDb, 'patients'), where('curp', 'in', chunk));
+        const snapByCurp = await getDocs(qByCurp);
+        snapByCurp.forEach(d => {
+            patientsMap[d.data().curp] = serializeData({ ...d.data(), id: d.id });
         });
     }
 
-    // Vinculamos los datos del paciente a cada cita
     return appointments.map(app => {
         const patientData = patientsMap[app.patientId];
         return {
             ...app,
-            // Si la cita ya tiene datos de paciente los mantiene, si no, usa el del mapa
-            patient: (app.patient && app.patient.name) ? app.patient : (patientData || { 
-                name: 'PACIENTE', 
-                paternalLastName: 'NO ENCONTRADO', 
-                maternalLastName: '', 
-                curp: app.patientId || 'S/C' 
-            })
+            patient: (app.patient && app.patient.name && app.patient.name !== 'N/A') 
+                ? app.patient 
+                : (patientData || { 
+                    name: 'PACIENTE', 
+                    paternalLastName: 'NO ENCONTRADO', 
+                    maternalLastName: '', 
+                    curp: app.patientId || 'S/C',
+                    phoneNumber: 'S/T'
+                })
         };
     });
 }
@@ -175,8 +184,7 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     } else if (options?.searchName) {
         q = query(colRef, where('name', '>=', options.searchName.toUpperCase()), where('name', '<=', options.searchName.toUpperCase() + '\uf8ff'), limit(500));
     } else {
-        // VISIBILIDAD TOTAL: 10,000 registros
-        q = query(colRef, limit(10000));
+        q = query(colRef, limit(5000));
     }
     const s = await getDocs(q);
     return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Patient[];
@@ -256,7 +264,7 @@ export async function bulkInsertPatients(patients: any[]) {
     return { success: true, processedCount: count };
 }
 
-// --- GESTIÓN DE CITAS (VISIBILIDAD TOTAL 10,000 REGISTROS) ---
+// --- GESTIÓN DE CITAS (CON HIDRATACIÓN UNIVERSAL) ---
 export async function getAppointmentsData() { 
     const q = query(collection(adminDb, 'appointments'), orderBy('date', 'desc'), limit(10000));
     const snap = await getDocs(q); 
@@ -334,7 +342,7 @@ export async function saveNewAppointment(a: any, p: any, isD: boolean, c?: strin
         id, 
         appointmentNumber,
         patientId: p.curp, 
-        patient: p, // DENORMALIZACIÓN PARA SEGURIDAD DE DATOS
+        patient: p, 
         coloniaName: c, 
         createdAt: new Date().toISOString() 
     };
