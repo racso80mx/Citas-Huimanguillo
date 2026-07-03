@@ -207,7 +207,7 @@ export async function getBIData() { return data.getBIData(); }
 export async function getAttendedPatientsForClinic(c: string) { return data.getAttendedPatientsForClinic(c); }
 export async function cleanupOldRecords() { return data.cleanupOldRecords(); }
 
-// --- MANTENIMIENTO ---
+// --- MANTENIMIENTO Y RESPALDO ---
 export async function normalizeExpedientesAction() { return data.normalizeExpedientesAction(); }
 export async function scanDuplicates(c: string) { return data.scanDuplicates(c); }
 export async function applyStatusUpdateChunk(e: string[], s: string) { return data.applyStatusUpdateChunk(e, s); }
@@ -217,3 +217,4 @@ export async function bulkInsertCie10Catalog(d: any[]) { return data.bulkInsertC
 export async function deleteAllCie10Glossary() { return data.deleteAllCie10Glossary(); }
 export async function deleteAllCie10Catalog() { return data.deleteAllCie10Catalog(); }
 export async function bulkInsertDoctors(d: any[]) { return data.bulkInsertDoctors(d); }
+export async function downloadBackupAction() { return data.downloadBackupAction(); }

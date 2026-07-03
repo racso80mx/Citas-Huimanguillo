@@ -46,7 +46,7 @@ import { Switch } from '../ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Calendar } from '../ui/calendar';
-import { format, isValid } from 'date-fns';
+import { format, isValid, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { timeSlots30Min } from '@/lib/time-slots';
 import { Badge } from '../ui/badge';
@@ -202,14 +202,14 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
             <DialogHeader className="p-6 shrink-0 border-b bg-muted/10">
                 <div className="flex items-center justify-between">
                     <div>
-                        <DialogTitle className="text-2xl font-black uppercase">Configuración Avanzada de Unidad</DialogTitle>
+                        <DialogTitle className="text-2xl font-black uppercase">Configuración de Unidad Médica</DialogTitle>
                         <div className="font-bold text-primary">{editedClinic.name || "Nueva Unidad"}</div>
                     </div>
                     {onDelete && clinic.id && !clinic.id.startsWith('new') && (
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <Button variant="destructive" size="sm" className="font-bold">
-                                    <Trash2 className="mr-2 h-4 w-4" /> ELIMINAR REGISTRO
+                                    <Trash2 className="mr-2 h-4 w-4" /> ELIMINAR UNIDAD
                                 </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -231,58 +231,122 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
             <ScrollArea className="flex-1">
                  <div className="p-8 space-y-12">
                     <div className="space-y-6">
-                        <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2"><Fingerprint className="h-5 w-5" /> 1. Datos del Responsable</h4>
+                        <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2"><Fingerprint className="h-5 w-5" /> 1. Datos Generales</h4>
                         <div className='grid sm:grid-cols-3 gap-8'>
                             <div className='space-y-2'><Label className="font-black text-[10px] uppercase opacity-60 tracking-tighter">Nombre de la Unidad</Label><Input value={editedClinic.name} onChange={(e) => handleFieldChange('name', e.target.value.toUpperCase())} className="h-12 font-bold" /></div>
                             <div className='space-y-2'><Label className="font-black text-[10px] uppercase opacity-60 tracking-tighter">Médico Responsable</Label><Input value={editedClinic.doctorName} onChange={(e) => handleFieldChange('doctorName', e.target.value.toUpperCase())} className="h-12 font-bold" /></div>
-                            <div className='space-y-2'><Label className="font-black text-[10px] uppercase opacity-60 tracking-tighter">CURP del Médico</Label><Input value={editedClinic.doctorCurp || ''} onChange={(e) => handleFieldChange('doctorCurp', e.target.value.toUpperCase())} className="h-12 font-mono" maxLength={18} /></div>
+                            <div className='space-y-2'><Label className="font-black text-[10px] uppercase opacity-60 tracking-tighter">Cédula Profesional</Label><Input value={editedClinic.professionalLicense || ''} onChange={(e) => handleFieldChange('professionalLicense', e.target.value.toUpperCase())} className="h-12 font-mono" /></div>
                         </div>
-                        <div className='grid sm:grid-cols-3 gap-8'>
+                        <div className='grid sm:grid-cols-2 gap-8'>
                             <div className='space-y-2'><Label className="font-black text-[10px] uppercase opacity-60 tracking-tighter">Categoría de Atención</Label><Select value={editedClinic.serviceTypeId} onValueChange={(v) => handleFieldChange('serviceTypeId', v)}><SelectTrigger className="h-12 font-bold"><SelectValue /></SelectTrigger><SelectContent>{serviceTypes.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select></div>
                             <div className='space-y-2'><Label className="font-black text-[10px] uppercase opacity-60 tracking-tighter">Especialidad</Label><Select value={editedClinic.specialtyId || 'none'} onValueChange={(v) => handleFieldChange('specialtyId', v === 'none' ? undefined : v)}><SelectTrigger className="h-12 font-bold"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">General / No Especializado</SelectItem>{specialties.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
-                            <div className='space-y-2'><Label className="font-black text-[10px] uppercase opacity-60 tracking-tighter">Cédula Profesional</Label><Input value={editedClinic.professionalLicense || ''} onChange={(e) => handleFieldChange('professionalLicense', e.target.value.toUpperCase())} className="h-12" /></div>
                         </div>
                     </div>
+                    
                     <Separator />
+                    
                     <div className="space-y-6">
-                        <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2"><Timer className="h-5 w-5" /> 2. Control de Agenda y Turnos</h4>
-                        <div className='grid grid-cols-2 md:grid-cols-6 gap-6 bg-primary/5 p-6 rounded-3xl border border-primary/10'>
-                            <div className='space-y-2'><Label className="text-[10px] font-black uppercase text-primary">Cupo Normal</Label><Input type="number" value={editedClinic.dailySlots} onChange={(e) => handleFieldChange('dailySlots', parseInt(e.target.value,10) || 0)} className="h-11 font-black text-center" /></div>
+                        <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2"><Timer className="h-5 w-5" /> 2. Gestión de Horarios y Cupos</h4>
+                        <div className='grid grid-cols-2 md:grid-cols-6 gap-6 bg-primary/5 p-6 rounded-3xl border border-primary/10 shadow-inner'>
+                            <div className='space-y-2'><Label className="text-[10px] font-black uppercase text-primary">Cupo Diario</Label><Input type="number" value={editedClinic.dailySlots} onChange={(e) => handleFieldChange('dailySlots', parseInt(e.target.value,10) || 0)} className="h-11 font-black text-center" /></div>
                             <div className='space-y-2'><Label className="text-[10px] font-black uppercase text-primary">Lista de Espera</Label><Input type="number" value={editedClinic.waitlistSlots || 0} onChange={(e) => handleFieldChange('waitlistSlots', parseInt(e.target.value,10) || 0)} className="h-11 font-black text-center bg-blue-50 border-blue-200" /></div>
-                            <div className='space-y-2'><Label className="text-[10px] font-black uppercase text-primary">Duración (min)</Label><Input type="number" value={editedClinic.consultationDuration || ''} onChange={(e) => handleFieldChange('consultationDuration', parseInt(e.target.value,10) || 0)} className="h-11 font-black text-center" /></div>
+                            <div className='space-y-2'><Label className="text-[10px] font-black uppercase text-primary">Duración (min)</Label><Input type="number" value={editedClinic.consultationDuration || 30} onChange={(e) => handleFieldChange('consultationDuration', parseInt(e.target.value,10) || 30)} className="h-11 font-black text-center" /></div>
                             <div className='space-y-2'><Label className="text-[10px] font-black uppercase text-primary">Entrada</Label><Select value={editedClinic.startTime} onValueChange={(v) => handleFieldChange('startTime', v)}><SelectTrigger className="h-11 font-bold"><SelectValue /></SelectTrigger><SelectContent>{timeSlots30Min.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
                             <div className='space-y-2'><Label className="text-[10px] font-black uppercase text-primary">Salida</Label><Select value={editedClinic.endTime} onValueChange={(v) => handleFieldChange('endTime', v)}><SelectTrigger className="h-11 font-bold"><SelectValue /></SelectTrigger><SelectContent>{timeSlots30Min.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent></Select></div>
-                            <div className='space-y-2'><Label className="text-[10px] font-black uppercase text-primary">Hora Comida</Label><Select value={editedClinic.breakTime || ''} onValueChange={(v) => handleFieldChange('breakTime', v === 'none' ? '' : v)}>
+                            <div className='space-y-2'><Label className="text-[10px] font-black uppercase text-primary">Descanso</Label><Select value={editedClinic.breakTime || 'none'} onValueChange={(v) => handleFieldChange('breakTime', v === 'none' ? undefined : v)}>
                                 <SelectTrigger className="h-11 font-bold bg-orange-50 border-orange-200"><SelectValue /></SelectTrigger>
-                                <SelectContent><SelectItem value="none">No</SelectItem>{dynamicBreakSlots.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                                <SelectContent><SelectItem value="none">Sin Descanso</SelectItem>{dynamicBreakSlots.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                             </Select></div>
                         </div>
                     </div>
+
                     <Separator />
+
                     <div className="grid lg:grid-cols-2 gap-10">
                         <div className="space-y-4">
-                            <Label className="text-sm font-black text-primary uppercase flex items-center gap-2"><CalendarDays className="h-5 w-5" /> 3. Días Administrativos (Bloqueados)</Label>
+                            <Label className="text-sm font-black text-primary uppercase flex items-center gap-2"><CalendarDays className="h-5 w-5" /> 3. Días de Atención Semanal</Label>
                             <div className="flex flex-wrap gap-3 p-6 bg-muted/20 border-2 border-dashed rounded-3xl">
                                 {DAYS_OF_WEEK.map(day => (<div key={day} className="flex items-center space-x-3 bg-background p-3 px-4 rounded-xl border-2 shadow-sm"><Checkbox id={`day-${day}`} checked={editedClinic.daysOfAction?.includes(day)} onCheckedChange={() => toggleDay(day)} /><Label htmlFor={`day-${day}`} className="text-xs font-black uppercase cursor-pointer">{day}</Label></div>))}
                             </div>
                         </div>
                         <div className="space-y-4">
-                            <Label className="text-sm font-black text-primary uppercase flex items-center gap-2"><Clock className="h-5 w-5" /> Disponibilidad Adicional</Label>
+                            <Label className="text-sm font-black text-primary uppercase flex items-center gap-2"><Clock className="h-5 w-5" /> Parámetros Operativos</Label>
                             <div className="p-6 bg-muted/20 border-2 border-dashed rounded-3xl space-y-6">
-                                <div className="flex items-center justify-between p-4 bg-background rounded-2xl border-2 shadow-sm"><Label className="text-sm font-black uppercase">¿Labora Sábados y Domingos?</Label><Switch checked={editedClinic.weekendBookingEnabled} onCheckedChange={(v) => handleFieldChange('weekendBookingEnabled', v)} /></div>
-                                <div className="flex items-center justify-between p-4 bg-background rounded-2xl border-2 shadow-sm"><Label className="text-sm font-black uppercase">Modo de Reserva</Label><Select value={editedClinic.bookingMode} onValueChange={(v: BookingMode) => handleFieldChange('bookingMode', v)}><SelectTrigger className="w-40 h-10 font-bold"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={BookingMode.Time}>Por Horario</SelectItem><SelectItem value={BookingMode.Token}>Por Ficha</SelectItem></SelectContent></Select></div>
+                                <div className="flex items-center justify-between p-4 bg-background rounded-2xl border-2 shadow-sm"><Label className="text-sm font-black uppercase">Atención Sábados/Domingos</Label><Switch checked={editedClinic.weekendBookingEnabled} onCheckedChange={(v) => handleFieldChange('weekendBookingEnabled', v)} /></div>
+                                <div className="flex items-center justify-between p-4 bg-background rounded-2xl border-2 shadow-sm"><Label className="text-sm font-black uppercase">Método de Asignación</Label><Select value={editedClinic.bookingMode} onValueChange={(v: BookingMode) => handleFieldChange('bookingMode', v)}><SelectTrigger className="w-44 h-10 font-bold"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={BookingMode.Time}>Por Horario (Exacto)</SelectItem><SelectItem value={BookingMode.Token}>Por Ficha (General)</SelectItem></SelectContent></Select></div>
                             </div>
                         </div>
                     </div>
+
                     <Separator />
+
+                    {/* TABLA DE VACACIONES Y BLOQUEOS TOTALES */}
+                    <div className='space-y-6'>
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2">
+                                <CalendarDays className="h-5 w-5" /> 4. Historial de Vacaciones y Bloqueos Totales
+                            </h4>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" className='h-11 font-black bg-destructive/5 text-destructive border-destructive/20 hover:bg-destructive/10'>
+                                        <CalendarPlus className="mr-2 h-5 w-5" /> AGENDAR DÍAS DE BLOQUEO
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className='w-auto p-0' align="end">
+                                    <Calendar 
+                                        mode="multiple" 
+                                        selected={editedClinic.unavailableDates?.map(d => new Date(d + 'T12:00:00'))} 
+                                        onSelect={handleDateSelection} 
+                                        locale={es} 
+                                        disabled={{ before: new Date() }} 
+                                    />
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                        
+                        <div className="border rounded-2xl overflow-hidden bg-background shadow-sm">
+                            <Table>
+                                <TableHeader className="bg-muted/50">
+                                    <TableRow>
+                                        <TableHead className="font-bold text-[10px] uppercase">Fecha Bloqueada</TableHead>
+                                        <TableHead className="font-bold text-[10px] uppercase">Motivo / Concepto</TableHead>
+                                        <TableHead className="w-[100px] text-right pr-6">Acción</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {editedClinic.unavailableDates?.length ? editedClinic.unavailableDates.map(dateStr => (
+                                        <TableRow key={dateStr} className="hover:bg-muted/30 transition-colors">
+                                            <TableCell className="font-black text-sm uppercase">
+                                                {format(new Date(dateStr + 'T12:00:00'), "eeee dd 'de' MMMM, yyyy", { locale: es })}
+                                            </TableCell>
+                                            <TableCell><Badge variant="outline" className="text-[10px] font-black uppercase bg-red-50 text-red-700 border-red-200">Vacaciones / Bloqueo Total</Badge></TableCell>
+                                            <TableCell className="text-right pr-6">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleRemoveUnavailableDate(dateStr)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    )) : (
+                                        <TableRow>
+                                            <TableCell colSpan={3} className="text-center py-20 opacity-30 uppercase font-black text-xs">Sin días bloqueados por vacaciones</TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* HORARIOS ESPECIALES */}
                     <div className="space-y-6">
-                        <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2"><Timer className="h-5 w-5" /> 4. Horarios Especiales (Salidas Tempranas)</h4>
-                        <div className="grid sm:grid-cols-3 gap-6 items-end bg-blue-50/50 p-6 rounded-3xl border border-blue-100">
+                        <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2"><Timer className="h-5 w-5" /> 5. Salidas Tempranas y Horarios Especiales</h4>
+                        <div className="grid sm:grid-cols-3 gap-6 items-end bg-blue-50/50 p-6 rounded-3xl border border-blue-100 shadow-sm">
                              <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase">Fecha del Evento</Label>
+                                <Label className="text-[10px] font-black uppercase text-blue-700">Fecha del Cambio</Label>
                                 <Popover>
                                     <PopoverTrigger asChild>
-                                        <Button variant="outline" className="w-full h-11 justify-start font-bold text-foreground">
+                                        <Button variant="outline" className="w-full h-12 justify-start font-bold bg-background">
                                             <CalendarIcon className="mr-2 h-4 w-4" />
                                             {newScheduleDate ? format(newScheduleDate, 'dd/MM/yyyy') : "Elegir Fecha..."}
                                         </Button>
@@ -291,66 +355,74 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
                                 </Popover>
                              </div>
                              <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase">Hora de Fin (Cierre)</Label>
+                                <Label className="text-[10px] font-black uppercase text-blue-700">Hora de Cierre</Label>
                                 <Select value={newScheduleEndTime} onValueChange={setNewScheduleEndTime}>
-                                    <SelectTrigger className="h-11 font-bold"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger className="h-12 font-bold bg-background"><SelectValue /></SelectTrigger>
                                     <SelectContent>{timeSlots30Min.map(t => <SelectItem key={`sched-${t.value}`} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                                 </Select>
                              </div>
-                             <Button onClick={addCustomSchedule} disabled={!newScheduleDate} className="h-11 font-black bg-blue-600 hover:bg-blue-700">PROGRAMAR CIERRE</Button>
+                             <Button onClick={addCustomSchedule} disabled={!newScheduleDate} className="h-12 font-black bg-blue-600 hover:bg-blue-700 uppercase tracking-widest">ASIGNAR SALIDA</Button>
                         </div>
-                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {editedClinic.customSchedules?.length ? editedClinic.customSchedules.map(sched => (
-                                <div key={sched.date} className="flex items-center justify-between p-4 bg-background border-2 border-blue-100 rounded-2xl shadow-sm animate-in zoom-in-95">
-                                    <div>
-                                        <p className="text-[10px] font-black uppercase text-blue-600">Salida Temprana</p>
-                                        <p className="font-bold text-sm">{formatBadgeDate(sched.date)}</p>
-                                        <p className="text-xs font-black text-muted-foreground uppercase flex items-center gap-1"><Clock className="h-3 w-3" /> Cierre: {sched.endTime}</p>
-                                    </div>
-                                    <Button variant="ghost" size="icon" onClick={() => removeCustomSchedule(sched.date)}><X className="h-4 w-4 text-destructive" /></Button>
-                                </div>
-                            )) : <div className="col-span-full py-8 text-center border-2 border-dashed rounded-3xl opacity-30 font-black text-[10px] uppercase">No hay cierres anticipados programados</div>}
+                        
+                        <div className="border rounded-2xl overflow-hidden bg-background shadow-sm">
+                            <Table>
+                                <TableHeader className="bg-muted/50">
+                                    <TableRow>
+                                        <TableHead className="font-bold text-[10px] uppercase">Fecha</TableHead>
+                                        <TableHead className="font-bold text-[10px] uppercase text-center">Hora Cierre</TableHead>
+                                        <TableHead className="w-[100px] text-right pr-6">Acción</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {editedClinic.customSchedules?.length ? editedClinic.customSchedules.map(sched => (
+                                        <TableRow key={sched.date} className="hover:bg-muted/30 transition-colors">
+                                            <TableCell className="font-black text-sm uppercase">
+                                                {format(new Date(sched.date + 'T12:00:00'), "eeee dd 'de' MMMM", { locale: es })}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <Badge className="bg-blue-600 text-white font-black h-7 px-4">{sched.endTime} HRS</Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right pr-6">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => removeCustomSchedule(sched.date)}>
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    )) : (
+                                        <TableRow>
+                                            <TableCell colSpan={3} className="text-center py-20 opacity-30 uppercase font-black text-xs">No hay cierres especiales programados</TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
                         </div>
-                    </div>
-                    <Separator />
-                    <div className='space-y-6'>
-                        <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2"><CalendarDays className="h-5 w-5" /> 5. Vacaciones y Bloqueos Totales</h4>
-                        <div className="flex gap-4 items-center">
-                            <Popover><PopoverTrigger asChild><Button variant="outline" className='flex-1 h-12 font-black bg-destructive/5 text-destructive border-destructive/20'><CalendarPlus className="mr-2 h-5 w-5" /> SELECCIONAR DÍAS DE BLOQUEO EN CALENDARIO</Button></PopoverTrigger><PopoverContent className='w-auto p-0' align="start"><Calendar mode="multiple" selected={editedClinic.unavailableDates?.map(d => new Date(d + 'T12:00:00'))} onSelect={handleDateSelection} locale={es} disabled={{ before: new Date() }} /></PopoverContent></Popover>
-                        </div>
-                        <ScrollArea className="h-[250px] border-2 border-dashed rounded-3xl bg-muted/5 p-6">
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                                {editedClinic.unavailableDates?.length ? editedClinic.unavailableDates.map(d => (
-                                    <div key={String(d)} className="flex items-center justify-between p-3 bg-background border rounded-xl shadow-sm hover:border-destructive/40 transition-colors">
-                                        <span className="text-xs font-bold uppercase">{formatBadgeDate(String(d))}</span>
-                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleRemoveUnavailableDate(String(d))}><X className="h-3 w-3 text-destructive" /></Button>
-                                    </div>
-                                )) : <div className="col-span-full text-center py-20 opacity-30 uppercase font-black text-xs">Sin días bloqueados por vacaciones</div>}
-                            </div>
-                        </ScrollArea>
                     </div>
                 </div>
             </ScrollArea>
-            <DialogFooter className="p-6 border-t bg-muted/10 shrink-0"><Button onClick={() => onSave(editedClinic)} className="h-14 px-12 text-lg font-black uppercase shadow-2xl bg-primary hover:bg-primary/90 rounded-2xl"><Save className="mr-2 h-6 w-6" /> GUARDAR TODA LA CONFIGURACIÓN</Button></DialogFooter>
+            <DialogFooter className="p-6 border-t bg-muted/10 shrink-0">
+                <Button onClick={() => onSave(editedClinic)} className="h-14 px-12 text-lg font-black uppercase shadow-2xl bg-primary hover:bg-primary/90 rounded-2xl transition-all hover:scale-[1.02]">
+                    <Save className="mr-2 h-6 w-6" /> GUARDAR TODA LA CONFIGURACIÓN
+                </Button>
+            </DialogFooter>
 
             <AlertDialog open={isConfirmingBlock} onOpenChange={setIsConfirmingBlock}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-                            <AlertTriangle className="h-6 w-6" /> ADVERTENCIA: CITAS EXISTENTES
+                            <AlertTriangle className="h-6 w-6" /> ADVERTENCIA DE SEGURIDAD
                         </AlertDialogTitle>
                         <div className="space-y-4 pt-2 text-sm text-muted-foreground">
                             <div className="font-bold text-foreground">
                                 Se han detectado <span className="text-primary text-lg">{conflictInfo?.count}</span> pacientes agendados para el día <span className="text-primary">{conflictInfo?.date}</span>.
                             </div>
                             <div className="text-xs">
-                                Si bloqueas este día, las citas actuales permanecerán registradas pero no se permitirán nuevas reservas.
+                                Si bloqueas este día, las citas actuales permanecerán registradas pero no se permitirán nuevas reservas. ¿Deseas continuar con el bloqueo de vacaciones?
                             </div>
                         </div>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <Button variant="outline" onClick={() => { setIsConfirmingBlock(false); setConflictInfo(null); setPendingDates(undefined); }}>No, elegir otra fecha</Button>
-                        <Button onClick={confirmBlockage} className="bg-destructive hover:bg-destructive/90 font-bold">SÍ, ASIGNAR BLOQUEO</Button>
+                        <Button variant="outline" onClick={() => { setIsConfirmingBlock(false); setConflictInfo(null); setPendingDates(undefined); }}>Cancelar y revisar fecha</Button>
+                        <Button onClick={confirmBlockage} className="bg-destructive hover:bg-destructive/90 font-bold">SÍ, APLICAR BLOQUEO</Button>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
@@ -460,7 +532,7 @@ export function ClinicsManager() {
     startSavingTransition(async () => {
         const result = await updateClinics(finalClinics);
         if (result.success) {
-            toast({ title: 'Unidad Guardada' });
+            toast({ title: 'Unidad Actualizada' });
             setIsDialogOpen(false);
             setSelectedClinic(null);
             fetchData();
@@ -500,7 +572,7 @@ export function ClinicsManager() {
             <CardTitle className="text-2xl font-bold font-headline flex items-center gap-2">
               <Hospital className="h-6 w-6 text-primary" /> Gestión de Consultorios y Núcleos
             </CardTitle>
-            <CardDescription>Configura los horarios y disponibilidad de cada unidad.</CardDescription>
+            <CardDescription>Configura los horarios, vacaciones y disponibilidad de cada unidad médica.</CardDescription>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={fetchData} className="h-10"><RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} /></Button>
@@ -512,7 +584,7 @@ export function ClinicsManager() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
                     placeholder="Buscar por consultorio o médico..." 
-                    className="pl-9 h-11"
+                    className="pl-9 h-11 border-primary/20"
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
                 />
@@ -527,7 +599,7 @@ export function ClinicsManager() {
                             <TableHead className="cursor-pointer hover:bg-muted" onClick={() => handleSort('doctorName')}>
                                 <div className="flex items-center">Médico {getSortIcon('doctorName')}</div>
                             </TableHead>
-                            <TableHead>Horario</TableHead>
+                            <TableHead>Horario / Cupo</TableHead>
                             <TableHead className="w-[100px] text-right pr-6">Config.</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -537,18 +609,19 @@ export function ClinicsManager() {
                                 <TableCell>
                                     <div className="flex flex-col">
                                         <span className="font-bold text-sm uppercase">{clinic.name}</span>
-                                        <Badge variant="outline" className="w-fit text-[9px] mt-1 uppercase font-bold text-muted-foreground">
+                                        <Badge variant="outline" className="w-fit text-[9px] mt-1 uppercase font-black text-muted-foreground border-muted-foreground/30">
                                             {serviceTypes.find(t => t.id === clinic.serviceTypeId)?.name || 'N/A'}
                                         </Badge>
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    <span className="text-xs font-medium uppercase text-primary">Dr. {clinic.doctorName}</span>
+                                    <span className="text-xs font-bold uppercase text-primary">Dr. {clinic.doctorName}</span>
                                 </TableCell>
                                 <TableCell>
-                                    <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
+                                    <div className="flex items-center gap-2 text-xs font-black text-muted-foreground">
                                         <Clock className="h-3 w-3" /> {clinic.startTime} - {clinic.endTime}
                                         <Badge className="bg-primary/5 text-primary text-[10px] h-5 border-primary/20">{clinic.dailySlots} Citas</Badge>
+                                        {(clinic.unavailableDates?.length || 0) > 0 && <Badge className="bg-red-50 text-red-600 text-[10px] border-red-200">VACACIONES</Badge>}
                                     </div>
                                 </TableCell>
                                 <TableCell className="text-right pr-6">
@@ -563,7 +636,7 @@ export function ClinicsManager() {
             </div>
         </CardContent>
         <CardFooter className="bg-muted/5 border-t py-4">
-             <Button onClick={handleBulkSave} disabled={isSaving || clinics.length === 0} className="w-full h-12 font-black uppercase shadow-lg bg-primary hover:bg-primary/90">
+             <Button onClick={handleBulkSave} disabled={isSaving || clinics.length === 0} className="w-full h-12 font-black uppercase shadow-lg bg-primary hover:bg-primary/90 text-white">
                 <Save className="mr-2 h-5 w-5" /> GUARDAR CATÁLOGO DE UNIDADES
              </Button>
         </CardFooter>
