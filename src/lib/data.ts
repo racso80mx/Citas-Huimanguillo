@@ -89,7 +89,7 @@ export const DEFAULT_PASSWORDS: Record<string, string> = {
     'vaccine': '123'
 };
 
-async function getPasswordFromStore(id: string, def: string): Promise<string> {
+export async function getPasswordFromStore(id: string, def: string): Promise<string> {
     try {
         const s = await getDoc(doc(adminDb, 'module_passwords', id));
         return s.exists() ? s.data().password : def;
@@ -219,7 +219,8 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     } else if (options?.searchName) {
         q = query(colRef, where('name', '>=', options.searchName.toUpperCase()), where('name', '<=', options.searchName.toUpperCase() + '\uf8ff'), limit(500));
     } else {
-        q = query(colRef, limit(options?.limitNum || 5000));
+        // Aumentado a 10,000 para visibilidad total en Administración
+        q = query(colRef, limit(options?.limitNum || 10000));
     }
     const s = await getDocs(q);
     return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Patient[];
@@ -301,12 +302,11 @@ export async function bulkInsertPatients(patients: any[]) {
 
 // --- GESTIÓN DE CITAS ---
 export async function getAppointmentsData() { 
-    // Priorizamos citas desde hace 2 días hacia el futuro para no saturar el límite de 10,000
-    const windowStart = subDays(new Date(), 2).toISOString();
+    // MOSTRAR TODO (Hasta 10,000) ordenado por fecha descendente.
+    // Esto asegura que el motor de disponibilidad vea todas las citas futuras.
     const q = query(
         collection(adminDb, 'appointments'), 
-        where('date', '>=', windowStart),
-        orderBy('date', 'asc'),
+        orderBy('date', 'desc'),
         limit(10000) 
     );
     const snap = await getDocs(q); 
@@ -315,22 +315,22 @@ export async function getAppointmentsData() {
 }
 
 export async function getLabAppointmentsData() { 
-    const snap = await getDocs(query(collection(adminDb, 'labAppointments'), limit(10000))); 
+    const snap = await getDocs(query(collection(adminDb, 'labAppointments'), orderBy('date', 'desc'), limit(10000))); 
     return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
 }
 
 export async function getXRayAppointmentsData() { 
-    const snap = await getDocs(query(collection(adminDb, 'xrayAppointments'), limit(5000))); 
+    const snap = await getDocs(query(collection(adminDb, 'xrayAppointments'), orderBy('date', 'desc'), limit(10000))); 
     return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
 }
 
 export async function getUltrasoundAppointmentsData() { 
-    const snap = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), limit(5000))); 
+    const snap = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), orderBy('date', 'desc'), limit(10000))); 
     return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
 }
 
 export async function getVaccineAppointmentsData() { 
-    const snap = await getDocs(query(collection(adminDb, 'vaccineAppointments'), limit(5000))); 
+    const snap = await getDocs(query(collection(adminDb, 'vaccineAppointments'), orderBy('date', 'desc'), limit(10000))); 
     return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
 }
 
@@ -452,7 +452,7 @@ export async function updateAppointmentStatus(id: string, s: string, t: any) {
 }
 
 export async function getAppointmentsForClinic(cid: string) { 
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(10000)); 
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), orderBy('date', 'desc'), limit(10000)); 
     const s = await getDocs(q); 
     const apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); 
     return hydrateAppointments(apps);
@@ -568,7 +568,7 @@ export async function updateSpecialties(t: any[]) { const b = writeBatch(adminDb
 export async function getColoniasData() { const snap = await getDocs(collection(adminDb, 'colonias')); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateColonias(c: Colonia[]) { const b = writeBatch(adminDb); c.forEach(x => b.set(doc(adminDb, 'colonias', x.id), x)); await b.commit(); return { success: true }; }
 
-export async function getRawCollection(collectionName: string, limitNum: number = 2000) {
+export async function getRawCollection(collectionName: string, limitNum: number = 10000) {
     const snap = await getDocs(query(collection(adminDb, collectionName), limit(Math.min(limitNum, 10000))));
     return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
 }
@@ -629,7 +629,7 @@ export async function cleanupOldRecords() {
 
 export async function downloadBackupAction() {
     const [appointments, labApps, xrApps, usApps, vacApps, patients, clinics] = await Promise.all([
-        getAppointmentsData(), getLabAppointmentsData(), getXRayAppointmentsData(), getUltrasoundAppointmentsData(), getVaccineAppointmentsData(), getRawCollection('patients', 5000), getClinicsData()
+        getAppointmentsData(), getLabAppointmentsData(), getXRayAppointmentsData(), getUltrasoundAppointmentsData(), getVaccineAppointmentsData(), getRawCollection('patients', 10000), getClinicsData()
     ]);
     return { success: true, data: { appointments, labAppointments: labApps, xRayAppointments: xrApps, ultrasoundAppointments: usApps, vaccineAppointments: vacApps, patients, clinics } };
 }
