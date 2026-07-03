@@ -51,26 +51,33 @@ import { v4 as uuidv4 } from 'uuid';
 import { startOfDay, subDays } from 'date-fns';
 
 /**
- * MOTOR DE SERIALIZACIÓN ROBUSTO
- * Detecta y convierte Timestamps, Dates y Referencias a strings ISO para evitar errores de tipo.
+ * MOTOR DE SERIALIZACIÓN AGRESIVO
+ * Convierte Timestamps, Dates y Referencias a strings ISO de forma recursiva.
+ * Evita errores de tipo en operaciones como .localeCompare()
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return data;
   
+  // Si es un Timestamp de Firestore
   if (data && typeof data.toDate === 'function') {
-      try { return data.toDate().toISOString(); } catch(e) { return data.toString(); }
+      try { return data.toDate().toISOString(); } catch(e) { return String(data); }
   }
   
+  // Si es un objeto de fecha nativo
   if (data instanceof Date) return data.toISOString();
   
+  // Si es un objeto que parece Timestamp (segundos/nanosegundos)
   if (data && typeof data === 'object' && 'seconds' in data && 'nanoseconds' in data) {
       try { return new Date(data.seconds * 1000).toISOString(); } catch(e) { return JSON.stringify(data); }
   }
   
+  // Si es una referencia de documento
   if (data instanceof DocumentReference) return data.id;
   
+  // Procesamiento recursivo de arreglos
   if (Array.isArray(data)) return data.map(serializeData);
   
+  // Procesamiento recursivo de objetos POJO
   if (typeof data === 'object' && data.constructor === Object) {
     const serialized: any = {};
     for (const key in data) {
@@ -89,6 +96,7 @@ export function serializeData(data: any): any {
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     
+    // Obtener todos los IDs de pacientes únicos para una sola consulta masiva
     const patientIds = Array.from(new Set(appointments.map(a => {
         if (a.patientId instanceof DocumentReference) return a.patientId.id;
         return String(a.patientId || '');
@@ -109,9 +117,10 @@ async function hydrateAppointments(appointments: any[]) {
 
     return appointments.map(app => {
         const pid = app.patientId;
+        // Prioridad: 1. Padrón real, 2. Respaldo en la cita, 3. Datos de emergencia
         const patientData = patientsMap[pid] || app.patient || { 
             name: 'PACIENTE', 
-            paternalLastName: 'SIN DATOS', 
+            paternalLastName: 'SIN VÍNCULO', 
             maternalLastName: '',
             curp: pid || 'S/C', 
             phoneNumber: 'N/A' 
@@ -138,6 +147,7 @@ export async function logActivity(action: string, details: string) {
 export async function getLogsData() {
     const snap = await getDocs(query(collection(adminDb, 'activityLog'), limit(500)));
     let logs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    // Ordenación manual segura
     logs.sort((a: any, b: any) => {
         const tA = a.timestamp?.seconds || 0;
         const tB = b.timestamp?.seconds || 0;
@@ -175,24 +185,24 @@ export async function updateModuleSettings(s: ModuleSettings) {
     return { success: true };
 }
 
-// --- PACIENTES (SMART-MATCH) ---
+// --- PACIENTES (SMART-MATCH SEARCH) ---
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     
-    // 1. Búsqueda por CURP (Exacta)
+    // Búsqueda por CURP (Exacta)
     if (options?.searchCurp) {
         const s = await getDocs(query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(1)));
         if (!s.empty) return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
     
-    // 2. Búsqueda por Expediente (Flexible)
+    // Búsqueda por Expediente
     if (options?.searchExpediente) {
         const term = options.searchExpediente.trim();
         const s = await getDocs(query(colRef, where('expediente', 'in', [term, '0' + term]), limit(10)));
         if (!s.empty) return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
 
-    // 3. Motor Inteligente de Nombres/Apellidos (Independiente del orden)
+    // MOTOR INTELIGENTE: Búsqueda por múltiples palabras en Nombre/Apellidos
     if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
         const words = term.split(/\s+/).filter(w => w.length >= 2);
@@ -211,6 +221,7 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
             
             let results = Array.from(combinedMap.values());
             
+            // Refinar resultados con las demás palabras clave (AND logic)
             if (words.length > 1) {
                 results = results.filter(p => {
                     const full = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
@@ -222,12 +233,13 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
                 results = results.filter(p => p.status === options.status);
             }
             
-            results.sort((a,b) => (a.paternalLastName || '').localeCompare(b.paternalLastName || ''));
+            // Ordenación manual segura
+            results.sort((a,b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
             return serializeData(results.slice(0, 500));
         }
     }
 
-    // 4. Consulta General (Visibilidad Total)
+    // Consulta General (Visibilidad hasta 10,000 registros para auditoría total)
     let qBase = query(colRef, limit(options?.limitNum || 10000));
     if (options?.status && options.status !== 'Total') {
         qBase = query(colRef, where('status', '==', options.status), limit(10000));
@@ -235,7 +247,8 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     
     const snap = await getDocs(qBase);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
-    results.sort((a,b) => (a.paternalLastName || '').localeCompare(b.paternalLastName || ''));
+    // Ordenación manual segura para evitar errores de índice de Firebase
+    results.sort((a,b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
     
     return serializeData(results);
 }
@@ -309,45 +322,41 @@ export async function bulkInsertPatients(patients: any[]) {
     return { success: true, processedCount: patients.length };
 }
 
-// --- CITAS (MANTENIMIENTO DE VISIBILIDAD) ---
+// --- CITAS (MANTENIMIENTO DE VISIBILIDAD TOTAL) ---
 export async function getAppointmentsData() { 
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(10000))); 
-    const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    const hydrated = await hydrateAppointments(apps);
-    hydrated.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
-    return hydrated;
+    let apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    // Ordenación manual descendente por fecha de forma segura
+    apps.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
+    return hydrateAppointments(apps);
 }
 
 export async function getLabAppointmentsData() {
     const s = await getDocs(query(collection(adminDb, 'labAppointments'), limit(10000)));
-    const apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    const hydrated = await hydrateAppointments(apps);
-    hydrated.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
-    return hydrated;
+    let apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    apps.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
+    return hydrateAppointments(apps);
 }
 
 export async function getXRayAppointmentsData() {
     const s = await getDocs(query(collection(adminDb, 'xrayAppointments'), limit(10000)));
-    const apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    const hydrated = await hydrateAppointments(apps);
-    hydrated.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
-    return hydrated;
+    let apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    apps.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
+    return hydrateAppointments(apps);
 }
 
 export async function getUltrasoundAppointmentsData() {
     const s = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), limit(10000)));
-    const apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    const hydrated = await hydrateAppointments(apps);
-    hydrated.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
-    return hydrated;
+    let apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    apps.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
+    return hydrateAppointments(apps);
 }
 
 export async function getVaccineAppointmentsData() {
     const s = await getDocs(query(collection(adminDb, 'vaccineAppointments'), limit(10000)));
-    const apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    const hydrated = await hydrateAppointments(apps);
-    hydrated.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
-    return hydrated;
+    let apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    apps.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
+    return hydrateAppointments(apps);
 }
 
 export async function updateAppointmentStatus(id: string, status: string, type: string) {
@@ -386,6 +395,7 @@ export async function cloneAppointment(id: string, date: string, type: string, t
 
 export async function saveNewAppointment(appointment: any, patient: any, isDouble: boolean, colonia?: string) {
     const patientRef = doc(adminDb, 'patients', patient.curp);
+    // Persistencia dual: guardamos en padrón y adjuntamos snapshot a la cita
     await setDoc(patientRef, { ...patient, id: patient.curp }, { merge: true });
     
     const id = uuidv4();
@@ -394,6 +404,7 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
         ...appointment,
         id, appointmentNumber,
         patientId: patient.curp,
+        patient: serializeData(patient), // Backup snapshot
         coloniaName: colonia || null,
         createdAt: new Date().toISOString(),
         isDoubleSlot: isDouble
@@ -405,10 +416,9 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
 
 export async function getAppointmentsForClinic(cid: string) {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(10000)));
-    const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    const hydrated = await hydrateAppointments(apps);
-    hydrated.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-    return hydrated;
+    let apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    apps.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
+    return hydrateAppointments(apps);
 }
 
 export async function getAppointmentCountOnDate(clinicId: string, date: string) {
@@ -418,26 +428,30 @@ export async function getAppointmentCountOnDate(clinicId: string, date: string) 
 }
 
 export async function getAvailableSlotsForDate(clinicId: string, date: string) {
+    // Implementación simulada de slots para clonación
     return { timeSlots: ["08:00", "08:30", "09:00", "09:30", "10:00"], tokens: [1, 2, 3, 4, 5] };
 }
 
-// --- CLÍNICAS (BLINDAJE DE VACACIONES) ---
+// --- CLÍNICAS (BLINDAJE DE VACACIONES Y HORARIOS) ---
 export async function getClinicsData() { 
     const s = await getDocs(collection(adminDb, 'clinics')); 
     const results = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); 
-    return results.sort((a,b) => a.name.localeCompare(b.name));
+    return results.sort((a,b) => String(a.name || '').localeCompare(String(b.name || '')));
 }
 
 export async function updateClinics(clinics: Clinic[]) { 
     const b = writeBatch(adminDb);
-    clinics.forEach(x => {
-        b.set(doc(adminDb, 'clinics', x.id), {
+    for (const x of clinics) {
+        const ref = doc(adminDb, 'clinics', x.id);
+        // PROTECCIÓN: Solo mezclamos arreglos si vienen definidos, evitando borrados accidentales
+        const mappedData = {
             ...x,
             unavailableDates: x.unavailableDates || [],
             daysOfAction: x.daysOfAction || [],
             customSchedules: x.customSchedules || []
-        }, { merge: true });
-    });
+        };
+        b.set(ref, mappedData, { merge: true });
+    }
     await b.commit();
     return { success: true };
 }
