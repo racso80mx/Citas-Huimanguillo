@@ -25,7 +25,8 @@ import type {
     Clinic,
     Colonia,
     ServiceType,
-    Specialty
+    Specialty,
+    Prescription
 } from './definitions';
 
 // --- LOGS ---
@@ -145,6 +146,7 @@ export async function deleteMedicalConsultation(id: string) { return data.delete
 export async function getConsultationByAppointmentId(aid: string) { return data.getConsultationByAppointmentId(aid); }
 export async function getPrescriptionsByPatientId(pid: string) { return data.getPrescriptionsByPatientId(pid); }
 export async function createPrescription(p: any) { return data.createPrescription(p); }
+export async function updatePrescription(id: string, p: any) { return data.updatePrescription(id, p); }
 export async function deletePrescription(id: string) { return data.deletePrescription(id); }
 export async function dispensePrescription(id: string, i: any[]) { return data.dispensePrescription(id, i); }
 export async function getPendingPrescriptions(f: any) { return data.getPendingPrescriptions(f); }
@@ -191,6 +193,8 @@ export async function getXRayStudies() { return data.getXRayStudies(); }
 export async function updateXRayStudies(s: XRayStudy[]) { return data.updateXRayStudies(s); }
 export async function getUltrasoundStudies() { return data.getUltrasoundStudies(); }
 export async function updateUltrasoundStudies(s: any[]) { return data.updateUltrasoundStudies(s); }
+export async function getVaccines() { return data.getVaccines(); }
+export async function updateVaccines(s: any[]) { return data.updateVaccines(s); }
 
 export async function getMedications() { return data.getMedications(); }
 export async function getSupplies() { return data.getSupplies(); }
@@ -202,3 +206,13 @@ export async function searchCie10(t: string) { return data.searchCie10(t); }
 export async function getBIData() { return data.getBIData(); }
 export async function getAttendedPatientsForClinic(c: string) { return data.getAttendedPatientsForClinic(c); }
 export async function cleanupOldRecords() { return data.cleanupOldRecords(); }
+
+// --- MANTENIMIENTO ---
+export async function normalizeExpedientesAction() { return data.normalizeExpedientesAction(); }
+export async function scanDuplicates(c: string) { return data.scanDuplicates(c); }
+export async function applyStatusUpdateChunk(e: string[], s: string) { return data.applyStatusUpdateChunk(e, s); }
+export async function getPatientPrescriptionsCountTodayAction(p: string) { return data.getPatientPrescriptionsCountTodayAction(p); }
+export async function bulkInsertCie10Glossary(d: any[]) { return data.bulkInsertCie10Glossary(d); }
+export async function bulkInsertCie10Catalog(d: any[]) { return data.bulkInsertCie10Catalog(d); }
+export async function deleteAllCie10Glossary() { return data.deleteAllCie10Glossary(); }
+export async function deleteAllCie10Catalog() { return data.deleteAllCie10Catalog(); }
