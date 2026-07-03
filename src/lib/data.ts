@@ -129,26 +129,26 @@ export async function getLogsData() {
     return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
 }
 
-// --- MOTOR DE HIDRATACIÓN DE PACIENTES (ELIMINA LOS N/A) ---
+// --- MOTOR DE HIDRATACIÓN UNIVERSAL (ELIMINA LOS N/A) ---
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     
-    // Identificar CURPs que necesitan datos (priorizamos IDs de documento)
-    const patientIdsToFetch = Array.from(new Set(appointments.map(a => a.patientId).filter(id => !!id)));
+    // Identificar todos los IDs de pacientes únicos (pueden ser CURPs)
+    const patientIds = Array.from(new Set(appointments.map(a => a.patientId).filter(id => !!id)));
     const patientsMap: Record<string, any> = {};
 
-    // Consultamos por lotes de 30
-    for (let i = 0; i < patientIdsToFetch.length; i += 30) {
-        const chunk = patientIdsToFetch.slice(i, i + 30);
+    // Consultamos por lotes de 30 (límite de Firestore para el operador 'in')
+    for (let i = 0; i < patientIds.length; i += 30) {
+        const chunk = patientIds.slice(i, i + 30);
         
-        // Intento 1: Buscar por ID de documento
+        // 1. Buscar por ID de documento (Rápido)
         const qById = query(collection(adminDb, 'patients'), where(documentId(), 'in', chunk));
         const snapById = await getDocs(qById);
         snapById.forEach(d => {
             patientsMap[d.id] = serializeData({ ...d.data(), id: d.id });
         });
 
-        // Intento 2: Buscar por campo 'curp' para redundancia
+        // 2. Buscar por campo CURP (Redundancia por si el ID no es el CURP)
         const qByCurp = query(collection(adminDb, 'patients'), where('curp', 'in', chunk));
         const snapByCurp = await getDocs(qByCurp);
         snapByCurp.forEach(d => {
@@ -157,18 +157,22 @@ async function hydrateAppointments(appointments: any[]) {
     }
 
     return appointments.map(app => {
-        const patientData = patientsMap[app.patientId];
+        // Intentar encontrar los datos del paciente en el mapa
+        const pData = patientsMap[app.patientId] || patientsMap[app.patient?.curp];
+        
+        // Si no hay datos hidratados, pero el objeto 'patient' ya trae info básica, la usamos.
+        // Si no hay nada, ponemos valores por defecto para evitar N/A feos.
+        const finalPatient = pData || (app.patient && app.patient.name ? app.patient : {
+            name: 'PACIENTE',
+            paternalLastName: 'REGISTRADO',
+            maternalLastName: '',
+            curp: app.patientId || 'S/C',
+            phoneNumber: 'S/T'
+        });
+
         return {
             ...app,
-            patient: (app.patient && app.patient.name && app.patient.name !== 'N/A') 
-                ? app.patient 
-                : (patientData || { 
-                    name: 'PACIENTE', 
-                    paternalLastName: 'NO ENCONTRADO', 
-                    maternalLastName: '', 
-                    curp: app.patientId || 'S/C',
-                    phoneNumber: 'S/T'
-                })
+            patient: finalPatient
         };
     });
 }
@@ -184,7 +188,7 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     } else if (options?.searchName) {
         q = query(colRef, where('name', '>=', options.searchName.toUpperCase()), where('name', '<=', options.searchName.toUpperCase() + '\uf8ff'), limit(500));
     } else {
-        q = query(colRef, limit(5000));
+        q = query(colRef, limit(10000));
     }
     const s = await getDocs(q);
     return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Patient[];
@@ -264,7 +268,7 @@ export async function bulkInsertPatients(patients: any[]) {
     return { success: true, processedCount: count };
 }
 
-// --- GESTIÓN DE CITAS (CON HIDRATACIÓN UNIVERSAL) ---
+// --- GESTIÓN DE CITAS (VISIBILIDAD TOTAL) ---
 export async function getAppointmentsData() { 
     const q = query(collection(adminDb, 'appointments'), orderBy('date', 'desc'), limit(10000));
     const snap = await getDocs(q); 
