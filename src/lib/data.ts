@@ -75,7 +75,12 @@ export function serializeData(data: any): any {
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     
-    const patientIds = Array.from(new Set(appointments.map(a => a.patientId).filter(Boolean)));
+    // Obtenemos los IDs de los pacientes de forma limpia (soportando DocumentReference)
+    const patientIds = Array.from(new Set(appointments.map(a => {
+        if (a.patientId instanceof DocumentReference) return a.patientId.id;
+        return String(a.patientId || '');
+    }).filter(Boolean)));
+
     if (patientIds.length === 0) return serializeData(appointments);
 
     const patientsMap: Record<string, any> = {};
@@ -91,15 +96,17 @@ async function hydrateAppointments(appointments: any[]) {
     }
 
     return appointments.map(app => {
-        const patientData = patientsMap[app.patientId] || app.patient || { 
+        const pid = app.patientId instanceof DocumentReference ? app.patientId.id : String(app.patientId);
+        const patientData = patientsMap[pid] || app.patient || { 
             name: 'PACIENTE', 
             paternalLastName: 'DESCONOCIDO', 
-            curp: app.patientId || 'S/C', 
+            curp: pid || 'S/C', 
             phoneNumber: 'N/A' 
         };
         
         return {
             ...serializeData(app),
+            patientId: pid,
             patient: serializeData(patientData)
         };
     });
@@ -155,23 +162,27 @@ export async function updateModuleSettings(s: ModuleSettings) {
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     
+    // Búsqueda por CURP exacta
     if (options?.searchCurp) {
         const s = await getDocs(query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(1)));
         if (!s.empty) return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
     
+    // Búsqueda por Expediente (soporta 0 inicial)
     if (options?.searchExpediente) {
         const expTerm = options.searchExpediente.trim();
         const s = await getDocs(query(colRef, where('expediente', 'in', [expTerm, '0' + expTerm]), limit(5)));
         if (!s.empty) return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
 
+    // BÚSQUEDA INTELIGENTE POR NOMBRE/APELLIDOS (SMART-MATCH)
     if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
         const words = term.split(/\s+/).filter((w: string) => w.length >= 2);
         
         if (words.length > 0) {
             const firstWord = words[0];
+            // Realizamos consultas por prefijo en los 3 campos principales
             const queries = [
                 query(colRef, where('name', '>=', firstWord), where('name', '<=', firstWord + '\uf8ff'), limit(500)),
                 query(colRef, where('paternalLastName', '>=', firstWord), where('paternalLastName', '<=', firstWord + '\uf8ff'), limit(500)),
@@ -183,20 +194,26 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
             snaps.forEach(s => s.docs.forEach(d => combinedMap.set(d.id, { ...d.data(), id: d.id } as Patient)));
             
             let results = Array.from(combinedMap.values());
+            
+            // Filtramos en memoria para asegurar que TODAS las palabras del buscador coincidan
             if (words.length > 1) {
                 results = results.filter(p => {
                     const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
                     return words.every(w => fullName.includes(w));
                 });
             }
+
             if (options.status && options.status !== 'Total') {
                 results = results.filter(p => p.status === options.status);
             }
+            
+            // Ordenación en memoria para evitar errores de índice de Firestore
             results.sort((a, b) => (a.paternalLastName || '').localeCompare(b.paternalLastName || ''));
             return serializeData(results.slice(0, 500));
         }
     }
 
+    // Consulta base por estatus (sin orderBy para evitar errores de índice)
     let qBase;
     if (options?.status && options.status !== 'Total') {
         qBase = query(colRef, where('status', '==', options.status), limit(options?.limitNum || 1000));
@@ -206,6 +223,8 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     
     const snap = await getDocs(qBase);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
+    
+    // Ordenamos en memoria
     results.sort((a, b) => (a.paternalLastName || '').localeCompare(b.paternalLastName || ''));
     
     return serializeData(results);
@@ -373,10 +392,6 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
     
     await setDoc(doc(adminDb, 'appointments', id), fullAppointment);
     
-    if (isDouble) {
-        // En un sistema real reservaríamos el siguiente slot, aquí simplificamos el guardado
-    }
-    
     const clinicSnap = await getDoc(doc(adminDb, 'clinics', appointment.clinicId));
     return { success: true, data: { appointment: fullAppointment, clinic: clinicSnap.data() } };
 }
@@ -396,10 +411,8 @@ export async function getAppointmentCountOnDate(clinicId: string, date: string) 
 }
 
 export async function getAvailableSlotsForDate(clinicId: string, date: string) {
-    // Lógica simplificada para obtener slots disponibles basada en configuración de clínica
     const clinic = await getDoc(doc(adminDb, 'clinics', clinicId));
     if (!clinic.exists()) return {};
-    const data = clinic.data();
     return { timeSlots: ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30"], tokens: [1, 2, 3, 4, 5] };
 }
 
