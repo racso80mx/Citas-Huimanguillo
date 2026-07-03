@@ -193,6 +193,10 @@ export async function getAppointmentCountOnDate(c: string, d: string) { return d
 export async function getAttendedPatientsForClinic(c: string) { return data.getAttendedPatientsForClinic(c); }
 export async function getPatientPrescriptionsCountTodayAction(p: string) { return data.getPatientPrescriptionsCountTodayAction(p); }
 
+export async function getRawCollection(c: string) { return data.getRawCollection(c); }
+export async function getAnnouncementsData() { return data.getAnnouncementsData(); }
+export async function getAppointmentsData() { return data.getAppointmentsData(); }
+
 export async function bulkInsertCie10Glossary(d: any[]) { return data.bulkInsertCie10Glossary(d); }
 export async function bulkInsertCie10Catalog(d: any[]) { return data.bulkInsertCie10Catalog(d); }
 export async function deleteAllCie10Glossary() { return data.deleteAllCie10Glossary(); }
