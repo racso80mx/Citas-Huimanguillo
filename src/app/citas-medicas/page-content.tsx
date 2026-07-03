@@ -93,11 +93,12 @@ export default function PageContent({
 
   const calculateForClinic = useCallback((clinic: Clinic, allAppointments: any[], holidaySet: Set<string>, freshSpecialActionDays: SpecialActionDay[]): DailyAvailability[] => {
       const startDate = startOfToday();
-      const endDate = addDays(startDate, 180); // Ampliado a 6 meses para cubrir agosto y fechas posteriores
+      const endDate = addDays(startDate, 180); 
       
+      // Robustez en el filtrado: Citas deben coincidir por ID o por nombre (insensible a mayúsculas)
       const clinicAppointments = allAppointments.filter(app => 
           app.clinicId === clinic.id || 
-          (app.clinicName && app.clinicName.toUpperCase() === clinic.name.toUpperCase())
+          (app.clinicName && app.clinicName.toUpperCase().trim() === clinic.name.toUpperCase().trim())
       );
       
       const dayMap = new Map<string, any[]>();
@@ -162,6 +163,7 @@ export default function PageContent({
   const fetchAllAvailability = React.useCallback(async (targetClinicId: string) => {
       setIsLoadingAvailability(true);
       
+      // Consultamos al servidor un set masivo de datos para no tener puntos ciegos
       const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
         getAppointments(), getHolidays(), getSpecialActionDays()
       ]);
@@ -175,6 +177,7 @@ export default function PageContent({
           setAvailabilityCache(prev => ({ ...prev, [targetClinicId]: targetAvail }));
           setIsLoadingAvailability(false); 
           
+          // Calcular el resto en background
           setTimeout(() => {
               const otherClinics = clinics.filter(c => c.id !== targetClinicId);
               const newCache: Record<string, DailyAvailability[]> = { [targetClinicId]: targetAvail };

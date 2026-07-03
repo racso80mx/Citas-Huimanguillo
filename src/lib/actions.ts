@@ -194,3 +194,10 @@ export async function getRawCollection(c: string) { return data.getRawCollection
 // --- MANTENIMIENTO ---
 export async function cleanupOldRecords() { return data.cleanupOldRecords(); }
 export async function downloadBackupAction() { return data.downloadBackupAction(); }
+export async function normalizeExpedientesAction() { return data.normalizeExpedientesAction(); }
+export async function applyStatusUpdateChunk(e: string[], s: any) { return data.applyStatusUpdateChunk(e, s); }
+export async function scanDuplicates(c: any) { return data.scanDuplicates(c); }
+export async function bulkInsertCie10Glossary(j: any[]) { return data.bulkInsertCie10Glossary(j); }
+export async function bulkInsertCie10Catalog(j: any[]) { return data.bulkInsertCie10Catalog(j); }
+export async function deleteAllCie10Glossary() { return data.deleteAllCie10Glossary(); }
+export async function deleteAllCie10Catalog() { return data.deleteAllCie10Catalog(); }
