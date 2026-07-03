@@ -90,6 +90,7 @@ function fuzzyMapInsumo(item: any) {
         if (isDate(cadVal)) {
             formattedCaducidad = formatDateFns(cadVal as Date, 'dd/MM/yyyy');
         } else if (typeof cadVal === 'number') {
+            // Manejo de fechas seriales de Excel
             const excelEpoch = new Date(1899, 11, 30);
             const d = new Date(excelEpoch.getTime() + cadVal * 86400000);
             if (isValid(d)) formattedCaducidad = formatDateFns(d, 'dd/MM/yyyy');
@@ -127,6 +128,7 @@ function fuzzyMapInsumo(item: any) {
 export async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     
+    // Identificar IDs de pacientes que no tienen el objeto 'patient' cargado
     const patientIdsToFetch = Array.from(new Set(
         appointments.filter(a => !a.patient && a.patientId).map(a => a.patientId)
     ));
@@ -231,6 +233,11 @@ export async function updatePatient(id: string, p: Partial<Patient>) {
     return { success: true }; 
 }
 
+export async function updatePatientStatus(id: string, s: string) { 
+    await updateDoc(doc(adminDb, 'patients', id), { status: s });
+    return { success: true };
+}
+
 export async function deletePatient(id: string) { 
     await deleteDoc(doc(adminDb, 'patients', id)); 
     return { success: true }; 
@@ -241,6 +248,13 @@ export async function deletePatients(ids: string[]) {
     ids.forEach(id => b.delete(doc(adminDb, 'patients', id))); 
     await b.commit(); 
     return { success: true }; 
+}
+
+export async function getPatientByCURP(curp: string) {
+    const q = query(collection(adminDb, 'patients'), where('curp', '==', curp.toUpperCase().trim()), limit(1));
+    const snap = await getDocs(q);
+    if (snap.empty) return { success: false };
+    return { success: true, data: serializeData({ ...snap.docs[0].data(), id: snap.docs[0].id }) as Patient };
 }
 
 export async function bulkInsertPatients(patients: any[]) {
@@ -417,6 +431,7 @@ export async function bulkInsertMedications(json: any[]) {
     let count = 0;
     json.forEach(item => {
         const med = fuzzyMapInsumo(item);
+        // Limpieza de caracteres prohibidos en IDs
         const sanitizedId = (med.claveCuadroBasico + '_' + med.lote).replace(/\//g, '-').replace(/\s/g, '_');
         b.set(doc(adminDb, 'medications', sanitizedId), { ...med, id: sanitizedId, updatedAt: new Date().toISOString() }, { merge: true });
         count++;
@@ -481,6 +496,7 @@ export async function getLabStudies() { const snap = await getDocs(query(collect
 export async function updateLabStudies(s: LabStudy[]) { const b = writeBatch(adminDb); const snap = await getDocs(collection(adminDb, 'labStudies')); snap.docs.forEach(d => b.delete(d.ref)); s.forEach(x => b.set(doc(adminDb, 'labStudies', x.id), x)); await b.commit(); return { success: true }; }
 export async function updateXRayStudies(s: XRayStudy[]) { const b = writeBatch(adminDb); const snap = await getDocs(collection(adminDb, 'xrayStudies')); snap.docs.forEach(d => b.delete(d.ref)); s.forEach(x => b.set(doc(adminDb, 'xrayStudies', x.id), x)); await b.commit(); return { success: true }; }
 export async function updateUltrasoundStudies(s: UltrasoundStudy[]) { const b = writeBatch(adminDb); const snap = await getDocs(collection(adminDb, 'ultrasoundStudies')); snap.docs.forEach(d => b.delete(d.ref)); s.forEach(x => b.set(doc(adminDb, 'ultrasoundStudies', x.id), x)); await b.commit(); return { success: true }; }
+export async function updateVaccines(v: Vaccine[]) { const b = writeBatch(adminDb); const snap = await getDocs(collection(adminDb, 'vaccines')); snap.docs.forEach(d => b.delete(d.ref)); v.forEach(x => b.set(doc(adminDb, 'vaccines', x.id), x)); await b.commit(); return { success: true }; }
 export async function getAnnouncementsData() { const d = await getDoc(doc(adminDb, 'settings', 'announcements')); return d.exists() ? d.data().messages || [] : []; }
 export async function updateAnnouncements(m: string[]) { await setDoc(doc(adminDb, 'settings', 'announcements'), { messages: m }); return { success: true }; }
 export async function getHolidaysData() { const snap = await getDocs(query(collection(adminDb, 'holidays'), limit(200))); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
@@ -498,7 +514,7 @@ export async function searchCie10(term: string) { const q = query(collection(adm
 export async function getAvailableSlotsForDate(cid: string, d: string) { return { timeSlots: [], tokens: [] }; }
 export async function getAppointmentCountOnDate(cid: string, d: string) { const dOnly = d.split('T')[0]; const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), where('date', '>=', dOnly), where('date', '<=', dOnly + 'T23:59:59')); const s = await getCountFromServer(q); return s.data().count; }
 export async function getAttendedPatientsForClinic(cid: string) { const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), where('status', '==', 'Atendido'), limit(200)); const s = await getDocs(q); return s.docs.map(d => ({ ...serializeData(d.data().patient), id: d.data().patientId })); }
-export async function getPatientPrescriptionsCountTodayAction(pid: string) { const s = startOfDay(new Date()).toISOString(); const q = query(collection(adminDb, 'prescriptions'), where('patientId', '==', pid), where('date', '>=', s)); const snap = await getCountFromServer(q); return snap.data().count; }
+export async function getPatientPrescriptionsCountTodayAction(pId: string) { const s = startOfDay(new Date()).toISOString(); const q = query(collection(adminDb, 'prescriptions'), where('patientId', '==', pId), where('date', '>=', s)); const snap = await getCountFromServer(q); return snap.data().count; }
 
 export async function cleanupOldRecords() { const t = subDays(new Date(), 30).toISOString(); const q = query(collection(adminDb, 'activityLog'), where('timestamp', '<', t), limit(500)); const s = await getDocs(q); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true, deletedCount: s.size }; }
 export async function downloadBackupAction() { const [p, c, a] = await Promise.all([getDocs(query(collection(adminDb, 'patients'), limit(2000))), getDocs(query(collection(adminDb, 'clinics'), limit(100))), getDocs(query(collection(adminDb, 'appointments'), limit(1000)))]); return { success: true, data: { patients: p.docs.map(d => serializeData(d.data())), clinics: c.docs.map(d => serializeData(d.data())), appointments: a.docs.map(d => serializeData(d.data())), labAppointments: [], xrayAppointments: [], ultrasoundAppointments: [], vaccineAppointments: [] } }; }
@@ -530,4 +546,16 @@ export async function getBIData() {
         clinics: c, 
         colonias: cl.docs.map(d => serializeData(d.data())) 
     };
+}
+
+export async function verifyModulePassword(module: string, pass: string) {
+    const storeId = module === 'superadmin' ? 'superadmin' : module === 'medical' ? 'medical' : module === 'archive' ? 'archive' : module === 'archiveInquiry' ? 'archiveInquiry' : module === 'pharmacy' ? 'pharmacy' : module === 'warehouse' ? 'warehouse' : module === 'bi' ? 'bi' : module === 'lab' ? 'lab' : module === 'xray' ? 'xray' : module === 'ultrasound' ? 'ultrasound' : 'vaccine';
+    const current = await getPasswordFromStore(storeId, '');
+    return { success: current === pass, message: current !== pass ? 'Contraseña incorrecta' : undefined };
+}
+
+export async function verifyClinicPassword(id: string, pass: string) {
+    const d = await getDoc(doc(adminDb, 'clinics', id));
+    if (!d.exists()) return { success: false, message: 'Clínica no encontrada' };
+    return { success: d.data().password === pass };
 }

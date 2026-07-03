@@ -51,7 +51,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { differenceInMonths, isValid, parse } from 'date-fns';
+import { differenceInMonths, isValid, parse, isDate } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PrescriptionDispenser } from './prescription-dispenser';
@@ -93,6 +93,8 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
     let expiryDate: Date | null = null;
     if (dateStr.includes('/')) {
         expiryDate = parse(dateStr, 'dd/MM/yyyy', new Date());
+    } else if (dateStr.includes('-')) {
+        expiryDate = new Date(dateStr);
     } else {
         expiryDate = new Date(dateStr);
     }
@@ -242,7 +244,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                 <Card className="md:col-span-1 shadow-md border-primary/10">
                     <CardHeader>
                         <CardTitle className="text-lg">Carga de Medicamentos</CardTitle>
-                        <CardDescription>El motor busca específicamente la columna "FECHA CADUCIDAD".</CardDescription>
+                        <CardDescription>Búsqueda estricta de columna "FECHA CADUCIDAD".</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
@@ -267,7 +269,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                             <AlertDialogContent>
                             <AlertDialogHeader>
                                 <AlertDialogTitle>¿Está seguro?</AlertDialogTitle>
-                                <AlertDialogDescription>Se eliminarán permanentemente los {medications.length} registros actuales de Farmacia.</AlertDialogDescription>
+                                <AlertDialogDescription>Se eliminarán permanentemente los registros actuales de Farmacia.</AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
@@ -281,7 +283,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                 <Card className="md:col-span-2 shadow-md border-primary/10">
                 <CardHeader className="pb-3">
                     <CardTitle className="text-lg flex items-center gap-2 uppercase font-black"><CalendarClock className="h-5 w-5 text-primary" /> Semáforo de Caducidades</CardTitle>
-                    <CardDescription>Haz clic en las tarjetas para filtrar la tabla de abajo.</CardDescription>
+                    <CardDescription>Filtros rápidos por estado de vencimiento.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
