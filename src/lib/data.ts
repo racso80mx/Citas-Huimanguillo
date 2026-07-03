@@ -56,7 +56,7 @@ import type {
 } from './definitions';
 import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
-import { format as formatDateFns, startOfMonth, startOfDay, endOfDay, subDays, isValid, parse, isDate } from 'date-fns';
+import { format as formatDateFns, startOfMonth, startOfDay, endOfDay, subDays, isValid, parse, isDate, endOfMonth } from 'date-fns';
 
 // --- SERIALIZACIÓN ---
 export function serializeData(data: any): any {
@@ -131,17 +131,23 @@ export async function getLogsData() {
 
 // --- MOTOR DE IMPORTACIÓN EXCEL ---
 function fuzzyMapInsumo(item: any) {
-    const findValue = (header: string) => {
-        if (item[header] !== undefined) return item[header];
-        const normalizedHeader = header.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-        for (const key of Object.keys(item)) {
+    const findHeader = (target: string) => {
+        const normalizedTarget = target.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        return Object.keys(item).find(key => {
             const normalizedKey = key.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-            if (normalizedKey === normalizedHeader) return item[key];
+            return normalizedKey === normalizedTarget;
+        });
+    };
+
+    const findValue = (headerNames: string[]) => {
+        for (const name of headerNames) {
+            const key = findHeader(name);
+            if (key) return item[key];
         }
         return undefined;
     };
 
-    const cadVal = findValue('FECHA CADUCIDAD');
+    const cadVal = findValue(['FECHA CADUCIDAD', 'CADUCIDAD', 'VENCIMIENTO']);
     let formattedCaducidad = 'SIN FECHA';
     
     if (cadVal !== undefined && cadVal !== null) {
@@ -161,21 +167,21 @@ function fuzzyMapInsumo(item: any) {
     }
 
     return {
-        claveCuadroBasico: String(findValue('CLAVE DE CUADRO BASICO') || findValue('CLAVE') || 'S/C').trim(),
-        descripcion: String(findValue('DESCRIPCIÓN') || findValue('DESCRIPCION') || 'SIN DESCRIPCIÓN').toUpperCase().trim(),
-        grupo: String(findValue('GRUPO') || '').toUpperCase().trim(),
-        existencia: Number(findValue('EXISTENCIA') || 0),
-        precioUnitario: Number(findValue('PRECIO UNITARIO') || 0),
-        totalImporte: Number(findValue('TOTAL IMPORTE') || 0),
-        lote: String(findValue('LOTE') || 'N/A').toUpperCase().trim(),
-        proveedor: String(findValue('PROVEEDOR') || '').toUpperCase().trim(),
-        rfcProveedor: String(findValue('RFC PROVEEDOR') || '').toUpperCase().trim(),
-        almacen: String(findValue('ALMACEN') || '').toUpperCase().trim(),
-        fuenteFinanciamiento: String(findValue('FUENTE FINANCIAMIENTO') || '').toUpperCase().trim(),
+        claveCuadroBasico: String(findValue(['CLAVE DE CUADRO BASICO', 'CLAVE']) || 'S/C').trim(),
+        descripcion: String(findValue(['DESCRIPCIÓN', 'DESCRIPCION']) || 'SIN DESCRIPCIÓN').toUpperCase().trim(),
+        grupo: String(findValue(['GRUPO']) || '').toUpperCase().trim(),
+        existencia: Number(findValue(['EXISTENCIA', 'CANTIDAD', 'STOCK']) || 0),
+        precioUnitario: Number(findValue(['PRECIO UNITARIO', 'COSTO']) || 0),
+        totalImporte: Number(findValue(['TOTAL IMPORTE', 'TOTAL']) || 0),
+        lote: String(findValue(['LOTE']) || 'N/A').toUpperCase().trim(),
+        proveedor: String(findValue(['PROVEEDOR']) || '').toUpperCase().trim(),
+        rfcProveedor: String(findValue(['RFC PROVEEDOR']) || '').toUpperCase().trim(),
+        almacen: String(findValue(['ALMACEN']) || '').toUpperCase().trim(),
+        fuenteFinanciamiento: String(findValue(['FUENTE FINANCIAMIENTO']) || '').toUpperCase().trim(),
         fechaCaducidad: formattedCaducidad,
-        ordenSuministro: String(findValue('ORDEN SUMINISTRO') || '').toUpperCase().trim(),
-        tipoInsumo: String(findValue('TIPO_INSUMO') || '').toUpperCase().trim(),
-        numeroContrato: String(findValue('NUMERO DE CONTRATO') || '').toUpperCase().trim()
+        ordenSuministro: String(findValue(['ORDEN SUMINISTRO']) || '').toUpperCase().trim(),
+        tipoInsumo: String(findValue(['TIPO_INSUMO']) || '').toUpperCase().trim(),
+        numeroContrato: String(findValue(['NUMERO DE CONTRATO']) || '').toUpperCase().trim()
     };
 }
 
@@ -183,11 +189,12 @@ function fuzzyMapInsumo(item: any) {
 export async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     
+    const appointmentsWithIncompletePatient = appointments.filter(a => !a.patient || !a.patient.name);
+    if (appointmentsWithIncompletePatient.length === 0) return appointments;
+
     const patientIdsToFetch = Array.from(new Set(
-        appointments.filter(a => !a.patient || !a.patient.name).map(a => a.patientId)
+        appointmentsWithIncompletePatient.map(a => a.patientId)
     ));
-    
-    if (patientIdsToFetch.length === 0) return appointments;
     
     const patientsMap: Record<string, any> = {};
     for (let i = 0; i < patientIdsToFetch.length; i += 30) {
@@ -202,7 +209,7 @@ export async function hydrateAppointments(appointments: any[]) {
     
     return appointments.map(app => ({
         ...app,
-        patient: (app.patient && app.patient.name) ? app.patient : (patientsMap[app.patientId] || { name: 'PACIENTE', paternalLastName: 'PENDIENTE', maternalLastName: '', curp: app.patientId })
+        patient: (app.patient && app.patient.name) ? app.patient : (patientsMap[app.patientId] || { name: 'PACIENTE', paternalLastName: 'N/A', maternalLastName: '', curp: app.patientId })
     }));
 }
 
@@ -284,7 +291,12 @@ export async function bulkInsertPatients(patients: any[]) {
             maternalLastName: String(p.Amaterno || p.maternalLastName || '').toUpperCase().trim(),
             expediente: String(p['No.Expediente'] || p.expediente || '').trim(),
             status: p.Estatus || p.status || PatientStatus.Vigente,
-            phoneNumber: String(p.Telefono || p.phoneNumber || '').trim()
+            phoneNumber: String(p.Telefono || p.phoneNumber || '').trim(),
+            age: Number(p.Edad || p.age || 0),
+            sex: String(p.Sexo || p.sex || 'Hombre'),
+            birthDate: String(p.FNacimiento || p.birthDate || ''),
+            address: String(p.Domicilio || p.address || ''),
+            coloniaName: String(p.Colonia || p.coloniaName || '')
         };
         batch.set(doc(adminDb, 'patients', curp), patientData, { merge: true });
         count++;
@@ -531,9 +543,17 @@ export async function getModuleSettings(): Promise<ModuleSettings> {
 export async function getAdminSettingsData() { const p = await getPasswordFromStore('superadmin', DEFAULT_PASSWORDS.superadmin); return { password: p }; }
 export async function updateAdminSettings(s: any) { await setDoc(doc(adminDb, 'module_passwords', 'superadmin'), { password: s.password }); return { success: true }; }
 export async function updateModuleSettings(s: ModuleSettings) { await setDoc(doc(adminDb, 'settings', 'moduleSettings'), s); return { success: true }; }
+
+export async function getArchiveSettings() { const p = await getPasswordFromStore('archive', DEFAULT_PASSWORDS.archive); return { password: p }; }
 export async function updateArchiveSettings(s: any) { await setDoc(doc(adminDb, 'module_passwords', 'archive'), { password: s.password }); return { success: true }; }
+
+export async function getPharmacySettings() { const p = await getPasswordFromStore('pharmacy', DEFAULT_PASSWORDS.pharmacy); return { password: p }; }
 export async function updatePharmacySettings(s: any) { await setDoc(doc(adminDb, 'module_passwords', 'pharmacy'), { password: s.password }); return { success: true }; }
+
+export async function getWarehouseSettings() { const p = await getPasswordFromStore('warehouse', DEFAULT_PASSWORDS.warehouse); return { password: p }; }
 export async function updateWarehouseSettings(s: any) { await setDoc(doc(adminDb, 'module_passwords', 'warehouse'), { password: s.password }); return { success: true }; }
+
+export async function getBISettings() { const p = await getPasswordFromStore('bi', DEFAULT_PASSWORDS.bi); return { password: p }; }
 export async function updateBISettings(s: any) { await setDoc(doc(adminDb, 'module_passwords', 'bi'), { password: s.password }); return { success: true }; }
 
 export async function getAnnouncementsData() { const snap = await getDoc(doc(adminDb, 'settings', 'announcements')); return snap.exists() ? snap.data().messages : []; }
@@ -570,11 +590,11 @@ export async function updateUltrasoundSettings(s: UltrasoundSettings) { await se
 export async function getVaccineSettings() { const s = await getDoc(doc(adminDb, 'settings', 'vaccineSettings')); return s.exists() ? serializeData(s.data()) as VaccineSettings : { dailySlots: 10, waitlistSlots: 0, weekendBookingEnabled: false, startTime: '08:00', endTime: '13:00' }; }
 export async function updateVaccineSettings(s: VaccineSettings) { await setDoc(doc(adminDb, 'settings', 'vaccineSettings'), s); return { success: true }; }
 
-export async function getLabStudies() { const snap = await getDocs(collection(adminDb, 'labStudies')); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
+export async function getLabStudies() { const snap = await getDocs(collection(adminDb, 'labStudies')); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as LabStudy[]; }
 export async function updateLabStudies(s: LabStudy[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'labStudies', x.id), x)); await b.commit(); return { success: true }; }
-export async function getXRayStudies() { const snap = await getDocs(collection(adminDb, 'xrayStudies')); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
+export async function getXRayStudies() { const snap = await getDocs(collection(adminDb, 'xrayStudies')); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as XRayStudy[]; }
 export async function updateXRayStudies(s: XRayStudy[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'xrayStudies', x.id), x)); await b.commit(); return { success: true }; }
-export async function getUltrasoundStudies() { const snap = await getDocs(collection(adminDb, 'ultrasoundStudies')); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
+export async function getUltrasoundStudies() { const snap = await getDocs(collection(adminDb, 'ultrasoundStudies')); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as UltrasoundStudy[]; }
 export async function updateUltrasoundStudies(s: UltrasoundStudy[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'ultrasoundStudies', x.id), x)); await b.commit(); return { success: true }; }
 export async function updateVaccines(v: Vaccine[]) {
     const b = writeBatch(adminDb);
@@ -598,6 +618,36 @@ export async function deletePrescription(id: string) { await deleteDoc(doc(admin
 export async function dispensePrescription(id: string, items: any[]) { const b = writeBatch(adminDb); for (const i of items) { b.update(doc(adminDb, 'medications', i.medicationId), { existencia: increment(-i.quantity) }); } b.update(doc(adminDb, 'prescriptions', id), { status: 'surtida', dispensedAt: new Date().toISOString() }); await b.commit(); return { success: true }; }
 export async function getPendingPrescriptions(f: any) { let q = query(collection(adminDb, 'prescriptions'), where('status', '==', 'pendiente'), limit(20)); if (f.folio) q = query(collection(adminDb, 'prescriptions'), where('folio', '==', f.folio.toUpperCase().trim())); const snap = await getDocs(q); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Prescription[]; }
 export async function getPrescriptionHistory(f: any) { let q = query(collection(adminDb, 'prescriptions'), where('status', '==', 'surtida'), limit(100)); if (f.startDate) q = query(collection(adminDb, 'prescriptions'), where('date', '>=', f.startDate), where('date', '<=', f.endDate), limit(500)); const snap = await getDocs(q); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Prescription[]; }
+
+// --- MANTENIMIENTO ---
+
+export async function cleanupOldRecords() {
+    const batch = writeBatch(adminDb);
+    const lastMonth = subDays(new Date(), 30);
+    const dateLimit = startOfMonth(lastMonth).toISOString();
+    
+    let total = 0;
+    const collections = ['appointments', 'labAppointments', 'xrayAppointments', 'ultrasoundAppointments', 'vaccineAppointments', 'activityLog'];
+    
+    for (const coll of collections) {
+        const q = query(collection(adminDb, coll), where('date', '<', dateLimit));
+        const snap = await getDocs(q);
+        snap.docs.forEach(d => {
+            batch.delete(d.ref);
+            total++;
+        });
+    }
+    
+    await batch.commit();
+    return { success: true, deletedCount: total };
+}
+
+export async function downloadBackupAction() {
+    const [appointments, labApps, xrApps, usApps, vacApps, patients, clinics] = await Promise.all([
+        getAppointmentsData(), getLabAppointmentsData(), getXRayAppointmentsData(), getUltrasoundAppointmentsData(), getVaccineAppointmentsData(), getRawCollection('patients', 5000), getClinicsData()
+    ]);
+    return { success: true, data: { appointments, labAppointments: labApps, xRayAppointments: xrApps, ultrasoundAppointments: usApps, vaccineAppointments: vacApps, patients, clinics } };
+}
 
 // --- OTROS ---
 export async function searchCie10(term: string) { const q = query(collection(adminDb, 'cie10Catalog'), where('nombre', '>=', term.toUpperCase()), limit(20)); const s = await getDocs(q); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Cie10Record[]; }

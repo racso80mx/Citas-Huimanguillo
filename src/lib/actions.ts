@@ -138,9 +138,13 @@ export async function getPrescriptionHistory(f: any) { return data.getPrescripti
 // --- CONFIG ---
 export async function getAdminSettingsData() { return data.getAdminSettingsData(); }
 export async function updateAdminSettings(s: AdminSettings) { return data.updateAdminSettings(s); }
+export async function getArchiveSettings() { return data.getArchiveSettings(); }
 export async function updateArchiveSettings(s: ArchiveSettings) { return data.updateArchiveSettings(s); }
+export async function getPharmacySettings() { return data.getPharmacySettings(); }
 export async function updatePharmacySettings(s: PharmacySettings) { return data.updatePharmacySettings(s); }
+export async function getWarehouseSettings() { return data.getWarehouseSettings(); }
 export async function updateWarehouseSettings(s: WarehouseSettings) { return data.updateWarehouseSettings(s); }
+export async function getBISettings() { return data.getBISettings(); }
 export async function updateBISettings(s: BISettings) { return data.updateBISettings(s); }
 
 // --- CATÁLOGOS ---
@@ -186,3 +190,7 @@ export async function getAppointmentCountOnDate(c: string, d: string) { return d
 export async function getAttendedPatientsForClinic(c: string) { return data.getAttendedPatientsForClinic(c); }
 export async function getPatientPrescriptionsCountTodayAction(p: string) { return data.getPatientPrescriptionsCountTodayAction(p); }
 export async function getRawCollection(c: string) { return data.getRawCollection(c); }
+
+// --- MANTENIMIENTO ---
+export async function cleanupOldRecords() { return data.cleanupOldRecords(); }
+export async function downloadBackupAction() { return data.downloadBackupAction(); }
