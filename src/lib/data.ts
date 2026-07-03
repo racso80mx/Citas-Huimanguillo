@@ -149,8 +149,8 @@ export async function getLogsData() {
     const snap = await getDocs(query(collection(adminDb, 'activityLog'), limit(500)));
     let logs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     logs.sort((a: any, b: any) => {
-        const tA = a.timestamp?.seconds || 0;
-        const tB = b.timestamp?.seconds || 0;
+        const tA = Number(a.timestamp?.seconds || 0);
+        const tB = Number(b.timestamp?.seconds || 0);
         return tB - tA;
     });
     return serializeData(logs);
@@ -323,7 +323,6 @@ export async function bulkInsertPatients(patients: any[]) {
 export async function getAppointmentsData() { 
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(10000))); 
     let apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    // ORDENACIÓN SEGURA: Forzamos String() para evitar errores de localeCompare
     apps.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
     return hydrateAppointments(apps);
 }
@@ -438,12 +437,9 @@ export async function updateClinics(clinics: Clinic[]) {
     const b = writeBatch(adminDb);
     for (const x of clinics) {
         const ref = doc(adminDb, 'clinics', x.id);
-        const mappedData = {
-            ...x,
-            unavailableDates: Array.isArray(x.unavailableDates) ? x.unavailableDates : [],
-            daysOfAction: Array.isArray(x.daysOfAction) ? x.daysOfAction : [],
-            customSchedules: Array.isArray(x.customSchedules) ? x.customSchedules : []
-        };
+        const mappedData: any = { ...x };
+        // Limpieza para evitar undefined en Firestore
+        Object.keys(mappedData).forEach(key => mappedData[key] === undefined && delete mappedData[key]);
         b.set(ref, mappedData, { merge: true });
     }
     await b.commit();
@@ -470,7 +466,7 @@ export async function getConsultationByAppointmentId(aid: string) {
 export async function getConsultationsByPatientId(pid: string) {
     const s = await getDocs(query(collection(adminDb, 'medicalConsultations'), where('patientId', '==', pid)));
     let results = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    results.sort((a,b) => String(b.date).localeCompare(String(a.date)));
+    results.sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)));
     return results;
 }
 
@@ -509,7 +505,7 @@ export async function getPrescriptionHistory(f: any) {
     const snap = await getDocs(query(collection(adminDb, 'prescriptions'), where('status', '==', 'surtida'), limit(1000))); 
     let res = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
     if (f?.startDate && f?.endDate) res = res.filter(r => r.date >= f.startDate && r.date <= f.endDate);
-    res.sort((a,b) => String(b.date).localeCompare(String(a.date)));
+    res.sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)));
     return res;
 }
 
