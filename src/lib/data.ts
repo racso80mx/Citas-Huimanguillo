@@ -129,69 +129,15 @@ export async function getLogsData() {
     return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
 }
 
-// --- MOTOR DE IMPORTACIÓN EXCEL ---
-function fuzzyMapInsumo(item: any) {
-    const findHeader = (target: string) => {
-        const normalizedTarget = target.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-        return Object.keys(item).find(key => {
-            const normalizedKey = key.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-            return normalizedKey === normalizedTarget;
-        });
-    };
-
-    const findValue = (headerNames: string[]) => {
-        for (const name of headerNames) {
-            const key = findHeader(name);
-            if (key) return item[key];
-        }
-        return undefined;
-    };
-
-    const cadVal = findValue(['FECHA CADUCIDAD', 'CADUCIDAD', 'VENCIMIENTO']);
-    let formattedCaducidad = 'SIN FECHA';
-    
-    if (cadVal !== undefined && cadVal !== null) {
-        if (isDate(cadVal)) {
-            formattedCaducidad = formatDateFns(cadVal as Date, 'dd/MM/yyyy');
-        } else if (typeof cadVal === 'number') {
-            const excelEpoch = new Date(1899, 11, 30);
-            const d = new Date(excelEpoch.getTime() + cadVal * 86400000);
-            if (isValid(d)) formattedCaducidad = formatDateFns(d, 'dd/MM/yyyy');
-        } else if (typeof cadVal === 'string' && cadVal.trim()) {
-            const s = cadVal.trim();
-            let d = parse(s, 'dd/MM/yyyy', new Date());
-            if (!isValid(d)) d = parse(s, 'yyyy-MM-dd', new Date());
-            if (!isValid(d)) d = new Date(s);
-            formattedCaducidad = isValid(d) ? formatDateFns(d, 'dd/MM/yyyy') : s.toUpperCase();
-        }
-    }
-
-    return {
-        claveCuadroBasico: String(findValue(['CLAVE DE CUADRO BASICO', 'CLAVE']) || 'S/C').trim().replace(/\//g, '-'),
-        descripcion: String(findValue(['DESCRIPCIÓN', 'DESCRIPCION']) || 'SIN DESCRIPCIÓN').toUpperCase().trim(),
-        grupo: String(findValue(['GRUPO']) || '').toUpperCase().trim(),
-        existencia: Number(findValue(['EXISTENCIA', 'CANTIDAD', 'STOCK']) || 0),
-        precioUnitario: Number(findValue(['PRECIO UNITARIO', 'COSTO']) || 0),
-        totalImporte: Number(findValue(['TOTAL IMPORTE', 'TOTAL']) || 0),
-        lote: String(findValue(['LOTE']) || 'N/A').toUpperCase().trim().replace(/\//g, '-'),
-        proveedor: String(findValue(['PROVEEDOR']) || '').toUpperCase().trim(),
-        rfcProveedor: String(findValue(['RFC PROVEEDOR']) || '').toUpperCase().trim(),
-        almacen: String(findValue(['ALMACEN']) || '').toUpperCase().trim(),
-        fuenteFinanciamiento: String(findValue(['FUENTE FINANCIAMIENTO']) || '').toUpperCase().trim(),
-        fechaCaducidad: formattedCaducidad,
-        ordenSuministro: String(findValue(['ORDEN SUMINISTRO']) || '').toUpperCase().trim(),
-        tipoInsumo: String(findValue(['TIPO_INSUMO']) || '').toUpperCase().trim(),
-        numeroContrato: String(findValue(['NUMERO DE CONTRATO']) || '').toUpperCase().trim()
-    };
-}
-
-// --- HIDRATACIÓN DE PACIENTES ---
+// --- MOTOR DE HIDRATACIÓN DE PACIENTES (ELIMINA LOS N/A) ---
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     
-    const curpsToFetch = Array.from(new Set(appointments.map(a => a.patientId)));
+    // Obtenemos todos los CURPS únicos de la lista de citas
+    const curpsToFetch = Array.from(new Set(appointments.map(a => a.patientId).filter(id => !!id)));
     const patientsMap: Record<string, any> = {};
 
+    // Consultamos los pacientes por lotes de 30 (límite de "in" en Firestore)
     for (let i = 0; i < curpsToFetch.length; i += 30) {
         const chunk = curpsToFetch.slice(i, i + 30);
         const q = query(collection(adminDb, 'patients'), where('curp', 'in', chunk));
@@ -202,10 +148,20 @@ async function hydrateAppointments(appointments: any[]) {
         });
     }
 
-    return appointments.map(app => ({
-        ...app,
-        patient: app.patient && app.patient.name ? app.patient : (patientsMap[app.patientId] || { name: 'PACIENTE', paternalLastName: 'NO ENCONTRADO', maternalLastName: '', curp: app.patientId })
-    }));
+    // Vinculamos los datos del paciente a cada cita
+    return appointments.map(app => {
+        const patientData = patientsMap[app.patientId];
+        return {
+            ...app,
+            // Si la cita ya tiene datos de paciente los mantiene, si no, usa el del mapa
+            patient: (app.patient && app.patient.name) ? app.patient : (patientData || { 
+                name: 'PACIENTE', 
+                paternalLastName: 'NO ENCONTRADO', 
+                maternalLastName: '', 
+                curp: app.patientId || 'S/C' 
+            })
+        };
+    });
 }
 
 // --- GESTIÓN DE PACIENTES ---
@@ -219,8 +175,8 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     } else if (options?.searchName) {
         q = query(colRef, where('name', '>=', options.searchName.toUpperCase()), where('name', '<=', options.searchName.toUpperCase() + '\uf8ff'), limit(500));
     } else {
-        // Aumentado a 10,000 para visibilidad total en Administración
-        q = query(colRef, limit(options?.limitNum || 10000));
+        // VISIBILIDAD TOTAL: 10,000 registros
+        q = query(colRef, limit(10000));
     }
     const s = await getDocs(q);
     return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Patient[];
@@ -300,15 +256,9 @@ export async function bulkInsertPatients(patients: any[]) {
     return { success: true, processedCount: count };
 }
 
-// --- GESTIÓN DE CITAS ---
+// --- GESTIÓN DE CITAS (VISIBILIDAD TOTAL 10,000 REGISTROS) ---
 export async function getAppointmentsData() { 
-    // MOSTRAR TODO (Hasta 10,000) ordenado por fecha descendente.
-    // Esto asegura que el motor de disponibilidad vea todas las citas futuras.
-    const q = query(
-        collection(adminDb, 'appointments'), 
-        orderBy('date', 'desc'),
-        limit(10000) 
-    );
+    const q = query(collection(adminDb, 'appointments'), orderBy('date', 'desc'), limit(10000));
     const snap = await getDocs(q); 
     const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
     return hydrateAppointments(apps);
@@ -316,22 +266,26 @@ export async function getAppointmentsData() {
 
 export async function getLabAppointmentsData() { 
     const snap = await getDocs(query(collection(adminDb, 'labAppointments'), orderBy('date', 'desc'), limit(10000))); 
-    return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    return hydrateAppointments(apps);
 }
 
 export async function getXRayAppointmentsData() { 
     const snap = await getDocs(query(collection(adminDb, 'xrayAppointments'), orderBy('date', 'desc'), limit(10000))); 
-    return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    return hydrateAppointments(apps);
 }
 
 export async function getUltrasoundAppointmentsData() { 
     const snap = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), orderBy('date', 'desc'), limit(10000))); 
-    return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    return hydrateAppointments(apps);
 }
 
 export async function getVaccineAppointmentsData() { 
     const snap = await getDocs(query(collection(adminDb, 'vaccineAppointments'), orderBy('date', 'desc'), limit(10000))); 
-    return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    return hydrateAppointments(apps);
 }
 
 export async function getAvailableSlotsForDate(clinicId: string, date: string) {
@@ -380,7 +334,7 @@ export async function saveNewAppointment(a: any, p: any, isD: boolean, c?: strin
         id, 
         appointmentNumber,
         patientId: p.curp, 
-        patient: p,
+        patient: p, // DENORMALIZACIÓN PARA SEGURIDAD DE DATOS
         coloniaName: c, 
         createdAt: new Date().toISOString() 
     };
@@ -491,6 +445,61 @@ export async function bulkInsertDoctors(d: any[]) {
 }
 
 // --- FARMACIA Y ALMACÉN ---
+function fuzzyMapInsumo(item: any) {
+    const findHeader = (target: string) => {
+        const normalizedTarget = target.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        return Object.keys(item).find(key => {
+            const normalizedKey = key.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+            return normalizedKey === normalizedTarget;
+        });
+    };
+
+    const findValue = (headerNames: string[]) => {
+        for (const name of headerNames) {
+            const key = findHeader(name);
+            if (key) return item[key];
+        }
+        return undefined;
+    };
+
+    const cadVal = findValue(['FECHA CADUCIDAD', 'CADUCIDAD', 'VENCIMIENTO']);
+    let formattedCaducidad = 'SIN FECHA';
+    
+    if (cadVal !== undefined && cadVal !== null) {
+        if (isDate(cadVal)) {
+            formattedCaducidad = formatDateFns(cadVal as Date, 'dd/MM/yyyy');
+        } else if (typeof cadVal === 'number') {
+            const excelEpoch = new Date(1899, 11, 30);
+            const d = new Date(excelEpoch.getTime() + cadVal * 86400000);
+            if (isValid(d)) formattedCaducidad = formatDateFns(d, 'dd/MM/yyyy');
+        } else if (typeof cadVal === 'string' && cadVal.trim()) {
+            const s = cadVal.trim();
+            let d = parse(s, 'dd/MM/yyyy', new Date());
+            if (!isValid(d)) d = parse(s, 'yyyy-MM-dd', new Date());
+            if (!isValid(d)) d = new Date(s);
+            formattedCaducidad = isValid(d) ? formatDateFns(d, 'dd/MM/yyyy') : s.toUpperCase();
+        }
+    }
+
+    return {
+        claveCuadroBasico: String(findValue(['CLAVE DE CUADRO BASICO', 'CLAVE']) || 'S/C').trim().replace(/\//g, '-'),
+        descripcion: String(findValue(['DESCRIPCIÓN', 'DESCRIPCION']) || 'SIN DESCRIPCIÓN').toUpperCase().trim(),
+        grupo: String(findValue(['GRUPO']) || '').toUpperCase().trim(),
+        existencia: Number(findValue(['EXISTENCIA', 'CANTIDAD', 'STOCK']) || 0),
+        precioUnitario: Number(findValue(['PRECIO UNITARIO', 'COSTO']) || 0),
+        totalImporte: Number(findValue(['TOTAL IMPORTE', 'TOTAL']) || 0),
+        lote: String(findValue(['LOTE']) || 'N/A').toUpperCase().trim().replace(/\//g, '-'),
+        proveedor: String(findValue(['PROVEEDOR']) || '').toUpperCase().trim(),
+        rfcProveedor: String(findValue(['RFC PROVEEDOR']) || '').toUpperCase().trim(),
+        almacen: String(findValue(['ALMACEN']) || '').toUpperCase().trim(),
+        fuenteFinanciamiento: String(findValue(['FUENTE FINANCIAMIENTO']) || '').toUpperCase().trim(),
+        fechaCaducidad: formattedCaducidad,
+        ordenSuministro: String(findValue(['ORDEN SUMINISTRO']) || '').toUpperCase().trim(),
+        tipoInsumo: String(findValue(['TIPO_INSUMO']) || '').toUpperCase().trim(),
+        numeroContrato: String(findValue(['NUMERO DE CONTRATO']) || '').toUpperCase().trim()
+    };
+}
+
 export async function bulkInsertMedications(json: any[]) {
     const b = writeBatch(adminDb);
     let count = 0;
