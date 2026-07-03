@@ -112,7 +112,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
   const [patients, setPatients] = useState<Patient[]>([]);
   const [counts, setCounts] = useState<ArchiveCounts>({ total: 0, vigente: 0, bajaTemporal: 0, bajaDefinitiva: 0 });
   
-  // Search fields for patients (Optimizado)
+  // Search fields
   const [searchName, setSearchName] = useState('');
   const [searchCurp, setSearchCurp] = useState('');
   const [searchExpediente, setSearchExpediente] = useState('');
@@ -137,7 +137,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
   const [selectedClinicType, setSelectedClinicType] = useState<string | 'all'>('Consulta Externa Especializada');
   const [dateFilter, setDateFilter] = useState<DateFilterType>('today');
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
-  const [searchTerm, setSearchTerm] = useState(''); // Estado definido para búsqueda en reporte de citas
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Manual jump to date
   const [manualDayMonth, setManualDayMonth] = useState('');
@@ -154,12 +154,12 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
     setCurrentPage(1); 
     
     try {
+      // Configuramos la búsqueda inteligente
       const searchOptions = { 
           status: statusFilter, 
-          searchName: searchName.trim() || undefined,
-          searchCurp: searchCurp.trim() || undefined,
-          searchExpediente: searchExpediente.trim() || undefined,
-          limitNum: (searchName || searchCurp || searchExpediente) ? 2000 : 1000 
+          searchName: searchName.toUpperCase().trim() || undefined,
+          searchCurp: searchCurp.toUpperCase().trim() || undefined,
+          searchExpediente: searchExpediente.trim() || undefined
       };
 
       const [patientsData, countsData, clinicsData, serviceTypesData, appointmentsData, coloniasData] = await Promise.all([
@@ -193,7 +193,12 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
       setSearchName('');
       setSearchCurp('');
       setSearchExpediente('');
-      loadData();
+      // Recargamos datos sin filtros
+      setIsDataLoading(true);
+      getPatients({ status: statusFilter }).then(data => {
+          setPatients(data);
+          setIsDataLoading(false);
+      });
   };
 
   const paginatedPatients = useMemo(() => {
@@ -367,21 +372,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
       await generateArchiveListPDF(appointmentsToDisplay, title, subtitle);
   };
 
-  const onSearchNameChange = (val: string) => {
-      setSearchName(val.toUpperCase());
-      if (val) { setSearchCurp(''); setSearchExpediente(''); }
-  };
-
-  const onSearchCurpChange = (val: string) => {
-      setSearchCurp(val.toUpperCase());
-      if (val) { setSearchName(''); setSearchExpediente(''); }
-  };
-
-  const onSearchExpedienteChange = (val: string) => {
-      setSearchExpediente(val);
-      if (val) { setSearchName(''); setSearchCurp(''); }
-  };
-
   return (
     <div className="container mx-auto px-4 py-6">
       <Card className="border-none shadow-none bg-transparent mb-6">
@@ -444,61 +434,66 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
         </TabsList>
 
         <TabsContent value="patients" className="space-y-4 pt-4">
-          <Card className="relative overflow-hidden">
-            <CardHeader className="pb-4">
+          <Card className="relative overflow-hidden shadow-md">
+            <CardHeader className="pb-4 bg-muted/5">
               <div className="flex flex-col space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
-                    <div className="relative group">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input 
-                            placeholder="Nombres o Apellidos..." 
-                            value={searchName} 
-                            onChange={e => onSearchNameChange(e.target.value)} 
-                            onKeyDown={e => e.key === 'Enter' && loadData()}
-                            className="pl-9 pr-9 h-11"
-                        />
+                    <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase text-primary">Buscar por Nombre o Apellidos</Label>
+                        <div className="relative group">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input 
+                                placeholder="Escribe nombres o apellidos..." 
+                                value={searchName} 
+                                onChange={e => setSearchName(e.target.value.toUpperCase())} 
+                                onKeyDown={e => e.key === 'Enter' && loadData()}
+                                className="pl-9 h-11 border-primary/20"
+                            />
+                        </div>
                     </div>
-                    <div className="relative group">
+                    <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase text-primary">Buscar por CURP</Label>
                         <Input 
                             placeholder="CURP (Exacto)..." 
                             value={searchCurp} 
-                            onChange={e => onSearchCurpChange(e.target.value)} 
+                            onChange={e => setSearchCurp(e.target.value.toUpperCase())} 
                             onKeyDown={e => e.key === 'Enter' && loadData()}
-                            className="h-11 pr-9"
+                            className="h-11 border-primary/20"
                             maxLength={18}
                         />
                     </div>
-                    <div className="relative group">
+                    <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase text-primary">Buscar por Expediente</Label>
                         <Input 
                             placeholder="No. Expediente..." 
                             value={searchExpediente} 
-                            onChange={e => onSearchExpedienteChange(e.target.value)} 
+                            onChange={e => setSearchExpediente(e.target.value)} 
                             onKeyDown={e => e.key === 'Enter' && loadData()}
-                            className="h-11 pr-9"
+                            className="h-11 border-primary/20"
                         />
                     </div>
-                    <div className="flex gap-2">
-                        <Button onClick={loadData} className="h-11 flex-1 font-bold" disabled={isDataLoading}>
+                    <div className="flex gap-2 items-end">
+                        <Button onClick={loadData} className="h-11 flex-1 font-black bg-primary hover:bg-primary/90" disabled={isDataLoading}>
                             {isDataLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
-                            BUSCAR
+                            INICIAR BÚSQUEDA
                         </Button>
-                        <Button variant="outline" onClick={handleClearSearch} className="h-11" title="Limpiar Todo">
+                        <Button variant="outline" onClick={handleClearSearch} className="h-11 border-primary/20" title="Limpiar Todo">
                             <X className="h-4 w-4" />
                         </Button>
                     </div>
                 </div>
                 
-                <div className="flex flex-wrap items-center gap-2 pt-2 border-t mt-2">
+                <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-dashed">
                   {!isReadOnly && (
                     <>
-                        <Button onClick={handleAddNew} size="sm" className="bg-primary hover:bg-primary/90">
+                        <Button onClick={handleAddNew} size="sm" className="bg-primary hover:bg-primary/90 font-bold">
                             <PlusCircle className="h-4 w-4 mr-2" /> Nuevo Paciente
                         </Button>
                         <MassUploadDialog isOpen={isUploadOpen} onClose={() => setIsUploadOpen(false)} onUploadSuccess={loadData} />
-                        <Button onClick={() => setIsUploadOpen(true)} variant="secondary" size="sm">
+                        <Button onClick={() => setIsUploadOpen(true)} variant="secondary" size="sm" className="font-bold">
                             <Upload className="h-4 w-4 mr-2" /> Cargar Excel
                         </Button>
-                        <Button onClick={handleDownloadExcel} variant="outline" size="sm">
+                        <Button onClick={handleDownloadExcel} variant="outline" size="sm" className="font-bold">
                             <Download className="mr-2 h-4 w-4" /> Exportar Padrón
                         </Button>
                     </>
@@ -511,6 +506,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
               {isDataLoading && (
                 <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-lg">
                     <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                    <p className="text-xs font-black uppercase tracking-widest text-primary mt-4 animate-pulse">Consultando Padrón...</p>
                 </div>
               )}
 
@@ -519,7 +515,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                   <Users className="h-16 w-16 text-muted-foreground" />
                   <div>
                     <p className="text-lg font-bold">No se encontraron registros</p>
-                    <p className="text-sm text-muted-foreground">Intenta con otros criterios de búsqueda o verifica el estatus seleccionado.</p>
+                    <p className="text-sm text-muted-foreground">Intenta con otros criterios o verifica si el paciente está en otro estatus.</p>
                   </div>
                 </div>
               ) : (
@@ -545,11 +541,11 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                           <SelectItem value="200">200</SelectItem>
                         </SelectContent>
                       </Select>
-                      <span className="text-sm text-muted-foreground whitespace-nowrap font-bold">Total: {patients.length}</span>
+                      <span className="text-sm text-muted-foreground whitespace-nowrap font-bold">Mostrando: {patients.length} pacientes</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>Anterior</Button>
-                      <div className="bg-muted px-3 py-1 rounded-md text-sm font-medium">Página {currentPage} de {totalPages || 1}</div>
+                      <div className="bg-muted px-4 py-1 rounded-md text-sm font-black">Página {currentPage} de {totalPages || 1}</div>
                       <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage >= totalPages || totalPages === 0}>Siguiente</Button>
                     </div>
                   </div>
