@@ -216,3 +216,4 @@ export async function bulkInsertCie10Glossary(d: any[]) { return data.bulkInsert
 export async function bulkInsertCie10Catalog(d: any[]) { return data.bulkInsertCie10Catalog(d); }
 export async function deleteAllCie10Glossary() { return data.deleteAllCie10Glossary(); }
 export async function deleteAllCie10Catalog() { return data.deleteAllCie10Catalog(); }
+export async function bulkInsertDoctors(d: any[]) { return data.bulkInsertDoctors(d); }
