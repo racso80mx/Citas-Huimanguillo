@@ -71,6 +71,21 @@ export function serializeData(data: any): any {
   return data;
 }
 
+// --- CONFIGURACIÓN DE CONTRASEÑAS MAESTRAS ---
+const DEFAULT_PASSWORDS: Record<string, string> = {
+    'superadmin': 'Hu1m4ngu1ll0',
+    'medical': 'citas2026',
+    'archive': '2026',
+    'archiveInquiry': '2026',
+    'pharmacy': 'farmacia2026',
+    'warehouse': 'almacen2026',
+    'bi': 'bi2026',
+    'lab': '123',
+    'xray': '123',
+    'ultrasound': '123',
+    'vaccine': '123'
+};
+
 // --- MOTOR DE MAPEO ESTRICTO PARA EXCEL DEL USUARIO ---
 function fuzzyMapInsumo(item: any) {
     const findValue = (header: string) => {
@@ -90,7 +105,6 @@ function fuzzyMapInsumo(item: any) {
         if (isDate(cadVal)) {
             formattedCaducidad = formatDateFns(cadVal as Date, 'dd/MM/yyyy');
         } else if (typeof cadVal === 'number') {
-            // Manejo de fechas seriales de Excel
             const excelEpoch = new Date(1899, 11, 30);
             const d = new Date(excelEpoch.getTime() + cadVal * 86400000);
             if (isValid(d)) formattedCaducidad = formatDateFns(d, 'dd/MM/yyyy');
@@ -127,24 +141,17 @@ function fuzzyMapInsumo(item: any) {
 // --- HIDRATACIÓN DE PACIENTES (JOIN) ---
 export async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
-    
-    // Identificar IDs de pacientes que no tienen el objeto 'patient' cargado
     const patientIdsToFetch = Array.from(new Set(
         appointments.filter(a => !a.patient && a.patientId).map(a => a.patientId)
     ));
-
     if (patientIdsToFetch.length === 0) return appointments;
-
     const patientsMap: Record<string, any> = {};
     for (let i = 0; i < patientIdsToFetch.length; i += 30) {
         const chunk = patientIdsToFetch.slice(i, i + 30);
         const q = query(collection(adminDb, 'patients'), where('id', 'in', chunk));
         const snap = await getDocs(q);
-        snap.forEach(d => {
-            patientsMap[d.id] = serializeData({ ...d.data(), id: d.id });
-        });
+        snap.forEach(d => { patientsMap[d.id] = serializeData({ ...d.data(), id: d.id }); });
     }
-
     return appointments.map(app => ({
         ...app,
         patient: app.patient || (app.patientId ? patientsMap[app.patientId] : null)
@@ -152,7 +159,6 @@ export async function hydrateAppointments(appointments: any[]) {
 }
 
 // --- FUNCIONES DE SERVIDOR ---
-
 export async function getRawCollection(collectionName: string, limitNum: number = 200) {
     const snap = await getDocs(query(collection(adminDb, collectionName), limit(limitNum)));
     return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
@@ -171,7 +177,7 @@ export async function getLogsData() {
 
 export async function getPasswordFromStore(id: string, def: string): Promise<string> {
     const s = await getDoc(doc(adminDb, 'module_passwords', id));
-    return s.exists() ? s.data().password : def;
+    return s.exists() ? s.data().password : (DEFAULT_PASSWORDS[id] || def);
 }
 
 export async function getModuleSettings(): Promise<ModuleSettings> {
@@ -312,44 +318,42 @@ export async function getVaccineAppointmentsData() {
 
 export async function saveNewAppointment(a: any, p: any, isD: boolean, c?: string) { 
     const id = uuidv4(); 
-    await setDoc(doc(adminDb, 'appointments', id), { 
-        ...a, 
-        id, 
-        patientId: p.curp, 
-        patient: p, 
-        coloniaName: c, 
-        createdAt: new Date().toISOString() 
-    }); 
+    const apt = { ...a, id, patientId: p.curp, patient: p, coloniaName: c, createdAt: new Date().toISOString() };
+    await setDoc(doc(adminDb, 'appointments', id), apt); 
     await setDoc(doc(adminDb, 'patients', p.curp), { ...p, id: p.curp }, { merge: true }); 
-    return { success: true, data: { appointment: { ...a, patient: p }, clinic: { name: 'UNIDAD MÉDICA' } } }; 
+    return { success: true, data: { appointment: apt, clinic: { name: 'UNIDAD MÉDICA' } } }; 
 }
 
 export async function saveNewLabAppointment(a: any, p: any) { 
     const id = uuidv4(); 
-    await setDoc(doc(adminDb, 'labAppointments', id), { ...a, id, patientId: p.curp, patient: p, createdAt: new Date().toISOString() }); 
+    const apt = { ...a, id, patientId: p.curp, patient: p, createdAt: new Date().toISOString() };
+    await setDoc(doc(adminDb, 'labAppointments', id), apt); 
     await setDoc(doc(adminDb, 'patients', p.curp), { ...p, id: p.curp }, { merge: true }); 
-    return { success: true, data: { ...a, patient: p } }; 
+    return { success: true, data: apt }; 
 }
 
 export async function saveNewXRayAppointment(a: any, p: any) { 
     const id = uuidv4(); 
-    await setDoc(doc(adminDb, 'xrayAppointments', id), { ...a, id, patientId: p.curp, patient: p, createdAt: new Date().toISOString() }); 
+    const apt = { ...a, id, patientId: p.curp, patient: p, createdAt: new Date().toISOString() };
+    await setDoc(doc(adminDb, 'xrayAppointments', id), apt); 
     await setDoc(doc(adminDb, 'patients', p.curp), { ...p, id: p.curp }, { merge: true }); 
-    return { success: true, data: { appointment: { ...a, patient: p }, study: { name: a.studyName, indications: '' } } }; 
+    return { success: true, data: { appointment: apt, study: { name: a.studyName, indications: '' } } }; 
 }
 
 export async function saveNewUltrasoundAppointment(a: any, p: any) { 
     const id = uuidv4(); 
-    await setDoc(doc(adminDb, 'ultrasoundAppointments', id), { ...a, id, patientId: p.curp, patient: p, createdAt: new Date().toISOString() }); 
+    const apt = { ...a, id, patientId: p.curp, patient: p, createdAt: new Date().toISOString() };
+    await setDoc(doc(adminDb, 'ultrasoundAppointments', id), apt); 
     await setDoc(doc(adminDb, 'patients', p.curp), { ...p, id: p.curp }, { merge: true }); 
-    return { success: true, data: { appointment: { ...a, patient: p }, study: { name: a.studyName, indications: '' } } }; 
+    return { success: true, data: { appointment: apt, study: { name: a.studyName, indications: '' } } }; 
 }
 
 export async function saveNewVaccineAppointment(a: any, p: any) { 
     const id = uuidv4(); 
-    await setDoc(doc(adminDb, 'vaccineAppointments', id), { ...a, id, patientId: p.curp, patient: p, createdAt: new Date().toISOString() }); 
+    const apt = { ...a, id, patientId: p.curp, patient: p, createdAt: new Date().toISOString() };
+    await setDoc(doc(adminDb, 'vaccineAppointments', id), apt); 
     await setDoc(doc(adminDb, 'patients', p.curp), { ...p, id: p.curp }, { merge: true }); 
-    return { success: true, data: { ...a, patient: p } }; 
+    return { success: true, data: apt }; 
 }
 
 export async function getAppointmentsForClinic(cid: string) { 
@@ -386,21 +390,11 @@ export async function cloneAppointment(id: string, newDate: string, type: string
     const coll = type === 'medical' ? 'appointments' : type === 'lab' ? 'labAppointments' : type === 'xray' ? 'xrayAppointments' : type === 'ultrasound' ? 'ultrasoundAppointments' : 'vaccineAppointments';
     const oldDoc = await getDoc(doc(adminDb, coll, id));
     if (!oldDoc.exists()) return { success: false, message: 'Cita original no encontrada.' };
-    
     const data = oldDoc.data();
     const newId = uuidv4();
-    const prefix = data.appointmentNumber.split('-')[0];
+    const prefix = data.appointmentNumber?.split('-')[0] || 'CITA';
     const newFolio = `${prefix}-${uuidv4().split('-')[0].toUpperCase()}`;
-    
-    await setDoc(doc(adminDb, coll, newId), {
-        ...data,
-        id: newId,
-        appointmentNumber: newFolio,
-        date: newDate,
-        time: newTime || data.time,
-        status: 'Agendada',
-        createdAt: new Date().toISOString()
-    });
+    await setDoc(doc(adminDb, coll, newId), { ...data, id: newId, appointmentNumber: newFolio, date: newDate, time: newTime || data.time, status: 'Agendada', createdAt: new Date().toISOString() });
     return { success: true, message: `Nueva cita generada con folio ${newFolio}` };
 }
 
@@ -418,10 +412,7 @@ export async function deleteClinic(id: string) {
 
 export async function bulkInsertDoctors(d: any[]) { 
     const b = writeBatch(adminDb); 
-    d.forEach(x => { 
-        const id = uuidv4(); 
-        b.set(doc(adminDb, 'clinics', id), { ...x, id }); 
-    }); 
+    d.forEach(x => { const id = uuidv4(); b.set(doc(adminDb, 'clinics', id), { ...x, id }); }); 
     await b.commit(); 
     return { success: true, processedCount: d.length }; 
 }
@@ -431,7 +422,6 @@ export async function bulkInsertMedications(json: any[]) {
     let count = 0;
     json.forEach(item => {
         const med = fuzzyMapInsumo(item);
-        // Limpieza de caracteres prohibidos en IDs
         const sanitizedId = (med.claveCuadroBasico + '_' + med.lote).replace(/\//g, '-').replace(/\s/g, '_');
         b.set(doc(adminDb, 'medications', sanitizedId), { ...med, id: sanitizedId, updatedAt: new Date().toISOString() }, { merge: true });
         count++;
@@ -470,11 +460,11 @@ export async function dispensePrescription(id: string, items: any[]) { const b =
 export async function getPendingPrescriptions(f: any) { let q = query(collection(adminDb, 'prescriptions'), where('status', '==', 'pendiente'), limit(20)); if (f.folio) q = query(collection(adminDb, 'prescriptions'), where('folio', '==', f.folio.toUpperCase().trim())); const snap = await getDocs(q); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Prescription[]; }
 export async function getPrescriptionHistory(f: any) { let q = query(collection(adminDb, 'prescriptions'), where('status', '==', 'surtida'), limit(100)); if (f.startDate) q = query(collection(adminDb, 'prescriptions'), where('date', '>=', f.startDate), where('date', '<=', f.endDate), limit(500)); const snap = await getDocs(q); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Prescription[]; }
 
-export async function getArchiveSettingsData() { const p = await getPasswordFromStore('archive', '2026'); return { password: p }; }
-export async function getPharmacySettingsData() { const p = await getPasswordFromStore('pharmacy', 'farmacia2026'); return { password: p }; }
-export async function getWarehouseSettingsData() { const p = await getPasswordFromStore('warehouse', 'almacen2026'); return { password: p }; }
-export async function getBISettingsData() { const p = await getPasswordFromStore('bi', 'bi2026'); return { password: p }; }
-export async function getAdminSettingsData() { const p = await getPasswordFromStore('superadmin', 'Hu1m4ngu1ll0'); return { password: p }; }
+export async function getArchiveSettingsData() { const p = await getPasswordFromStore('archive', DEFAULT_PASSWORDS.archive); return { password: p }; }
+export async function getPharmacySettingsData() { const p = await getPasswordFromStore('pharmacy', DEFAULT_PASSWORDS.pharmacy); return { password: p }; }
+export async function getWarehouseSettingsData() { const p = await getPasswordFromStore('warehouse', DEFAULT_PASSWORDS.warehouse); return { password: p }; }
+export async function getBISettingsData() { const p = await getPasswordFromStore('bi', DEFAULT_PASSWORDS.bi); return { password: p }; }
+export async function getAdminSettingsData() { const p = await getPasswordFromStore('superadmin', DEFAULT_PASSWORDS.superadmin); return { password: p }; }
 
 export async function updateAdminSettings(s: any) { await setDoc(doc(adminDb, 'module_passwords', 'superadmin'), { password: s.password }); return { success: true }; }
 export async function updateArchiveSettings(s: any) { await setDoc(doc(adminDb, 'module_passwords', 'archive'), { password: s.password }); return { success: true }; }
@@ -550,7 +540,7 @@ export async function getBIData() {
 
 export async function verifyModulePassword(module: string, pass: string) {
     const storeId = module === 'superadmin' ? 'superadmin' : module === 'medical' ? 'medical' : module === 'archive' ? 'archive' : module === 'archiveInquiry' ? 'archiveInquiry' : module === 'pharmacy' ? 'pharmacy' : module === 'warehouse' ? 'warehouse' : module === 'bi' ? 'bi' : module === 'lab' ? 'lab' : module === 'xray' ? 'xray' : module === 'ultrasound' ? 'ultrasound' : 'vaccine';
-    const current = await getPasswordFromStore(storeId, '');
+    const current = await getPasswordFromStore(storeId, DEFAULT_PASSWORDS[storeId] || '');
     return { success: current === pass, message: current !== pass ? 'Contraseña incorrecta' : undefined };
 }
 
