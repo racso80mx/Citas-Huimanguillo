@@ -89,7 +89,7 @@ export const DEFAULT_PASSWORDS: Record<string, string> = {
     'vaccine': '123'
 };
 
-export async function getPasswordFromStore(id: string, def: string): Promise<string> {
+async function getPasswordFromStore(id: string, def: string): Promise<string> {
     try {
         const s = await getDoc(doc(adminDb, 'module_passwords', id));
         return s.exists() ? s.data().password : def;
@@ -186,13 +186,10 @@ function fuzzyMapInsumo(item: any) {
 }
 
 // --- HIDRATACIÓN DE PACIENTES ---
-export async function hydrateAppointments(appointments: any[]) {
+async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     
-    const appointmentsToHydrate = appointments.filter(a => !a.patient || !a.patient.name);
-    if (appointmentsToHydrate.length === 0) return appointments;
-
-    const curpsToFetch = Array.from(new Set(appointmentsToHydrate.map(a => a.patientId)));
+    const curpsToFetch = Array.from(new Set(appointments.map(a => a.patientId)));
     const patientsMap: Record<string, any> = {};
 
     for (let i = 0; i < curpsToFetch.length; i += 30) {
@@ -302,17 +299,16 @@ export async function bulkInsertPatients(patients: any[]) {
     return { success: true, processedCount: count };
 }
 
-// --- GESTIÓN DE CITAS (CRITICAL FIX FOR FIREBASE LIMIT) ---
+// --- GESTIÓN DE CITAS (CRITICAL FIX FOR 10,000 LIMIT) ---
 export async function getAppointmentsData() { 
-    // Firestore hard limit for limit() is 10,000.
-    // Priorizamos citas desde hace 30 días para calcular disponibilidad futura.
-    const thirtyDaysAgo = subDays(new Date(), 30).toISOString();
-    const snap = await getDocs(query(
+    const windowStart = subDays(new Date(), 15).toISOString();
+    const q = query(
         collection(adminDb, 'appointments'), 
-        where('date', '>=', thirtyDaysAgo),
+        where('date', '>=', windowStart),
         orderBy('date', 'asc'),
         limit(10000) 
-    )); 
+    );
+    const snap = await getDocs(q); 
     const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
     return hydrateAppointments(apps);
 }
@@ -735,7 +731,7 @@ export async function getAttendedPatientsForClinic(cid: string) {
 }
 
 export async function getPatientPrescriptionsCountTodayAction(pId: string) { 
-    const s = startOfToday().toISOString(); 
+    const s = startOfDay(new Date()).toISOString(); 
     const q = query(collection(adminDb, 'prescriptions'), where('patientId', '==', pId), where('date', '>=', s)); 
     const snap = await getCountFromServer(q); 
     return snap.data().count; 
