@@ -16,7 +16,6 @@ import {
   where,
   limit,
   getCountFromServer,
-  orderBy,
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -129,7 +128,7 @@ export async function updateModuleSettings(s: ModuleSettings) {
     return { success: true };
 }
 
-// --- PACIENTES (SMART SEARCH) ---
+// --- PACIENTES (BÚSQUEDA INTELIGENTE SIN ERRORES DE ÍNDICE) ---
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     
@@ -146,7 +145,7 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
         if (!s.empty) return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
 
-    // Búsqueda Inteligente por Nombre
+    // Búsqueda Inteligente por Nombre (Multi-campo)
     if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
         const words = term.split(/\s+/).filter((w: string) => w.length >= 2);
@@ -173,12 +172,13 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
             if (options.status && options.status !== 'Total') {
                 results = results.filter(p => p.status === options.status);
             }
+            // ORDENACIÓN EN MEMORIA (Para evitar FirebaseError: The query requires an index)
             results.sort((a, b) => (a.paternalLastName || '').localeCompare(b.paternalLastName || ''));
             return serializeData(results.slice(0, 500));
         }
     }
 
-    // Consulta por defecto (Ordenación en memoria para evitar errores de índice compuesto)
+    // Consulta por defecto con ordenación en memoria
     let qBase;
     if (options?.status && options.status !== 'Total') {
         qBase = query(colRef, where('status', '==', options.status), limit(options?.limitNum || 1000));
@@ -270,11 +270,11 @@ export async function getPatientByCURP(curp: string) {
     return snap.exists() ? { success: true, data: serializeData({ ...snap.data(), id: snap.id }) } : { success: false };
 }
 
-// --- CITAS ---
+// --- CITAS (ORDENACIÓN EN MEMORIA) ---
 export async function getAppointmentsData() { 
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(10000))); 
     let apps = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-    apps.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    apps.sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
     return hydrateAppointments(apps);
 }
 
@@ -282,7 +282,7 @@ export async function getAppointmentsForClinic(cid: string) {
     const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(10000));
     const snap = await getDocs(q);
     let apps = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-    apps.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    apps.sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
     return hydrateAppointments(apps);
 }
 
@@ -462,25 +462,25 @@ export async function getLabSettings() { const s = await getDoc(doc(adminDb, 'se
 export async function updateLabSettings(s: any) { await setDoc(doc(adminDb, 'settings', 'labSettings'), s, { merge: true }); return { success: true }; }
 export async function getLabStudies() { const s = await getDocs(collection(adminDb, 'labStudies')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateLabStudies(s: any[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'labStudies', x.id), x)); await b.commit(); return { success: true }; }
-export async function getLabAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'labAppointments'), limit(5000))); let apps = s.docs.map(d => ({ ...d.data(), id: d.id })); apps.sort((a,b) => b.date.localeCompare(a.date)); return hydrateAppointments(apps); }
+export async function getLabAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'labAppointments'), limit(5000))); let apps = s.docs.map(d => ({ ...d.data(), id: d.id })); apps.sort((a: any, b: any) => b.date.localeCompare(a.date)); return hydrateAppointments(apps); }
 
 export async function getXRaySettings() { const s = await getDoc(doc(adminDb, 'settings', 'xraySettings')); return s.exists() ? serializeData(s.data()) : { dailySlots: 10, waitlistSlots: 0, weekendBookingEnabled: false, startTime: '08:00', endTime: '13:00' }; }
 export async function updateXRaySettings(s: any) { await setDoc(doc(adminDb, 'settings', 'xraySettings'), s, { merge: true }); return { success: true }; }
 export async function getXRayStudies() { const s = await getDocs(collection(adminDb, 'xrayStudies')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateXRayStudies(s: any[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'xrayStudies', x.id), x)); await b.commit(); return { success: true }; }
-export async function getXRayAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'xrayAppointments'), limit(5000))); let apps = s.docs.map(d => ({ ...d.data(), id: d.id })); apps.sort((a,b) => b.date.localeCompare(a.date)); return hydrateAppointments(apps); }
+export async function getXRayAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'xrayAppointments'), limit(5000))); let apps = s.docs.map(d => ({ ...d.data(), id: d.id })); apps.sort((a: any, b: any) => b.date.localeCompare(a.date)); return hydrateAppointments(apps); }
 
 export async function getUltrasoundSettings() { const s = await getDoc(doc(adminDb, 'settings', 'ultrasoundSettings')); return s.exists() ? serializeData(s.data()) : { dailySlots: 10, waitlistSlots: 0, weekendBookingEnabled: false, startTime: '08:00', endTime: '13:00' }; }
 export async function updateUltrasoundSettings(s: any) { await setDoc(doc(adminDb, 'settings', 'ultrasoundSettings'), s, { merge: true }); return { success: true }; }
 export async function getUltrasoundStudies() { const s = await getDocs(collection(adminDb, 'ultrasoundStudies')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateUltrasoundStudies(s: any[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'ultrasoundStudies', x.id), x)); await b.commit(); return { success: true }; }
-export async function getUltrasoundAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), limit(5000))); let apps = s.docs.map(d => ({ ...d.data(), id: d.id })); apps.sort((a,b) => b.date.localeCompare(a.date)); return hydrateAppointments(apps); }
+export async function getUltrasoundAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), limit(5000))); let apps = s.docs.map(d => ({ ...d.data(), id: d.id })); apps.sort((a: any, b: any) => b.date.localeCompare(a.date)); return hydrateAppointments(apps); }
 
 export async function getVaccineSettings() { const s = await getDoc(doc(adminDb, 'settings', 'vaccineSettings')); return s.exists() ? serializeData(s.data()) : { dailySlots: 10, waitlistSlots: 0, weekendBookingEnabled: false, startTime: '08:00', endTime: '13:00' }; }
 export async function updateVaccineSettings(s: any) { await setDoc(doc(adminDb, 'settings', 'vaccineSettings'), s, { merge: true }); return { success: true }; }
 export async function getVaccines() { const s = await getDocs(collection(adminDb, 'vaccines')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateVaccines(s: any[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'vaccines', x.id), x)); await b.commit(); return { success: true }; }
-export async function getVaccineAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'vaccineAppointments'), limit(5000))); let apps = s.docs.map(d => ({ ...d.data(), id: d.id })); apps.sort((a,b) => b.date.localeCompare(a.date)); return hydrateAppointments(apps); }
+export async function getVaccineAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'vaccineAppointments'), limit(5000))); let apps = s.docs.map(d => ({ ...d.data(), id: d.id })); apps.sort((a: any, b: any) => b.date.localeCompare(a.date)); return hydrateAppointments(apps); }
 
 // --- FARMACIA ---
 export async function getMedications() { const s = await getDocs(query(collection(adminDb, 'medications'), limit(3000))); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
