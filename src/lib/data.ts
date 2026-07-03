@@ -225,7 +225,7 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     } else if (options?.searchName) {
         q = query(colRef, where('name', '>=', options.searchName.toUpperCase()), where('name', '<=', options.searchName.toUpperCase() + '\uf8ff'), limit(100));
     } else {
-        q = query(colRef, limit(options?.limitNum || 100));
+        q = query(colRef, limit(options?.limitNum || 2000));
     }
     const s = await getDocs(q);
     return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Patient[];
@@ -308,31 +308,31 @@ export async function bulkInsertPatients(patients: any[]) {
 // --- GESTIÓN DE CITAS ---
 
 export async function getAppointmentsData() { 
-    const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(1000))); 
+    const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(10000))); 
     const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
     return hydrateAppointments(apps);
 }
 
 export async function getLabAppointmentsData() { 
-    const snap = await getDocs(query(collection(adminDb, 'labAppointments'), limit(1000))); 
+    const snap = await getDocs(query(collection(adminDb, 'labAppointments'), limit(5000))); 
     const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
     return hydrateAppointments(apps);
 }
 
 export async function getXRayAppointmentsData() { 
-    const snap = await getDocs(query(collection(adminDb, 'xrayAppointments'), limit(500))); 
+    const snap = await getDocs(query(collection(adminDb, 'xrayAppointments'), limit(2000))); 
     const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
     return hydrateAppointments(apps);
 }
 
 export async function getUltrasoundAppointmentsData() { 
-    const snap = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), limit(500))); 
+    const snap = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), limit(2000))); 
     const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
     return hydrateAppointments(apps);
 }
 
 export async function getVaccineAppointmentsData() { 
-    const snap = await getDocs(query(collection(adminDb, 'vaccineAppointments'), limit(500))); 
+    const snap = await getDocs(query(collection(adminDb, 'vaccineAppointments'), limit(2000))); 
     const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
     return hydrateAppointments(apps);
 }
@@ -455,7 +455,7 @@ export async function updateAppointmentStatus(id: string, s: string, t: any) {
 }
 
 export async function getAppointmentsForClinic(cid: string) { 
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(1000)); 
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(5000)); 
     const s = await getDocs(q); 
     const apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); 
     return hydrateAppointments(apps);
@@ -522,8 +522,8 @@ export async function bulkInsertSupplies(json: any[]) {
     return { success: true, processedCount: count };
 }
 
-export async function getMedications() { const snap = await getDocs(query(collection(adminDb, 'medications'), limit(1500))); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Medication[]; }
-export async function getSupplies() { const snap = await getDocs(query(collection(adminDb, 'supplies'), limit(1500))); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Supply[]; }
+export async function getMedications() { const snap = await getDocs(query(collection(adminDb, 'medications'), limit(2000))); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Medication[]; }
+export async function getSupplies() { const snap = await getDocs(query(collection(adminDb, 'supplies'), limit(2000))); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Supply[]; }
 export async function deleteAllMedications() { const s = await getDocs(collection(adminDb, 'medications')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 export async function deleteAllSupplies() { const s = await getDocs(collection(adminDb, 'supplies')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 
@@ -574,7 +574,7 @@ export async function updateSpecialties(t: any[]) { const b = writeBatch(adminDb
 export async function getColoniasData() { const snap = await getDocs(collection(adminDb, 'colonias')); return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateColonias(c: Colonia[]) { const b = writeBatch(adminDb); c.forEach(x => b.set(doc(adminDb, 'colonias', x.id), x)); await b.commit(); return { success: true }; }
 
-export async function getRawCollection(collectionName: string, limitNum: number = 500) {
+export async function getRawCollection(collectionName: string, limitNum: number = 2000) {
     const snap = await getDocs(query(collection(adminDb, collectionName), limit(limitNum)));
     return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
 }
