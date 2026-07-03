@@ -207,7 +207,7 @@ export async function getBIData() { return data.getBIData(); }
 export async function getAttendedPatientsForClinic(c: string) { return data.getAttendedPatientsForClinic(c); }
 export async function cleanupOldRecords() { return data.cleanupOldRecords(); }
 
-// --- MANTENIMIENTO Y RESPALDO ---
+// --- MANTENIMIENTO ---
 export async function normalizeExpedientesAction() { return data.normalizeExpedientesAction(); }
 export async function scanDuplicates(c: string) { return data.scanDuplicates(c); }
 export async function applyStatusUpdateChunk(e: string[], s: string) { return data.applyStatusUpdateChunk(e, s); }
