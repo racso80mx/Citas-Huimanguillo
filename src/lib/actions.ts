@@ -113,13 +113,6 @@ export async function updateClinics(c: Clinic[]) {
 export async function deleteClinic(id: string) { return data.deleteClinic(id); }
 export async function bulkInsertDoctors(d: any[]) { return data.bulkInsertDoctors(d); }
 
-// --- MANTENIMIENTO ---
-export async function downloadBackupAction() { return data.downloadBackupAction(); }
-export async function cleanupOldRecords() { return data.cleanupOldRecords(); }
-export async function normalizeExpedientesAction() { return data.normalizeExpedientesAction(); }
-export async function applyStatusUpdateChunk(ex: string[], s: PatientStatus) { return data.applyStatusUpdateChunk(ex, s); }
-export async function scanDuplicates(c: any) { return data.scanDuplicates(c); }
-
 // --- CONSULTAS Y RECETAS ---
 export async function getConsultationsByPatientId(pid: string) { return data.getConsultationsByPatientId(pid); }
 export async function saveMedicalConsultation(c: any) { 
@@ -138,11 +131,7 @@ export async function getPendingPrescriptions(f: any) { return data.getPendingPr
 export async function getPrescriptionHistory(f: any) { return data.getPrescriptionHistory(f); }
 
 // --- CONFIG ---
-export async function getArchiveSettings() { return data.getArchiveSettingsData(); }
-export async function getPharmacySettings() { return data.getPharmacySettingsData(); }
-export async function getWarehouseSettings() { return data.getWarehouseSettingsData(); }
-export async function getBISettings() { return data.getBISettingsData(); }
-export async function getAdminSettings() { return data.getAdminSettingsData(); }
+export async function getAdminSettingsData() { return data.getAdminSettingsData(); }
 export async function updateAdminSettings(s: AdminSettings) { return data.updateAdminSettings(s); }
 export async function updateArchiveSettings(s: ArchiveSettings) { return data.updateArchiveSettings(s); }
 export async function updatePharmacySettings(s: PharmacySettings) { return data.updatePharmacySettings(s); }
@@ -174,9 +163,7 @@ export async function updateVaccineSettings(s: VaccineSettings) { return data.up
 
 export async function getLabStudies() { return data.getLabStudies(); }
 export async function updateLabStudies(s: LabStudy[]) { return data.updateLabStudies(s); }
-export async function getXRayStudies() { return data.getRawCollection('xrayStudies'); }
 export async function updateXRayStudies(s: XRayStudy[]) { return data.updateXRayStudies(s); }
-export async function getUltrasoundStudies() { return data.getRawCollection('ultrasoundStudies'); }
 export async function updateUltrasoundStudies(s: UltrasoundStudy[]) { return data.updateUltrasoundStudies(s); }
 export async function getVaccines() { return data.getRawCollection('vaccines', 500); }
 export async function updateVaccines(v: Vaccine[]) { return data.updateVaccines(v); }
@@ -188,16 +175,7 @@ export async function deleteAllMedications() { return data.deleteAllMedications(
 export async function deleteAllSupplies() { return data.deleteAllSupplies(); }
 export async function searchCie10(t: string) { return data.searchCie10(t); }
 export async function getBIData() { return data.getBIData(); }
-export async function getAvailableSlotsForDate(c: string, d: string) { return data.getAvailableSlotsForDate(c, d); }
 export async function getAppointmentCountOnDate(c: string, d: string) { return data.getAppointmentCountOnDate(c, d); }
 export async function getAttendedPatientsForClinic(c: string) { return data.getAttendedPatientsForClinic(c); }
 export async function getPatientPrescriptionsCountTodayAction(p: string) { return data.getPatientPrescriptionsCountTodayAction(p); }
-
 export async function getRawCollection(c: string) { return data.getRawCollection(c); }
-export async function getAnnouncementsData() { return data.getAnnouncementsData(); }
-export async function getAppointmentsData() { return data.getAppointmentsData(); }
-
-export async function bulkInsertCie10Glossary(d: any[]) { return data.bulkInsertCie10Glossary(d); }
-export async function bulkInsertCie10Catalog(d: any[]) { return data.bulkInsertCie10Catalog(d); }
-export async function deleteAllCie10Glossary() { return data.deleteAllCie10Glossary(); }
-export async function deleteAllCie10Catalog() { return data.deleteAllCie10Catalog(); }
