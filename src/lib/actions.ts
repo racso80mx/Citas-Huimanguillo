@@ -94,11 +94,32 @@ export async function updateAppointmentStatus(id: string, s: string, t: any) {
     revalidatePath('/', 'layout');
     return res;
 }
-export async function deleteAppointment(id: string) { return data.deleteAppointment(id); }
-export async function deleteLabAppointment(id: string) { return data.deleteLabAppointment(id); }
-export async function deleteXRayAppointment(id: string) { return data.deleteXRayAppointment(id); }
-export async function deleteUltrasoundAppointment(id: string) { return data.deleteUltrasoundAppointment(id); }
-export async function deleteVaccineAppointment(id: string) { return data.deleteVaccineAppointment(id); }
+export async function deleteAppointment(id: string) { 
+    const res = await data.deleteAppointment(id);
+    revalidatePath('/', 'layout');
+    return res;
+}
+export async function deleteLabAppointment(id: string) { 
+    const res = await data.deleteLabAppointment(id);
+    revalidatePath('/', 'layout');
+    return res;
+}
+export async function deleteXRayAppointment(id: string) { 
+    const res = await data.deleteXRayAppointment(id);
+    revalidatePath('/', 'layout');
+    return res;
+}
+export async function deleteUltrasoundAppointment(id: string) { 
+    const res = await data.deleteUltrasoundAppointment(id);
+    revalidatePath('/', 'layout');
+    return res;
+}
+export async function deleteVaccineAppointment(id: string) { 
+    const res = await data.deleteVaccineAppointment(id);
+    revalidatePath('/', 'layout');
+    return res;
+}
+
 export async function rescheduleAppointment(id: string, d: string, t: any) { return data.rescheduleAppointment(id, d, t); }
 export async function cloneAppointment(id: string, d: string, t: any, ti?: string) { return data.cloneAppointment(id, d, t, ti); }
 export async function saveNewAppointment(a: any, p: any, isD: boolean, c?: string) { return data.saveNewAppointment(a, p, isD, c); }
