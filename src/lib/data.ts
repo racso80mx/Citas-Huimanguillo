@@ -43,29 +43,32 @@ import type {
   Specialty,
   Prescription,
   ArchiveCounts,
-  MedicalConsultation
+  MedicalConsultation,
+  Cie10Record
 } from './definitions';
 import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
 import { startOfDay, subDays } from 'date-fns';
 
 /**
- * MOTOR DE SERIALIZACIÓN INFALIBLE
- * Garantiza que todos los datos de Firestore (especialmente fechas) sean strings puros para evitar errores de localeCompare.
+ * MOTOR DE SERIALIZACIÓN ROBUSTO
+ * Detecta y convierte Timestamps, Dates y Referencias a strings ISO para evitar errores de tipo.
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return data;
   
-  // Detección robusta de Timestamps de Firestore o Fechas
   if (data && typeof data.toDate === 'function') {
-      try { return data.toDate().toISOString(); } catch(e) {}
+      try { return data.toDate().toISOString(); } catch(e) { return data.toString(); }
   }
+  
   if (data instanceof Date) return data.toISOString();
+  
   if (data && typeof data === 'object' && 'seconds' in data && 'nanoseconds' in data) {
-      try { return new Date(data.seconds * 1000).toISOString(); } catch(e) {}
+      try { return new Date(data.seconds * 1000).toISOString(); } catch(e) { return JSON.stringify(data); }
   }
   
   if (data instanceof DocumentReference) return data.id;
+  
   if (Array.isArray(data)) return data.map(serializeData);
   
   if (typeof data === 'object' && data.constructor === Object) {
@@ -75,12 +78,13 @@ export function serializeData(data: any): any {
     }
     return serialized;
   }
+  
   return data;
 }
 
 /**
  * MOTOR DE HIDRATACIÓN PROFUNDA
- * Vincula citas con pacientes reales del padrón, eliminando los registros "N/A".
+ * Vincula citas con pacientes reales y usa snapshots de respaldo para evitar registros "N/A".
  */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
@@ -104,8 +108,7 @@ async function hydrateAppointments(appointments: any[]) {
     }
 
     return appointments.map(app => {
-        const pid = app.patientId instanceof DocumentReference ? app.patientId.id : String(app.patientId);
-        // Respaldo: Si no está en el padrón vivo, usamos el snapshot guardado en la cita
+        const pid = app.patientId;
         const patientData = patientsMap[pid] || app.patient || { 
             name: 'PACIENTE', 
             paternalLastName: 'SIN DATOS', 
@@ -115,7 +118,7 @@ async function hydrateAppointments(appointments: any[]) {
         };
         
         return {
-            ...serializeData(app),
+            ...app,
             patientId: pid,
             patient: serializeData(patientData)
         };
@@ -172,7 +175,7 @@ export async function updateModuleSettings(s: ModuleSettings) {
     return { success: true };
 }
 
-// --- PACIENTES (SMART-MATCH SEARCH) ---
+// --- PACIENTES (SMART-MATCH) ---
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     
@@ -208,7 +211,6 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
             
             let results = Array.from(combinedMap.values());
             
-            // Refinado en memoria para múltiples palabras (ej. "CAMPOS ELOY")
             if (words.length > 1) {
                 results = results.filter(p => {
                     const full = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
@@ -220,14 +222,15 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
                 results = results.filter(p => p.status === options.status);
             }
             
-            return serializeData(results.sort((a,b) => (a.paternalLastName || '').localeCompare(b.paternalLastName || '')).slice(0, 500));
+            results.sort((a,b) => (a.paternalLastName || '').localeCompare(b.paternalLastName || ''));
+            return serializeData(results.slice(0, 500));
         }
     }
 
-    // 4. Consulta General (Con ordenación en servidor para evitar errores de índice)
-    let qBase = query(colRef, limit(options?.limitNum || 1000));
+    // 4. Consulta General (Visibilidad Total)
+    let qBase = query(colRef, limit(options?.limitNum || 10000));
     if (options?.status && options.status !== 'Total') {
-        qBase = query(colRef, where('status', '==', options.status), limit(options?.limitNum || 1000));
+        qBase = query(colRef, where('status', '==', options.status), limit(10000));
     }
     
     const snap = await getDocs(qBase);
@@ -306,40 +309,45 @@ export async function bulkInsertPatients(patients: any[]) {
     return { success: true, processedCount: patients.length };
 }
 
-// --- CITAS (VISIBILIDAD TOTAL) ---
+// --- CITAS (MANTENIMIENTO DE VISIBILIDAD) ---
 export async function getAppointmentsData() { 
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(10000))); 
     const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    apps.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-    return hydrateAppointments(apps);
+    const hydrated = await hydrateAppointments(apps);
+    hydrated.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
+    return hydrated;
 }
 
 export async function getLabAppointmentsData() {
     const s = await getDocs(query(collection(adminDb, 'labAppointments'), limit(10000)));
     const apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    apps.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-    return hydrateAppointments(apps);
+    const hydrated = await hydrateAppointments(apps);
+    hydrated.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
+    return hydrated;
 }
 
 export async function getXRayAppointmentsData() {
     const s = await getDocs(query(collection(adminDb, 'xrayAppointments'), limit(10000)));
     const apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    apps.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-    return hydrateAppointments(apps);
+    const hydrated = await hydrateAppointments(apps);
+    hydrated.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
+    return hydrated;
 }
 
 export async function getUltrasoundAppointmentsData() {
     const s = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), limit(10000)));
     const apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    apps.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-    return hydrateAppointments(apps);
+    const hydrated = await hydrateAppointments(apps);
+    hydrated.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
+    return hydrated;
 }
 
 export async function getVaccineAppointmentsData() {
     const s = await getDocs(query(collection(adminDb, 'vaccineAppointments'), limit(10000)));
     const apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    apps.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-    return hydrateAppointments(apps);
+    const hydrated = await hydrateAppointments(apps);
+    hydrated.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
+    return hydrated;
 }
 
 export async function updateAppointmentStatus(id: string, status: string, type: string) {
@@ -398,8 +406,9 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
 export async function getAppointmentsForClinic(cid: string) {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(10000)));
     const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    apps.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-    return hydrateAppointments(apps);
+    const hydrated = await hydrateAppointments(apps);
+    hydrated.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    return hydrated;
 }
 
 export async function getAppointmentCountOnDate(clinicId: string, date: string) {
@@ -409,11 +418,10 @@ export async function getAppointmentCountOnDate(clinicId: string, date: string) 
 }
 
 export async function getAvailableSlotsForDate(clinicId: string, date: string) {
-    // Retorna slots simulados para clonador (reemplazar por lógica real de ser necesario)
     return { timeSlots: ["08:00", "08:30", "09:00", "09:30", "10:00"], tokens: [1, 2, 3, 4, 5] };
 }
 
-// --- CLÍNICAS ---
+// --- CLÍNICAS (BLINDAJE DE VACACIONES) ---
 export async function getClinicsData() { 
     const s = await getDocs(collection(adminDb, 'clinics')); 
     const results = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); 
@@ -502,7 +510,7 @@ export async function getPrescriptionsByPatientId(pid: string) {
     return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); 
 }
 
-// --- CONFIGURACIÓN SEGURIDAD ---
+// --- CONFIGURACIÓN ---
 export async function getAdminSettingsData(): Promise<AdminSettings> { const s = await getDoc(doc(adminDb, 'settings', 'adminSettings')); return s.exists() ? serializeData(s.data()) : { password: 'Hu1m4ngu1ll0' }; }
 export async function updateAdminSettings(s: AdminSettings) { await setDoc(doc(adminDb, 'settings', 'adminSettings'), s, { merge: true }); return { success: true }; }
 export async function getArchiveSettings(): Promise<ArchiveSettings> { const s = await getDoc(doc(adminDb, 'settings', 'archiveSettings')); return s.exists() ? serializeData(s.data()) : { password: '2026' }; }
@@ -528,7 +536,7 @@ export async function updateServiceTypes(t: any[]) { const b = writeBatch(adminD
 export async function getSpecialtiesData() { const s = await getDocs(collection(adminDb, 'specialties')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateSpecialties(t: any[]) { const b = writeBatch(adminDb); t.forEach(x => b.set(doc(adminDb, 'specialties', x.id), x)); await b.commit(); return { success: true }; }
 
-// --- SERVICIOS AUXILIARES ---
+// --- AUXILIARES ---
 export async function getLabSettings() { const s = await getDoc(doc(adminDb, 'settings', 'labSettings')); return s.exists() ? serializeData(s.data()) : { dailySlots: 10, waitlistSlots: 0, weekendBookingEnabled: false, startTime: '08:00', endTime: '13:00' }; }
 export async function updateLabSettings(s: any) { await setDoc(doc(adminDb, 'settings', 'labSettings'), s, { merge: true }); return { success: true }; }
 export async function getLabStudies() { const s = await getDocs(collection(adminDb, 'labStudies')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
@@ -549,7 +557,7 @@ export async function updateVaccineSettings(s: any) { await setDoc(doc(adminDb, 
 export async function getVaccines() { const s = await getDocs(collection(adminDb, 'vaccines')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateVaccines(s: any[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'vaccines', x.id), x)); await b.commit(); return { success: true }; }
 
-// --- FARMACIA ---
+// --- INVENTARIOS ---
 export async function getMedications() { const s = await getDocs(query(collection(adminDb, 'medications'), limit(5000))); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function bulkInsertMedications(items: any[]) {
     const batch = writeBatch(adminDb);
@@ -605,8 +613,7 @@ export async function getAttendedPatientsForClinic(cid: string) {
     if (ids.length === 0) return [];
     const patients: Patient[] = [];
     for (let i = 0; i < ids.length; i += 30) {
-        const chunk = ids.slice(i, i + 30);
-        const psnap = await getDocs(query(collection(adminDb, 'patients'), where('__name__', 'in', chunk)));
+        const psnap = await getDocs(query(collection(adminDb, 'patients'), where('__name__', 'in', ids.slice(i, i+30))));
         psnap.forEach(d => patients.push({ ...d.data(), id: d.id } as Patient));
     }
     return serializeData(patients);
