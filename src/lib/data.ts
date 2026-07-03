@@ -219,7 +219,7 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     } else if (options?.searchName) {
         q = query(colRef, where('name', '>=', options.searchName.toUpperCase()), where('name', '<=', options.searchName.toUpperCase() + '\uf8ff'), limit(500));
     } else {
-        q = query(colRef, limit(options?.limitNum || 2000));
+        q = query(colRef, limit(options?.limitNum || 5000));
     }
     const s = await getDocs(q);
     return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })) as Patient[];
@@ -299,9 +299,10 @@ export async function bulkInsertPatients(patients: any[]) {
     return { success: true, processedCount: count };
 }
 
-// --- GESTIÓN DE CITAS (CRITICAL FIX FOR 10,000 LIMIT) ---
+// --- GESTIÓN DE CITAS ---
 export async function getAppointmentsData() { 
-    const windowStart = subDays(new Date(), 15).toISOString();
+    // Priorizamos citas desde hace 2 días hacia el futuro para no saturar el límite de 10,000
+    const windowStart = subDays(new Date(), 2).toISOString();
     const q = query(
         collection(adminDb, 'appointments'), 
         where('date', '>=', windowStart),
@@ -343,7 +344,7 @@ export async function getAvailableSlotsForDate(clinicId: string, date: string) {
         where('clinicId', '==', clinicId), 
         where('date', '>=', dOnly), 
         where('date', '<=', dOnly + 'T23:59:59'),
-        limit(100)
+        limit(500)
     );
     const snap = await getDocs(q);
     const booked = snap.docs.map(d => d.data().time);
@@ -459,7 +460,7 @@ export async function getAppointmentsForClinic(cid: string) {
 
 export async function getAppointmentCountOnDate(cid: string, d: string) { 
     const dOnly = d.split('T')[0]; 
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), where('date', '>=', dOnly), where('date', '<=', dOnly + 'T23:59:59')); 
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), where('date', '>=', dOnly), where('date', '<=', dOnly + 'T23:59:59'), limit(500)); 
     const s = await getCountFromServer(q); 
     return s.data().count; 
 }
