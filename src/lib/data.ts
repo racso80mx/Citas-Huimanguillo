@@ -129,45 +129,38 @@ export async function getLogsData() {
     return snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
 }
 
-// --- MOTOR DE HIDRATACIÓN UNIVERSAL (ELIMINA LOS N/A) ---
+// --- MOTOR DE HIDRATACIÓN UNIVERSAL ---
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     
-    // Identificar todos los IDs de pacientes únicos (pueden ser CURPs)
     const patientIds = Array.from(new Set(appointments.map(a => a.patientId).filter(id => !!id)));
     const patientsMap: Record<string, any> = {};
 
-    // Consultamos por lotes de 30 (límite de Firestore para el operador 'in')
     for (let i = 0; i < patientIds.length; i += 30) {
         const chunk = patientIds.slice(i, i + 30);
         
-        // 1. Buscar por ID de documento (Rápido)
         const qById = query(collection(adminDb, 'patients'), where(documentId(), 'in', chunk));
         const snapById = await getDocs(qById);
         snapById.forEach(d => {
             patientsMap[d.id] = serializeData({ ...d.data(), id: d.id });
         });
 
-        // 2. Buscar por campo CURP (Redundancia por si el ID no es el CURP)
         const qByCurp = query(collection(adminDb, 'patients'), where('curp', 'in', chunk));
         const snapByCurp = await getDocs(qByCurp);
         snapByCurp.forEach(d => {
-            patientsMap[d.data().curp] = serializeData({ ...d.data(), id: d.id });
+            const data = d.data();
+            patientsMap[data.curp] = serializeData({ ...data, id: d.id });
         });
     }
 
     return appointments.map(app => {
-        // Intentar encontrar los datos del paciente en el mapa
         const pData = patientsMap[app.patientId] || patientsMap[app.patient?.curp];
-        
-        // Si no hay datos hidratados, pero el objeto 'patient' ya trae info básica, la usamos.
-        // Si no hay nada, ponemos valores por defecto para evitar N/A feos.
-        const finalPatient = pData || (app.patient && app.patient.name ? app.patient : {
+        const finalPatient = pData || (app.patient && app.patient.name ? serializeData(app.patient) : {
             name: 'PACIENTE',
             paternalLastName: 'REGISTRADO',
             maternalLastName: '',
             curp: app.patientId || 'S/C',
-            phoneNumber: 'S/T'
+            phoneNumber: 'N/A'
         });
 
         return {
@@ -268,7 +261,7 @@ export async function bulkInsertPatients(patients: any[]) {
     return { success: true, processedCount: count };
 }
 
-// --- GESTIÓN DE CITAS (VISIBILIDAD TOTAL) ---
+// --- GESTIÓN DE CITAS ---
 export async function getAppointmentsData() { 
     const q = query(collection(adminDb, 'appointments'), orderBy('date', 'desc'), limit(10000));
     const snap = await getDocs(q); 
