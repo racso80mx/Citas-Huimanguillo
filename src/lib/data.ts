@@ -51,9 +51,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { startOfDay, subDays } from 'date-fns';
 
 /**
- * MOTOR DE SERIALIZACIÓN AGRESIVO
- * Convierte Timestamps, Dates y Referencias a strings ISO de forma recursiva.
- * Evita errores de tipo en operaciones como .localeCompare()
+ * MOTOR DE SERIALIZACIÓN INFALIBLE
+ * Convierte cualquier tipo de dato de Firestore a primitivos serializables.
+ * Especialmente diseñado para manejar Timestamps y Referencias sin errores de tipo.
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return data;
@@ -67,8 +67,11 @@ export function serializeData(data: any): any {
   if (data instanceof Date) return data.toISOString();
   
   // Si es un objeto que parece Timestamp (segundos/nanosegundos)
-  if (data && typeof data === 'object' && 'seconds' in data && 'nanoseconds' in data) {
-      try { return new Date(data.seconds * 1000).toISOString(); } catch(e) { return JSON.stringify(data); }
+  if (data && typeof data === 'object' && 'seconds' in data) {
+      try { 
+          const secs = Number(data.seconds);
+          if (!isNaN(secs)) return new Date(secs * 1000).toISOString(); 
+      } catch(e) { }
   }
   
   // Si es una referencia de documento
@@ -96,7 +99,6 @@ export function serializeData(data: any): any {
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     
-    // Obtener todos los IDs de pacientes únicos para una sola consulta masiva
     const patientIds = Array.from(new Set(appointments.map(a => {
         if (a.patientId instanceof DocumentReference) return a.patientId.id;
         return String(a.patientId || '');
@@ -117,10 +119,9 @@ async function hydrateAppointments(appointments: any[]) {
 
     return appointments.map(app => {
         const pid = app.patientId;
-        // Prioridad: 1. Padrón real, 2. Respaldo en la cita, 3. Datos de emergencia
         const patientData = patientsMap[pid] || app.patient || { 
             name: 'PACIENTE', 
-            paternalLastName: 'SIN VÍNCULO', 
+            paternalLastName: 'DESCONOCIDO', 
             maternalLastName: '',
             curp: pid || 'S/C', 
             phoneNumber: 'N/A' 
@@ -147,7 +148,6 @@ export async function logActivity(action: string, details: string) {
 export async function getLogsData() {
     const snap = await getDocs(query(collection(adminDb, 'activityLog'), limit(500)));
     let logs = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-    // Ordenación manual segura
     logs.sort((a: any, b: any) => {
         const tA = a.timestamp?.seconds || 0;
         const tB = b.timestamp?.seconds || 0;
@@ -185,24 +185,21 @@ export async function updateModuleSettings(s: ModuleSettings) {
     return { success: true };
 }
 
-// --- PACIENTES (SMART-MATCH SEARCH) ---
+// --- PACIENTES (BÚSQUEDA INTELIGENTE SMART-SEARCH) ---
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     
-    // Búsqueda por CURP (Exacta)
     if (options?.searchCurp) {
         const s = await getDocs(query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(1)));
         if (!s.empty) return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
     
-    // Búsqueda por Expediente
     if (options?.searchExpediente) {
         const term = options.searchExpediente.trim();
         const s = await getDocs(query(colRef, where('expediente', 'in', [term, '0' + term]), limit(10)));
         if (!s.empty) return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
 
-    // MOTOR INTELIGENTE: Búsqueda por múltiples palabras en Nombre/Apellidos
     if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
         const words = term.split(/\s+/).filter(w => w.length >= 2);
@@ -210,9 +207,9 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
         if (words.length > 0) {
             const first = words[0];
             const queries = [
-                query(colRef, where('name', '>=', first), where('name', '<=', first + '\uf8ff'), limit(300)),
-                query(colRef, where('paternalLastName', '>=', first), where('paternalLastName', '<=', first + '\uf8ff'), limit(300)),
-                query(colRef, where('maternalLastName', '>=', first), where('maternalLastName', '<=', first + '\uf8ff'), limit(300))
+                query(colRef, where('name', '>=', first), where('name', '<=', first + '\uf8ff'), limit(500)),
+                query(colRef, where('paternalLastName', '>=', first), where('paternalLastName', '<=', first + '\uf8ff'), limit(500)),
+                query(colRef, where('maternalLastName', '>=', first), where('maternalLastName', '<=', first + '\uf8ff'), limit(500))
             ];
             
             const snaps = await Promise.all(queries.map(q => getDocs(q)));
@@ -221,7 +218,6 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
             
             let results = Array.from(combinedMap.values());
             
-            // Refinar resultados con las demás palabras clave (AND logic)
             if (words.length > 1) {
                 results = results.filter(p => {
                     const full = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
@@ -233,13 +229,11 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
                 results = results.filter(p => p.status === options.status);
             }
             
-            // Ordenación manual segura
             results.sort((a,b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
             return serializeData(results.slice(0, 500));
         }
     }
 
-    // Consulta General (Visibilidad hasta 10,000 registros para auditoría total)
     let qBase = query(colRef, limit(options?.limitNum || 10000));
     if (options?.status && options.status !== 'Total') {
         qBase = query(colRef, where('status', '==', options.status), limit(10000));
@@ -247,7 +241,6 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     
     const snap = await getDocs(qBase);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
-    // Ordenación manual segura para evitar errores de índice de Firebase
     results.sort((a,b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
     
     return serializeData(results);
@@ -311,10 +304,14 @@ export async function bulkInsertPatients(patients: any[]) {
             maternalLastName: String(p.Amaterno || p.maternalLastName || '').toUpperCase().trim(),
             expediente: String(p['No.Expediente'] || p.expediente || '').trim(),
             birthDate: String(p.FNacimiento || p.birthDate || '').trim(),
-            sex: (p.Sexo || p.sex || 'H').startsWith('H') ? 'Hombre' : 'Mujer',
+            sex: String(p.Sexo || p.sex || 'H').startsWith('H') ? 'Hombre' : 'Mujer',
             age: Number(p.Edad || p.age || 0),
             phoneNumber: String(p.Telefono || p.phoneNumber || '').trim(),
             status: p.Estatus || p.status || PatientStatus.Vigente,
+            address: String(p.Domicilio || p.address || '').toUpperCase().trim(),
+            coloniaName: String(p.Colonia || p.coloniaName || '').toUpperCase().trim(),
+            registrationDate: String(p.FechaApertura || p.registrationDate || '').trim(),
+            derechoAbiencia: String(p.DerechoAbiencia || p.derechoAbiencia || '').toUpperCase().trim(),
         };
         batch.set(ref, mapped, { merge: true });
     }
@@ -322,11 +319,11 @@ export async function bulkInsertPatients(patients: any[]) {
     return { success: true, processedCount: patients.length };
 }
 
-// --- CITAS (MANTENIMIENTO DE VISIBILIDAD TOTAL) ---
+// --- CITAS ---
 export async function getAppointmentsData() { 
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(10000))); 
     let apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    // Ordenación manual descendente por fecha de forma segura
+    // ORDENACIÓN SEGURA: Forzamos String() para evitar errores de localeCompare
     apps.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
     return hydrateAppointments(apps);
 }
@@ -395,7 +392,6 @@ export async function cloneAppointment(id: string, date: string, type: string, t
 
 export async function saveNewAppointment(appointment: any, patient: any, isDouble: boolean, colonia?: string) {
     const patientRef = doc(adminDb, 'patients', patient.curp);
-    // Persistencia dual: guardamos en padrón y adjuntamos snapshot a la cita
     await setDoc(patientRef, { ...patient, id: patient.curp }, { merge: true });
     
     const id = uuidv4();
@@ -404,7 +400,7 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
         ...appointment,
         id, appointmentNumber,
         patientId: patient.curp,
-        patient: serializeData(patient), // Backup snapshot
+        patient: serializeData(patient),
         coloniaName: colonia || null,
         createdAt: new Date().toISOString(),
         isDoubleSlot: isDouble
@@ -428,11 +424,10 @@ export async function getAppointmentCountOnDate(clinicId: string, date: string) 
 }
 
 export async function getAvailableSlotsForDate(clinicId: string, date: string) {
-    // Implementación simulada de slots para clonación
     return { timeSlots: ["08:00", "08:30", "09:00", "09:30", "10:00"], tokens: [1, 2, 3, 4, 5] };
 }
 
-// --- CLÍNICAS (BLINDAJE DE VACACIONES Y HORARIOS) ---
+// --- CLÍNICAS (BLINDAJE DE PERSISTENCIA) ---
 export async function getClinicsData() { 
     const s = await getDocs(collection(adminDb, 'clinics')); 
     const results = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); 
@@ -443,12 +438,11 @@ export async function updateClinics(clinics: Clinic[]) {
     const b = writeBatch(adminDb);
     for (const x of clinics) {
         const ref = doc(adminDb, 'clinics', x.id);
-        // PROTECCIÓN: Solo mezclamos arreglos si vienen definidos, evitando borrados accidentales
         const mappedData = {
             ...x,
-            unavailableDates: x.unavailableDates || [],
-            daysOfAction: x.daysOfAction || [],
-            customSchedules: x.customSchedules || []
+            unavailableDates: Array.isArray(x.unavailableDates) ? x.unavailableDates : [],
+            daysOfAction: Array.isArray(x.daysOfAction) ? x.daysOfAction : [],
+            customSchedules: Array.isArray(x.customSchedules) ? x.customSchedules : []
         };
         b.set(ref, mappedData, { merge: true });
     }
