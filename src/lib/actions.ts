@@ -166,18 +166,18 @@ export async function getBISettings() { return data.getBISettings(); }
 export async function updateBISettings(s: BISettings) { return data.updateBISettings(s); }
 
 // --- CATÁLOGOS ---
-export async function getServiceTypes() { return data.getServiceTypesData(); }
-export async function updateServiceTypes(t: any[]) { return data.updateServiceTypes(t); }
-export async function getSpecialties() { return data.getSpecialtiesData(); }
-export async function updateSpecialties(t: any[]) { return data.updateSpecialties(t); }
-export async function getColonias() { return data.getColoniasData(); }
-export async function updateColonias(c: Colonia[]) { return data.updateColonias(c); }
-export async function getAnnouncements() { return data.getAnnouncementsData(); }
-export async function updateAnnouncements(m: string[]) { return data.updateAnnouncements(m); }
 export async function getHolidays() { return data.getHolidaysData(); }
 export async function updateHolidays(h: Holiday[]) { return data.updateHolidays(h); }
 export async function getSpecialActionDays() { return data.getSpecialActionDaysData(); }
 export async function updateSpecialActionDays(i: SpecialActionDay[]) { return data.updateSpecialActionDays(i); }
+export async function getColonias() { return data.getColoniasData(); }
+export async function updateColonias(c: Colonia[]) { return data.updateColonias(c); }
+export async function getAnnouncements() { return data.getAnnouncementsData(); }
+export async function updateAnnouncements(m: string[]) { return data.updateAnnouncements(m); }
+export async function getServiceTypes() { return data.getServiceTypesData(); }
+export async function updateServiceTypes(t: any[]) { return data.updateServiceTypes(t); }
+export async function getSpecialties() { return data.getSpecialtiesData(); }
+export async function updateSpecialties(t: any[]) { return data.updateSpecialties(t); }
 
 export async function getLabSettings() { return data.getLabSettings(); }
 export async function updateLabSettings(s: LabSettings) { return data.updateLabSettings(s); }

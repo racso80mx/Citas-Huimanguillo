@@ -233,7 +233,6 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     }
 
     // 2. Consulta a Base de Datos (Limitada a 10,000 para procesamiento en memoria)
-    // Esto evita errores de índices compuestos en Firebase.
     const snap = await getDocs(query(colRef, limit(10000)));
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
 
@@ -288,6 +287,12 @@ export async function rebuildNombreCompletoAction() {
     return { success: true, count };
 }
 
+export async function getPatientByCURP(curp: string) {
+    const s = await getDoc(doc(adminDb, 'patients', curp.toUpperCase().trim()));
+    if (s.exists()) return { success: true, data: serializeData({ ...s.data(), id: s.id }) };
+    return { success: false };
+}
+
 export async function savePatient(p: Omit<Patient, 'id'>, id: string) {
     const finalId = id || p.curp.toUpperCase().trim();
     const nombreCompleto = generateNombreCompleto(p);
@@ -326,17 +331,14 @@ export async function deletePatients(ids: string[]) {
 
 export async function getPatientCounts(): Promise<ArchiveCounts> {
     const colRef = collection(adminDb, 'patients');
-    const [total, v, bt, bd] = await Promise.all([
-        getCountFromServer(colRef),
-        getCountFromServer(query(colRef, where('status', '==', PatientStatus.Vigente))),
-        getCountFromServer(query(colRef, where('status', '==', PatientStatus.Baja))),
-        getCountFromServer(query(colRef, where('status', '==', PatientStatus.BajaDefinitiva)))
-    ]);
+    const snap = await getDocs(query(colRef, limit(20000)));
+    const patients = snap.docs.map(d => d.data());
+    
     return {
-        total: total.data().count,
-        vigente: v.data().count,
-        bajaTemporal: bt.data().count,
-        bajaDefinitiva: bd.data().count
+        total: patients.length,
+        vigente: patients.filter(p => p.status === PatientStatus.Vigente || !p.status).length,
+        bajaTemporal: patients.filter(p => p.status === PatientStatus.Baja).length,
+        bajaDefinitiva: patients.filter(p => p.status === PatientStatus.BajaDefinitiva).length
     };
 }
 
