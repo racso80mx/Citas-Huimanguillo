@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -93,7 +92,7 @@ import {
 import { es } from 'date-fns/locale';
 import { DateRange } from 'react-day-picker';
 import { Calendar } from '../ui/calendar';
-import { generateArchiveListPDF } from '@/lib/report-helpers';
+import { generateArchiveListPDF, downloadExcel } from '@/lib/report-helpers';
 import { Label } from '../ui/label';
 
 type DateFilterType = 'today' | 'tomorrow' | 'week' | 'month' | 'range';
@@ -268,6 +267,21 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     return filtered.sort((a, b) => a.time.localeCompare(b.time));
   }, [allAppointments, selectedClinics, selectedClinicType, dateFilter, dateRange, serviceTypes, clinics, searchTerm]);
 
+  const handleAppointmentDelete = (id: string) => {
+    startSubmitTransition(async () => {
+      const res = await deleteAppointment(id);
+      if (res.success) {
+        toast({ title: 'Cita Eliminada' });
+        loadData(true);
+      }
+    });
+  };
+
+  const handleExportExcel = () => {
+    if (patients.length === 0) return;
+    downloadExcel(patients, `padron_pacientes_${statusFilter}`);
+  };
+
   return (
     <div className="container mx-auto px-4 py-6">
       <Card className="border-none shadow-none bg-transparent mb-6">
@@ -321,7 +335,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                 </div>
                 <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-dashed">
                     {!isReadOnly && <><Button onClick={handleAddNew} size="sm" className="font-bold"><PlusCircle className="mr-2 h-4 w-4" /> Nuevo Paciente</Button><Button onClick={() => setIsUploadOpen(true)} variant="secondary" size="sm" className="font-bold"><Upload className="mr-2 h-4 w-4" /> Cargar Excel</Button></>}
-                    <Button onClick={handleDownloadExcel} variant="outline" size="sm" className="font-bold"><Download className="mr-2 h-4 w-4" /> Exportar</Button>
+                    <Button onClick={handleExportExcel} variant="outline" size="sm" className="font-bold"><Download className="mr-2 h-4 w-4" /> Exportar</Button>
                 </div>
             </CardHeader>
             <CardContent className="relative min-h-[400px] pt-4">
@@ -371,6 +385,31 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                                 <SelectTrigger className="h-10 w-[220px] bg-background font-bold uppercase text-xs"><SelectValue placeholder="Categoría" /></SelectTrigger>
                                 <SelectContent><SelectItem value="all">Todas</SelectItem>{serviceTypes.map(s => <SelectItem key={s.id} value={s.name} className="uppercase font-bold text-xs">{s.name}</SelectItem>)}</SelectContent>
                             </Select>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" className="h-10 border-dashed bg-background border-primary/20 font-bold text-xs">
+                                        <Plus className="mr-2 h-4 w-4 text-primary" />
+                                        Filtrar Consultorio
+                                        {selectedClinics.length > 0 && <Badge className="ml-2 px-1 bg-primary text-white">{selectedClinics.length}</Badge>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[280px] p-0" align="start">
+                                    <Command>
+                                        <CommandInput placeholder="Buscar unidad..." className="h-9" />
+                                        <CommandList>
+                                            <CommandEmpty>No hay resultados.</CommandEmpty>
+                                            <CommandGroup>
+                                                {clinics.filter(c => selectedClinicType === 'all' || c.serviceTypeId === selectedClinicType).map(c => (
+                                                    <CommandItem key={c.id} onSelect={() => setSelectedClinics(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])}>
+                                                        <div className={cn("mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary", selectedClinics.includes(c.id) ? "bg-primary text-white" : "opacity-50 [&_svg]:invisible")}><Check className="h-4 w-4" /></div>
+                                                        <span className="text-xs font-bold uppercase">{c.name}</span>
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                             <div className="relative flex-1">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input placeholder="Buscar por Nombre, Folio o CURP..." className="pl-9 h-11 border-primary/20 bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
@@ -390,12 +429,4 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
       <MassUploadDialog isOpen={isUploadOpen} onClose={() => setIsUploadOpen(false)} onUploadSuccess={() => loadData(true)} />
     </div>
   );
-}
-
-function handleAppointmentDelete(id: string) {
-    // Implementada internamente via startSubmitTransition
-}
-
-function handleDownloadExcel() {
-    // Implementada internamente via xlsx
 }

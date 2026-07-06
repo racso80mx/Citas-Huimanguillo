@@ -1,4 +1,3 @@
-
 import { z } from 'zod';
 
 export type ActivityLog = {
@@ -103,6 +102,7 @@ export type Clinic = {
   specialtyId?: string;
   bookingMode: BookingMode;
   consultationDuration?: number;
+  clinicType?: string;
 };
 
 export type ServiceType = {
@@ -489,17 +489,17 @@ export type Cie10Record = {
     esSuiveEstEpi: string;
     esSuiveEstBrote: string;
     sinac: string;
-    prin_sinac: string;
-    prin_sinac_grupo: string;
-    descripcion_sinac_grupo: string;
-    prin_sinac_subgrupo: string;
-    descripcion_sinac_subgrupo: string;
+    prinSinac: string;
+    prinSinacGrupo: string;
+    descripcionSinacGrupo: string;
+    prinSinacSubgrupo: string;
+    descripcionSinacSubgrupo: string;
     daga: string;
     asterisco: string;
-    prin_mm: string;
-    prin_mm_grupo: string;
-    descripcion_mm_grupo: string;
-    prin_mm_subgrupo: string;
-    descripcion_mm_subgrupo: string;
-    cod_adi_mort: string;
+    prinMm: string;
+    prinMmGrupo: string;
+    descripcionMmGrupo: string;
+    prinMmSubgrupo: string;
+    descripcionMmSubgrupo: string;
+    codAdiMort: string;
 };
