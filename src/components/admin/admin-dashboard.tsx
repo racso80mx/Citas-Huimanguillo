@@ -26,6 +26,7 @@ import {
   Calendar as CalendarIcon,
   Hospital,
   LayoutGrid,
+  ShieldAlert
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ClinicsManager } from './clinics-manager';
@@ -67,6 +68,7 @@ import { Badge } from '../ui/badge';
 import { Label } from '../ui/label';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '../ui/command';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 function ServiceTypesManager() {
   const [types, setTypes] = useState<any[]>([]);
@@ -209,12 +211,10 @@ function AppointmentsViewer() {
         }
         results = list.filter(dateFilterFn);
 
-        // Los filtros de unidad y categoría SOLO aplican a la pestaña de Cita Médica
         if (isMedicalTab) {
             if (selectedServiceType !== 'all') {
                 results = results.filter(a => a.clinicId && data.clinics.find((c: any) => c.id === a.clinicId)?.serviceTypeId === selectedServiceType);
             }
-
             if (selectedClinics.length > 0) {
                 results = results.filter(a => a.clinicId && selectedClinics.includes(a.clinicId));
             }
@@ -308,7 +308,7 @@ function AppointmentsViewer() {
                                                 {data.clinics.filter((c: any) => selectedServiceType === 'all' || c.serviceTypeId === selectedServiceType).map((c: any) => (
                                                     <CommandItem key={c.id} onSelect={() => setSelectedClinics(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])}>
                                                         <div className={cn("mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary", selectedClinics.includes(c.id) ? "bg-primary text-white" : "opacity-50 [&_svg]:invisible")}><Check className="h-4 w-4" /></div>
-                                                        <span className="text-xs uppercase font-bold">{c.name}</span>
+                                                        <span className="text-xs font-bold uppercase">{c.name}</span>
                                                     </CommandItem>
                                                 ))}
                                             </CommandGroup>
@@ -370,6 +370,20 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
             <div className="grid lg:grid-cols-2 gap-8">
                 <ClinicsManager />
                 <div className="space-y-8">
+                    <Card className="bg-destructive/5 border-destructive/20 shadow-lg">
+                        <CardHeader>
+                            <CardTitle className="text-sm font-black uppercase text-destructive flex items-center gap-2">
+                                <ShieldAlert className="h-5 w-5" /> Herramientas Especiales
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <Button asChild variant="destructive" className="w-full font-black uppercase">
+                                <Link href="/admin/duplicates">
+                                    Mantenimiento y Duplicados
+                                </Link>
+                            </Button>
+                        </CardContent>
+                    </Card>
                     <AnnouncementsManager />
                     <BackupManager onRestoreSuccess={() => window.location.reload()} />
                     <HolidaysManager />
