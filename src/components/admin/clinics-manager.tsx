@@ -128,6 +128,7 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
             return;
         }
 
+        // Si se agregó una fecha nueva, validar conflictos de citas
         if (dates.length > prevDates.length) {
             const newDate = dates.find(d => !prevDates.includes(format(d, 'yyyy-MM-dd')));
             if (newDate) {
@@ -171,13 +172,6 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
 
     const removeCustomSchedule = (dateStr: string) => {
         handleFieldChange('customSchedules', editedClinic.customSchedules?.filter(s => s.date !== dateStr) || []);
-    };
-
-    const formatBadgeDate = (d: string) => {
-        try {
-            const dateObj = new Date(d + 'T12:00:00');
-            return isValid(dateObj) ? format(dateObj, 'dd/MM/yy', { locale: es }) : d;
-        } catch (e) { return d; }
     };
 
     const dynamicBreakSlots = useMemo(() => {
@@ -280,22 +274,21 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
 
                     <Separator />
 
-                    {/* TABLA DE VACACIONES Y BLOQUEOS TOTALES */}
                     <div className='space-y-6'>
                         <div className="flex items-center justify-between">
                             <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2">
-                                <CalendarDays className="h-5 w-5" /> 4. Historial de Vacaciones y Bloqueos Totales
+                                <CalendarDays className="h-5 w-5" /> 4. Vacaciones y Bloqueos Totales
                             </h4>
                             <Popover>
                                 <PopoverTrigger asChild>
                                     <Button variant="outline" className='h-11 font-black bg-destructive/5 text-destructive border-destructive/20 hover:bg-destructive/10'>
-                                        <CalendarPlus className="mr-2 h-5 w-5" /> AGENDAR DÍAS DE BLOQUEO
+                                        <CalendarPlus className="mr-2 h-5 w-5" /> SELECCIONAR DÍAS DE BLOQUEO
                                     </Button>
                                 </PopoverTrigger>
                                 <PopoverContent className='w-auto p-0' align="end">
                                     <Calendar 
                                         mode="multiple" 
-                                        selected={editedClinic.unavailableDates?.map(d => new Date(d + 'T12:00:00'))} 
+                                        selected={(editedClinic.unavailableDates || []).map(d => new Date(d + 'T12:00:00'))} 
                                         onSelect={handleDateSelection} 
                                         locale={es} 
                                         disabled={{ before: new Date() }} 
@@ -338,7 +331,6 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
 
                     <Separator />
 
-                    {/* HORARIOS ESPECIALES */}
                     <div className="space-y-6">
                         <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2"><Timer className="h-5 w-5" /> 5. Salidas Tempranas y Horarios Especiales</h4>
                         <div className="grid sm:grid-cols-3 gap-6 items-end bg-blue-50/50 p-6 rounded-3xl border border-blue-100 shadow-sm">

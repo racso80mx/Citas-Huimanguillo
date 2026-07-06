@@ -58,7 +58,6 @@ import { startOfDay, subDays } from 'date-fns';
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return '';
   
-  // Detección de Timestamps de Firestore o fechas
   if (typeof data.toDate === 'function') {
     return data.toDate().toISOString();
   }
@@ -88,7 +87,6 @@ export function serializeData(data: any): any {
 
 /**
  * HIDRATACIÓN DE CITAS
- * Vincula citas con pacientes de forma robusta.
  */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
@@ -213,33 +211,28 @@ export async function verifyClinicPassword(id: string, password: string) {
     return { success: false, message: 'Contraseña de unidad incorrecta.' };
 }
 
-// --- PACIENTES (BÚSQUEDA INTELIGENTE SMART-MATCH) ---
+// --- PACIENTES ---
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     
-    // 1. PRIORIDAD: Búsqueda exacta por CURP
     if (options?.searchCurp) {
         const s = await getDocs(query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(1)));
         return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
     
-    // 2. PRIORIDAD: Búsqueda exacta por Expediente
     if (options?.searchExpediente) {
         const term = options.searchExpediente.trim();
         const s = await getDocs(query(colRef, where('expediente', 'in', [term, '0' + term]), limit(20)));
         if (!s.empty) return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
 
-    // 3. CONSULTA GENERAL (Con límite amplio para evitar puntos ciegos)
     const snap = await getDocs(query(colRef, limit(10000)));
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
 
-    // 4. FILTRO DE ESTATUS (Se hace en memoria para evitar errores de índice de Firebase)
     if (options?.status && options.status !== 'Total') {
         results = results.filter(p => p.status === options.status);
     }
 
-    // 5. BÚSQUEDA POR NOMBRE (Smart-Match multi-campo)
     if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
         const words = term.split(/\s+/).filter(w => w.length >= 2);
@@ -250,7 +243,6 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
         });
     }
 
-    // 6. ORDENACIÓN EN MEMORIA (Elimina permanentemente el FirebaseError de Índices)
     results.sort((a, b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
     
     return serializeData(results.slice(0, 500));
@@ -430,32 +422,91 @@ export async function deleteXRayAppointment(id: string) { await deleteDoc(doc(ad
 export async function deleteUltrasoundAppointment(id: string) { await deleteDoc(doc(adminDb, 'ultrasoundAppointments', id)); return { success: true }; }
 export async function deleteVaccineAppointment(id: string) { await deleteDoc(doc(adminDb, 'vaccineAppointments', id)); return { success: true }; }
 
-// --- CLÍNICAS ---
+// --- CLÍNICAS Y TABLA DE BLOQUEOS (TABLA APARTE) ---
 export async function getClinicsData() { 
-    const s = await getDocs(collection(adminDb, 'clinics')); 
-    const results = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); 
-    return results.sort((a,b) => String(a.name || '').localeCompare(String(b.name || '')));
+    const [clinicsSnap, blocksSnap] = await Promise.all([
+        getDocs(collection(adminDb, 'clinics')),
+        getDocs(collection(adminDb, 'clinicBlocks'))
+    ]);
+    
+    const blocks = blocksSnap.docs.map(d => serializeData(d.data()));
+    const clinics = clinicsSnap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+
+    return clinics.map(clinic => {
+        const clinicBlocks = blocks.filter(b => b.clinicId === clinic.id);
+        return {
+            ...clinic,
+            unavailableDates: clinicBlocks.filter(b => b.type === 'vacation').map(b => b.date),
+            customSchedules: clinicBlocks.filter(b => b.type === 'custom').map(b => ({
+                date: b.date,
+                endTime: b.endTime,
+                reason: b.reason
+            }))
+        };
+    }).sort((a,b) => String(a.name || '').localeCompare(String(b.name || '')));
 }
 
 export async function updateClinics(clinics: Clinic[]) { 
     const b = writeBatch(adminDb);
+    
+    // Obtener bloqueos actuales para manejar eliminaciones
+    const currentBlocksSnap = await getDocs(collection(adminDb, 'clinicBlocks'));
+    const currentBlocks = currentBlocksSnap.docs.map(d => ({ id: d.id, ...serializeData(d.data()) }));
+
     for (const x of clinics) {
-        const ref = doc(adminDb, 'clinics', x.id);
-        const current = await getDoc(ref);
-        const baseData = current.exists() ? current.data() : {};
+        const clinicRef = doc(adminDb, 'clinics', x.id);
+        const { unavailableDates, customSchedules, ...clinicData } = x;
         
-        const mappedData: any = { 
-            ...baseData,
-            ...x 
-        };
-        Object.keys(mappedData).forEach(key => mappedData[key] === undefined && delete mappedData[key]);
-        b.set(ref, mappedData, { merge: true });
+        const finalClinicData = { ...clinicData };
+        Object.keys(finalClinicData).forEach(key => finalClinicData[key] === undefined && delete finalClinicData[key]);
+        b.set(clinicRef, finalClinicData, { merge: true });
+
+        const newBlockIds = new Set<string>();
+        
+        // Guardar en tabla aparte: Vacaciones
+        if (unavailableDates) {
+            for (const date of unavailableDates) {
+                const blockId = `${x.id}_${date}`;
+                newBlockIds.add(blockId);
+                b.set(doc(adminDb, 'clinicBlocks', blockId), { clinicId: x.id, date, type: 'vacation' });
+            }
+        }
+
+        // Guardar en tabla aparte: Horarios Especiales
+        if (customSchedules) {
+            for (const sched of customSchedules) {
+                const blockId = `${x.id}_${sched.date}`;
+                newBlockIds.add(blockId);
+                b.set(doc(adminDb, 'clinicBlocks', blockId), { 
+                    clinicId: x.id, 
+                    date: sched.date, 
+                    type: 'custom', 
+                    endTime: sched.endTime, 
+                    reason: sched.reason || 'Salida Temprana' 
+                });
+            }
+        }
+
+        // Limpiar bloqueos obsoletos de esta clínica
+        const blocksToDelete = currentBlocks.filter((cb: any) => cb.clinicId === x.id && !newBlockIds.has(cb.id));
+        blocksToDelete.forEach(block => b.delete(doc(adminDb, 'clinicBlocks', block.id)));
     }
+    
     await b.commit();
     return { success: true };
 }
 
-export async function deleteClinic(id: string) { await deleteDoc(doc(adminDb, 'clinics', id)); return { success: true }; }
+export async function deleteClinic(id: string) { 
+    const b = writeBatch(adminDb);
+    b.delete(doc(adminDb, 'clinics', id));
+    
+    // Borrar bloqueos asociados en la tabla aparte
+    const blocksSnap = await getDocs(query(collection(adminDb, 'clinicBlocks'), where('clinicId', '==', id)));
+    blocksSnap.forEach(d => b.delete(d.ref));
+    
+    await b.commit();
+    return { success: true }; 
+}
 
 // --- CONSULTAS Y RECETAS ---
 export async function getConsultationsByPatientId(pid: string) {

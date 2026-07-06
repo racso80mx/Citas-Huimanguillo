@@ -55,6 +55,19 @@
         "available": { "type": "boolean" }
       },
       "required": ["id", "name", "available"]
+    },
+    "ClinicBlock": {
+      "title": "Bloqueo de Agenda",
+      "type": "object",
+      "description": "Días de vacaciones o cierres especiales de un consultorio.",
+      "properties": {
+        "id": { "type": "string", "description": "clinicId_date" },
+        "clinicId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "type": { "type": "string", "enum": ["vacation", "custom"] },
+        "endTime": { "type": "string", "description": "Hora de cierre especial" },
+        "reason": { "type": "string" }
+      }
     }
   },
   "firestore": {
@@ -65,6 +78,10 @@
     "/specialties/{id}": {
       "schema": "#/entities/Specialty",
       "description": "Catálogo de especialidades médicas para especialistas."
+    },
+    "/clinicBlocks/{id}": {
+      "schema": "#/entities/ClinicBlock",
+      "description": "Tabla independiente para vacaciones y horarios especiales de unidades."
     }
   },
   "storage": {
