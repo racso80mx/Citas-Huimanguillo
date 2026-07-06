@@ -12,7 +12,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
   Loader2, 
-  LogOut, 
   Search, 
   Users, 
   UserCheck, 
@@ -141,48 +140,44 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     if (manualSearch) setHasSearched(true);
     
     try {
-      const searchOptions: any = { status: statusFilter };
-
-      if (manualSearch) {
-          if (searchCurp) searchOptions.searchCurp = searchCurp.toUpperCase().trim();
-          if (searchExpediente) searchOptions.searchExpediente = searchExpediente.trim();
-          if (searchName) searchOptions.searchName = searchName.toUpperCase().trim();
-      }
-
-      // Si no es búsqueda manual y no hay datos previos, solo traer metadatos
-      if (!manualSearch && !hasSearched && activeTab === 'patients') {
-          const [countsData, clinicsData, serviceTypesData, appointmentsData, coloniasData] = await Promise.all([
-            getPatientCounts(), getClinics(), getServiceTypes(), getAppointments(), getColonias()
-          ]);
-          setCounts(countsData);
-          setClinics(clinicsData);
-          setServiceTypes(serviceTypesData);
-          setAllAppointments(appointmentsData);
-          setColonias(coloniasData);
-          setIsDataLoading(false);
-          return;
-      }
-
-      const [patientsData, countsData, clinicsData, serviceTypesData, appointmentsData, coloniasData] = await Promise.all([
-        getPatients(searchOptions), getPatientCounts(), getClinics(), getServiceTypes(), getAppointments(), getColonias()
+      // 1. Cargar metadatos siempre (Conteos, Clínicas, etc)
+      const [countsData, clinicsData, serviceTypesData, coloniasData] = await Promise.all([
+        getPatientCounts(), getClinics(), getServiceTypes(), getColonias()
       ]);
-      
-      setPatients(patientsData);
       setCounts(countsData);
       setClinics(clinicsData);
       setServiceTypes(serviceTypesData);
-      setAllAppointments(appointmentsData);
       setColonias(coloniasData);
+
+      // 2. Cargar Agenda solo si se solicita o estamos en esa pestaña
+      if (activeTab === 'appointments' || manualSearch) {
+          const apps = await getAppointments();
+          setAllAppointments(apps);
+      }
+
+      // 3. Cargar Pacientes SOLO si es búsqueda manual
+      if (manualSearch && activeTab === 'patients') {
+          const searchOptions: any = { 
+              status: statusFilter,
+              searchCurp: searchCurp.toUpperCase().trim() || undefined,
+              searchExpediente: searchExpediente.trim() || undefined,
+              searchName: searchName.toUpperCase().trim() || undefined
+          };
+          const patientsData = await getPatients(searchOptions);
+          setPatients(patientsData);
+          setCurrentPage(1);
+      }
     } catch (e) {
       toast({ title: 'Error de Red', variant: 'destructive' });
     } finally {
       setIsDataLoading(false);
     }
-  }, [statusFilter, searchName, searchCurp, searchExpediente, hasSearched, activeTab, toast]);
+  }, [statusFilter, searchName, searchCurp, searchExpediente, activeTab, toast]);
   
   useEffect(() => {
+    // Inicialización: Solo cargar conteos y catálogos, NO pacientes
     loadData(false);
-  }, [statusFilter, loadData]); 
+  }, []); // Solo al montar
 
   const handleClearSearch = () => {
       setSearchName('');
@@ -307,7 +302,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
           { label: 'Baja Definitiva', count: counts.bajaDefinitiva, status: PatientStatusEnum.BajaDefinitiva, icon: UserX, color: 'text-red-600' },
           { label: 'Total Padrón', count: counts.total, status: 'Total' as const, icon: Users, color: 'text-primary' }
         ].map((item) => (
-          <button key={item.label} onClick={() => setStatusFilter(item.status)} className={cn("flex flex-col items-start p-4 rounded-xl border transition-all text-left", statusFilter === item.status ? "bg-card border-primary ring-2 ring-primary/20 shadow-lg scale-[1.02]" : "bg-muted/30 border-transparent hover:bg-muted/50")}>
+          <button key={item.label} onClick={() => { setStatusFilter(item.status); setPatients([]); setHasSearched(false); }} className={cn("flex flex-col items-start p-4 rounded-xl border transition-all text-left", statusFilter === item.status ? "bg-card border-primary ring-2 ring-primary/20 shadow-lg scale-[1.02]" : "bg-muted/30 border-transparent hover:bg-muted/50")}>
             <div className="flex items-center justify-between w-full mb-2"><item.icon className={cn("h-5 w-5", item.color)} />{statusFilter === item.status && <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />}</div>
             <span className="text-[10px] font-black uppercase text-muted-foreground">{item.label}</span>
             <span className={cn("text-2xl font-black", item.color)}>{item.count.toLocaleString()}</span>
@@ -375,7 +370,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                                 </div>
                                 <Popover>
                                     <PopoverTrigger asChild><Button variant="outline" size="sm" className="h-9 border-primary/20"><CalendarIcon className="mr-2 h-4 w-4" /> Selector Rango</Button></PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="end"><Calendar mode="range" selected={dateRange} onSelect={r => { setDateRange(r); setFilterType('range'); }} numberOfMonths={2} locale={es} /></PopoverContent>
+                                    <PopoverContent className="w-auto p-0" align="end"><Calendar mode="range" selected={dateRange} onSelect={r => { setDateRange(r); setDateFilter('range'); }} numberOfMonths={2} locale={es} /></PopoverContent>
                                 </Popover>
                                 <Button onClick={async () => await generateArchiveListPDF(appointmentsToDisplay, 'LISTADO DE CITAS', `Filtro: ${dateFilter.toUpperCase()}`)} variant="secondary" size="sm" className="font-bold"><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
                             </div>

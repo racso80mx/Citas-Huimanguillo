@@ -86,7 +86,7 @@ export function BackupManager({ onRestoreSuccess }: { onRestoreSuccess?: () => v
 
             toast({
               title: 'Respaldo Exitoso',
-              description: 'Se ha generado el archivo Excel con toda la información.',
+              description: 'Se ha generardo el archivo Excel con toda la información.',
             });
             await logActivity("Mantenimiento", "Se descargó un respaldo completo en Excel.");
         } catch (excelError: any) {

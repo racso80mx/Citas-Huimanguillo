@@ -224,22 +224,34 @@ export async function verifyClinicPassword(id: string, password: string) {
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     
+    // Si no hay criterios de búsqueda, no devolvemos nada (según solicitud)
+    if (!options?.searchCurp && !options?.searchExpediente && !options?.searchName) {
+        return [];
+    }
+
+    // 1. Prioridad: Búsqueda exacta por CURP (ID del documento)
     if (options?.searchCurp) {
         const s = await getDoc(doc(adminDb, 'patients', options.searchCurp.toUpperCase().trim()));
         if (s.exists()) return serializeData([{ ...s.data(), id: s.id }]);
         return [];
     }
 
-    const snap = await getDocs(query(colRef, limit(10000)));
-    let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
-
+    // 2. Prioridad: Búsqueda exacta por Expediente
     if (options?.searchExpediente) {
         const exp = options.searchExpediente.trim();
-        results = results.filter(p => {
-            const pe = String(p.expediente || '').trim();
-            return pe === exp || pe === '0' + exp || pe === exp.replace(/^0+/, '');
-        });
+        const q = query(colRef, where('expediente', '==', exp), limit(50));
+        const snap = await getDocs(q);
+        if (!snap.empty) return serializeData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+        
+        // Intento con 0 inicial si no se encontró
+        const qAlt = query(colRef, where('expediente', '==', '0' + exp), limit(50));
+        const snapAlt = await getDocs(qAlt);
+        return serializeData(snapAlt.docs.map(d => ({ ...d.data(), id: d.id })));
     }
+
+    // 3. Búsqueda por Nombre (Smart-Match en Servidor)
+    const snap = await getDocs(query(colRef, limit(10000)));
+    let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
 
     if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
@@ -251,13 +263,13 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
         });
     }
 
-    if (options?.status && options.status !== 'Total' && !options.searchName && !options.searchExpediente) {
+    if (options?.status && options.status !== 'Total') {
         results = results.filter(p => p.status === options.status);
     }
 
     results.sort((a, b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
     
-    return serializeData(results);
+    return serializeData(results.slice(0, 300)); // Limitar resultados de búsqueda por nombre
 }
 
 export async function rebuildNombreCompletoAction() {
