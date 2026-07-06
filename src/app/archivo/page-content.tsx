@@ -1,3 +1,4 @@
+
 'use client';
 import { useState } from 'react';
 import { ArchiveLoginForm } from '@/components/archivo/login-form';
@@ -15,7 +16,7 @@ export default function PageContent() {
   }
 
   return (
-    <div className="py-8 md:py-12">
+    <div className="py-0 md:py-4">
       {isAuthenticated ? (
         <ArchiveDashboard onLogout={handleLogout} />
       ) : (

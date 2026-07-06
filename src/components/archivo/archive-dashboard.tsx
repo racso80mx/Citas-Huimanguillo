@@ -108,17 +108,17 @@ type DateFilterType = 'today' | 'tomorrow' | 'week' | 'month' | 'range';
 export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashboardProps) {
   const [activeTab, setActiveTab] = useState('patients');
 
-  // Patient states
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [counts, setCounts] = useState<ArchiveCounts>({ total: 0, vigente: 0, bajaTemporal: 0, bajaDefinitiva: 0 });
-  
-  // Search fields
+  // Patient search states
   const [searchName, setSearchName] = useState('');
   const [searchCurp, setSearchCurp] = useState('');
   const [searchExpediente, setSearchExpediente] = useState('');
   
+  // Table state
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [counts, setCounts] = useState<ArchiveCounts>({ total: 0, vigente: 0, bajaTemporal: 0, bajaDefinitiva: 0 });
   const [statusFilter, setStatusFilter] = useState<'Total' | PatientStatusEnum>(PatientStatusEnum.Vigente);
   
+  // UI states
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
@@ -143,24 +143,26 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
   const [manualDayMonth, setManualDayMonth] = useState('');
   const [manualYear, setManualYear] = useState(new Date().getFullYear().toString());
 
-  // Common states
-  const [isDataLoading, setIsDataLoading] = useState(true);
+  // Loading states
+  const [isDataLoading, setIsDataLoading] = useState(false);
   const [isSubmitting, startSubmitTransition] = useTransition();
 
   const { toast } = useToast();
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (manualSearch = false) => {
     setIsDataLoading(true);
     setCurrentPage(1); 
     
     try {
-      // Configuramos la búsqueda inteligente
-      const searchOptions = { 
+      const searchOptions: any = { 
           status: statusFilter, 
-          searchName: searchName.toUpperCase().trim() || undefined,
-          searchCurp: searchCurp.toUpperCase().trim() || undefined,
-          searchExpediente: searchExpediente.trim() || undefined
       };
+
+      if (manualSearch) {
+          if (searchCurp) searchOptions.searchCurp = searchCurp.toUpperCase().trim();
+          if (searchExpediente) searchOptions.searchExpediente = searchExpediente.trim();
+          if (searchName) searchOptions.searchName = searchName.toUpperCase().trim();
+      }
 
       const [patientsData, countsData, clinicsData, serviceTypesData, appointmentsData, coloniasData] = await Promise.all([
         getPatients(searchOptions),
@@ -179,26 +181,22 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
       setColonias(coloniasData || []);
     } catch (error: any) {
       console.error("Dashboard error:", error);
-      toast({ title: 'Error de Consulta', variant: 'destructive' });
+      toast({ title: 'Error de Consulta', description: 'Ocurrió un problema al cargar los datos.', variant: 'destructive' });
     } finally {
       setIsDataLoading(false);
     }
   }, [statusFilter, searchName, searchCurp, searchExpediente, toast]);
   
+  // Initial load only
   useEffect(() => {
-    loadData();
-  }, [loadData, statusFilter]); 
+    loadData(false);
+  }, [statusFilter]); 
 
   const handleClearSearch = () => {
       setSearchName('');
       setSearchCurp('');
       setSearchExpediente('');
-      // Recargamos datos sin filtros
-      setIsDataLoading(true);
-      getPatients({ status: statusFilter }).then(data => {
-          setPatients(data);
-          setIsDataLoading(false);
-      });
+      loadData(false);
   };
 
   const paginatedPatients = useMemo(() => {
@@ -281,9 +279,9 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
         'CURP': p.curp ?? '',
     }));
     const ws = xlsx.utils.json_to_sheet(worksheetData);
-    const wb = xlsx.utils.book_new();
-    xlsx.utils.book_append_sheet(wb, ws, 'Pacientes');
-    xlsx.writeFile(wb, `padron_pacientes_${statusFilter}.xlsx`);
+    const workbook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(workbook, ws, 'Pacientes');
+    xlsx.writeFile(workbook, `padron_pacientes_${statusFilter}.xlsx`);
   }
 
   const handleClinicSelect = (clinicId: string) => {
@@ -388,13 +386,13 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
             </div>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Button variant="outline" onClick={loadData} disabled={isDataLoading}>
+            <Button variant="outline" onClick={() => loadData(false)} disabled={isDataLoading}>
               <RefreshCw className={cn("mr-2 h-4 w-4", isDataLoading && "animate-spin")} />
-              Actualizar Datos
+              Sincronizar
             </Button>
             <Button variant="outline" onClick={onLogout} className="flex-1 sm:flex-none">
               <LogOut className="mr-2 h-4 w-4" />
-              Cerrar Sesión
+              Salir
             </Button>
           </div>
         </div>
@@ -428,9 +426,9 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="patients">Padrón de Pacientes</TabsTrigger>
-          <TabsTrigger value="appointments">Reporte de Citas</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 bg-muted/20 p-1">
+          <TabsTrigger value="patients" className="font-bold">Padrón de Pacientes</TabsTrigger>
+          <TabsTrigger value="appointments" className="font-bold">Reporte de Citas</TabsTrigger>
         </TabsList>
 
         <TabsContent value="patients" className="space-y-4 pt-4">
@@ -443,10 +441,10 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                         <div className="relative group">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input 
-                                placeholder="Escribe nombres o apellidos..." 
+                                placeholder="Nombres o apellidos..." 
                                 value={searchName} 
                                 onChange={e => setSearchName(e.target.value.toUpperCase())} 
-                                onKeyDown={e => e.key === 'Enter' && loadData()}
+                                onKeyDown={e => e.key === 'Enter' && loadData(true)}
                                 className="pl-9 h-11 border-primary/20"
                             />
                         </div>
@@ -457,7 +455,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                             placeholder="CURP (Exacto)..." 
                             value={searchCurp} 
                             onChange={e => setSearchCurp(e.target.value.toUpperCase())} 
-                            onKeyDown={e => e.key === 'Enter' && loadData()}
+                            onKeyDown={e => e.key === 'Enter' && loadData(true)}
                             className="h-11 border-primary/20"
                             maxLength={18}
                         />
@@ -468,12 +466,12 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                             placeholder="No. Expediente..." 
                             value={searchExpediente} 
                             onChange={e => setSearchExpediente(e.target.value)} 
-                            onKeyDown={e => e.key === 'Enter' && loadData()}
+                            onKeyDown={e => e.key === 'Enter' && loadData(true)}
                             className="h-11 border-primary/20"
                         />
                     </div>
                     <div className="flex gap-2 items-end">
-                        <Button onClick={loadData} className="h-11 flex-1 font-black bg-primary hover:bg-primary/90" disabled={isDataLoading}>
+                        <Button onClick={() => loadData(true)} className="h-11 flex-1 font-black bg-primary hover:bg-primary/90" disabled={isDataLoading}>
                             {isDataLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
                             INICIAR BÚSQUEDA
                         </Button>
@@ -489,7 +487,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                         <Button onClick={handleAddNew} size="sm" className="bg-primary hover:bg-primary/90 font-bold">
                             <PlusCircle className="h-4 w-4 mr-2" /> Nuevo Paciente
                         </Button>
-                        <MassUploadDialog isOpen={isUploadOpen} onClose={() => setIsUploadOpen(false)} onUploadSuccess={loadData} />
+                        <MassUploadDialog isOpen={isUploadOpen} onClose={() => setIsUploadOpen(false)} onUploadSuccess={() => loadData(false)} />
                         <Button onClick={() => setIsUploadOpen(true)} variant="secondary" size="sm" className="font-bold">
                             <Upload className="h-4 w-4 mr-2" /> Cargar Excel
                         </Button>
@@ -502,9 +500,9 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
               </div>
             </CardHeader>
             
-            <CardContent className="relative min-h-[400px]">
+            <CardContent className="relative min-h-[400px] pt-4">
               {isDataLoading && (
-                <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-lg">
+                <div className="absolute inset-0 z-50 bg-background/70 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-lg">
                     <Loader2 className="h-12 w-12 animate-spin text-primary" />
                     <p className="text-xs font-black uppercase tracking-widest text-primary mt-4 animate-pulse">Consultando Padrón...</p>
                 </div>
@@ -514,21 +512,23 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                 <div className="flex flex-col items-center justify-center py-20 text-center gap-4 opacity-60">
                   <Users className="h-16 w-16 text-muted-foreground" />
                   <div>
-                    <p className="text-lg font-bold">No se encontraron registros</p>
-                    <p className="text-sm text-muted-foreground">Intenta con otros criterios o verifica si el paciente está en otro estatus.</p>
+                    <p className="text-lg font-bold">Sin resultados</p>
+                    <p className="text-sm text-muted-foreground">Presiona "INICIAR BÚSQUEDA" para ver los registros.</p>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <PatientList 
-                    patients={paginatedPatients} 
-                    onEdit={handleEdit} 
-                    onDelete={handleDelete} 
-                    onStatusChange={handleStatusChange} 
-                    onSchedule={handleSchedule} 
-                    isSubmitting={isSubmitting}
-                    isReadOnly={isReadOnly}
-                  />
+                  <div className={cn("transition-opacity", isDataLoading ? "opacity-50" : "opacity-100")}>
+                    <PatientList 
+                        patients={paginatedPatients} 
+                        onEdit={handleEdit} 
+                        onDelete={handleDelete} 
+                        onStatusChange={handleStatusChange} 
+                        onSchedule={handleSchedule} 
+                        isSubmitting={isSubmitting}
+                        isReadOnly={isReadOnly}
+                    />
+                  </div>
                   
                   <div className="flex flex-col sm:flex-row items-center justify-between border-t pt-4 gap-4">
                     <div className="flex items-center gap-3">
@@ -541,7 +541,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                           <SelectItem value="200">200</SelectItem>
                         </SelectContent>
                       </Select>
-                      <span className="text-sm text-muted-foreground whitespace-nowrap font-bold">Mostrando: {patients.length} pacientes</span>
+                      <span className="text-sm text-muted-foreground whitespace-nowrap font-bold">Total encontrados: {patients.length}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>Anterior</Button>
@@ -654,9 +654,9 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent className="pt-6">
+                <CardContent className="pt-6 relative min-h-[400px]">
                     {isDataLoading ? (
-                        <div className="py-20 flex flex-col items-center gap-4">
+                        <div className="absolute inset-0 z-50 bg-background/70 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-lg">
                             <Loader2 className="h-12 w-12 animate-spin text-primary" />
                             <p className="text-xs font-black uppercase tracking-widest text-muted-foreground animate-pulse">Sincronizando Agenda...</p>
                         </div>
@@ -666,7 +666,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                           clinics={clinics} 
                           isAdmin={!isReadOnly} 
                           onDelete={handleAppointmentDelete} 
-                          onEditSuccess={loadData} 
+                          onEditSuccess={() => loadData(false)} 
                         />
                     )}
                 </CardContent>
@@ -675,7 +675,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
       </Tabs>
 
       {isEditOpen && <EditPatientDialog isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} patient={editingPatient} onSave={handleSavePatient} isSaving={isSubmitting} />}
-      {schedulingPatient && <ScheduleAppointmentDialog patient={schedulingPatient} isOpen={!!schedulingPatient} onClose={() => setSchedulingPatient(null)} onBookingSuccess={() => { setSchedulingPatient(null); loadData(); }} clinics={clinics} colonias={colonias} isDoctorBypass={true} />}
+      {schedulingPatient && <ScheduleAppointmentDialog patient={schedulingPatient} isOpen={!!schedulingPatient} onClose={() => setSchedulingPatient(null)} onBookingSuccess={() => { setSchedulingPatient(null); loadData(false); }} clinics={clinics} colonias={colonias} isDoctorBypass={true} />}
     </div>
   );
 }

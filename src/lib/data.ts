@@ -53,11 +53,12 @@ import { startOfDay, subDays } from 'date-fns';
 
 /**
  * MOTOR DE SERIALIZACIÓN ROBUSTO
- * Convierte Timestamps y objetos complejos a tipos primitivos seguros.
+ * Convierte Timestamps y objetos complejos a tipos primitivos seguros de forma recursiva.
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return '';
   
+  // Detección de Timestamps de Firestore
   if (typeof data.toDate === 'function') {
     return data.toDate().toISOString();
   }
@@ -87,7 +88,7 @@ export function serializeData(data: any): any {
 
 /**
  * HIDRATACIÓN DE CITAS
- * Vincula citas con pacientes de forma robusta.
+ * Vincula citas con pacientes de forma robusta, previniendo registros N/A.
  */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
@@ -204,32 +205,35 @@ export async function verifyModulePassword(module: string, password: string) {
     return { success: snap.data()?.password === password };
 }
 
-export async function verifyClinicPassword(clinicId: string, password: string) {
-    const snap = await getDoc(doc(adminDb, 'clinics', clinicId));
-    return { success: snap.exists() && snap.data()?.password === password };
+export async function verifyClinicPassword(id: string, password: string) {
+    const snap = await getDoc(doc(adminDb, 'clinics', id));
+    if (snap.exists() && snap.data().password === password) {
+        return { success: true };
+    }
+    return { success: false, message: 'Contraseña de unidad incorrecta.' };
 }
 
 // --- PACIENTES (BÚSQUEDA INTELIGENTE SMART-MATCH) ---
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     
-    // 1. CURP Exacto
     if (options?.searchCurp) {
         const s = await getDocs(query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(1)));
         return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
     
-    // 2. Expediente (Tolerante)
     if (options?.searchExpediente) {
         const term = options.searchExpediente.trim();
         const s = await getDocs(query(colRef, where('expediente', 'in', [term, '0' + term]), limit(20)));
         if (!s.empty) return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
 
-    // 3. Búsqueda por Nombre Inteligente (Filtrado en memoria para evitar errores de índice)
-    const limitNum = options?.limitNum || 10000;
-    const snap = await getDocs(query(colRef, limit(limitNum)));
+    const snap = await getDocs(query(colRef, limit(10000)));
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
+
+    if (options?.status && options.status !== 'Total') {
+        results = results.filter(p => p.status === options.status);
+    }
 
     if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
@@ -241,12 +245,8 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
         });
     }
 
-    if (options?.status && options.status !== 'Total') {
-        results = results.filter(p => p.status === options.status);
-    }
-
-    // Ordenación en memoria
     results.sort((a, b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
+    
     return serializeData(results.slice(0, 500));
 }
 
@@ -435,7 +435,13 @@ export async function updateClinics(clinics: Clinic[]) {
     const b = writeBatch(adminDb);
     for (const x of clinics) {
         const ref = doc(adminDb, 'clinics', x.id);
-        const mappedData: any = { ...x };
+        const current = await getDoc(ref);
+        const baseData = current.exists() ? current.data() : {};
+        
+        const mappedData: any = { 
+            ...baseData,
+            ...x 
+        };
         Object.keys(mappedData).forEach(key => mappedData[key] === undefined && delete mappedData[key]);
         b.set(ref, mappedData, { merge: true });
     }
