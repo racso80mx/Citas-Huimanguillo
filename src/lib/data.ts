@@ -179,6 +179,14 @@ export async function updateModuleSettings(s: ModuleSettings) {
 }
 
 export async function verifyModulePassword(module: string, password: string) {
+    if (module === 'superadmin') {
+        const sa = await getDoc(doc(adminDb, 'settings', 'adminSettings'));
+        const dbPassword = sa.data()?.password;
+        // FALLBACK: Permite la contraseña maestra por defecto si no hay nada en DB
+        const defaultMaster = 'Hu1m4ngu1ll0';
+        return { success: (dbPassword || defaultMaster) === password };
+    }
+    
     let docId = 'adminSettings';
     if (module === 'archive') docId = 'archiveSettings';
     if (module === 'pharmacy') docId = 'pharmacySettings';
@@ -193,11 +201,6 @@ export async function verifyModulePassword(module: string, password: string) {
     if (module === 'medical') {
         const mod = await getDoc(doc(adminDb, 'settings', 'moduleSettings'));
         return { success: mod.data()?.citasMedicasPassword === password };
-    }
-    
-    if (module === 'superadmin') {
-        const sa = await getDoc(doc(adminDb, 'settings', 'adminSettings'));
-        return { success: sa.data()?.password === password };
     }
 
     const snap = await getDoc(doc(adminDb, 'settings', docId));
@@ -216,28 +219,23 @@ export async function verifyClinicPassword(id: string, password: string) {
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     
-    // 1. Prioridad: Búsqueda exacta por ID (CURP)
     if (options?.searchCurp) {
         const s = await getDoc(doc(adminDb, 'patients', options.searchCurp.toUpperCase().trim()));
         if (s.exists()) return serializeData([{ ...s.data(), id: s.id }]);
         return [];
     }
 
-    // 2. Consulta a Base de Datos (Limitada a 10,000 para procesamiento en memoria)
     const snap = await getDocs(query(colRef, limit(10000)));
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
 
-    // 3. Filtrado por Expediente (tolerante a ceros iniciales)
     if (options?.searchExpediente) {
         const exp = options.searchExpediente.trim();
         results = results.filter(p => {
             const pe = String(p.expediente || '').trim();
             return pe === exp || pe === '0' + exp || pe === exp.replace(/^0+/, '');
         });
-        return serializeData(results);
     }
 
-    // 4. Filtrado Inteligente por Nombre (Multi-Palabra)
     if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
         const searchWords = term.split(/\s+/).filter(w => w.length > 0);
@@ -248,12 +246,10 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
         });
     }
 
-    // 5. Filtro de Estatus (Solo si no hay búsquedas específicas arriba)
     if (options?.status && options.status !== 'Total' && !options.searchName && !options.searchExpediente) {
         results = results.filter(p => p.status === options.status);
     }
 
-    // 6. Ordenación alfabética en servidor (evita error de índices)
     results.sort((a, b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
     
     return serializeData(results);
@@ -274,7 +270,7 @@ export async function rebuildNombreCompletoAction() {
     });
     
     await batch.commit();
-    await logActivity("Mantenimiento", `Reconstrucción masiva de nombres completada: ${count} registros actualizados.`);
+    await logActivity("Mantenimiento", `Reconstrucción masiva de nombres completada: ${count} registros.`);
     return { success: true, count };
 }
 
