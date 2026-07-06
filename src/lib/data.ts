@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -43,7 +44,9 @@ import type {
   ServiceType,
   Specialty,
   Prescription,
-  ArchiveCounts
+  ArchiveCounts,
+  MedicalConsultation,
+  Cie10Record
 } from './definitions';
 import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
@@ -149,7 +152,8 @@ export async function verifyClinicPassword(clinicId: string, password: string) {
 export async function getPatientCounts(): Promise<ArchiveCounts> {
     const coll = collection(adminDb, 'patients');
     
-    // Conteo atómico desde servidor (SIN LÍMITES)
+    // CONTEO ATÓMICO DESDE EL SERVIDOR (SIN LÍMITES)
+    // getCountFromServer es la única forma de obtener cifras reales > 10,000 sin descargar documentos
     const [totalSnap, bajaSnap, bajaDefSnap] = await Promise.all([
         getCountFromServer(coll),
         getCountFromServer(query(coll, where('status', '==', PatientStatus.Baja))),
@@ -179,7 +183,7 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
         q = query(colRef, where('expediente', '==', options.searchExpediente.trim()), limit(50));
     } else if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
-        // Búsqueda por prefijo en el campo nombreCompleto
+        // Búsqueda inteligente por prefijo en el campo normalizado
         q = query(colRef, where('nombreCompleto', '>=', term), where('nombreCompleto', '<=', term + '\uf8ff'), limit(100));
     }
 
@@ -188,9 +192,12 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     const snap = await getDocs(q);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
 
-    // Filtrado secundario por estatus en el servidor si se requiere
+    // Si el estatus es nulo en la BD, lo tratamos como Vigente para que aparezcan en la búsqueda
     if (options?.status && options.status !== 'Total') {
-        results = results.filter(p => (p.status || PatientStatus.Vigente) === options.status);
+        results = results.filter(p => {
+            const currentStatus = p.status || PatientStatus.Vigente;
+            return currentStatus === options.status;
+        });
     }
 
     return serializeData(results);
@@ -246,6 +253,7 @@ export async function bulkInsertPatients(patients: any[]) {
                 derechoAbiencia: String(p.DerechoAbiencia || p.derechoAbiencia || '').toUpperCase().trim(),
             };
             mapped.nombreCompleto = generateNombreCompleto(mapped);
+            // USAMOS LA CURP COMO ID DEL DOCUMENTO PARA EVITAR DUPLICADOS
             batch.set(doc(adminDb, 'patients', curp), mapped, { merge: true });
         });
         
@@ -257,8 +265,9 @@ export async function bulkInsertPatients(patients: any[]) {
 }
 
 export async function getPatientByCURP(curp: string) {
-    const s = await getDoc(doc(adminDb, 'patients', curp.toUpperCase().trim()));
-    if (s.exists()) return { success: true, data: serializeData({ ...s.data(), id: s.id }) };
+    const q = query(collection(adminDb, 'patients'), where('curp', '==', curp.toUpperCase().trim()), limit(1));
+    const s = await getDocs(q);
+    if (!s.empty) return { success: true, data: serializeData({ ...s.docs[0].data(), id: s.docs[0].id }) };
     return { success: false };
 }
 
