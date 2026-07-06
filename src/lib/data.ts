@@ -15,7 +15,8 @@ import {
   where,
   limit,
   orderBy,
-  getCountFromServer
+  getCountFromServer,
+  deleteField
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -144,50 +145,11 @@ export async function verifyClinicPassword(id: string, password: string) {
     return { success: false, message: 'Contraseña de unidad médica incorrecta.' };
 }
 
-// --- PACIENTES (CONSULTAS DIRECTAS SIN CARGA MASIVA) ---
-export async function getPatientsData(options?: any): Promise<Patient[]> {
-    const colRef = collection(adminDb, 'patients');
-    
-    // Si no hay búsqueda, no cargar nada para ahorrar recursos
-    if (!options?.searchCurp && !options?.searchExpediente && !options?.searchName) return [];
-
-    let q;
-    const searchStatus = options?.status && options.status !== 'Total' ? options.status : null;
-
-    // 1. Búsqueda por CURP (Directa)
-    if (options?.searchCurp) {
-        q = query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(10));
-    } 
-    // 2. Búsqueda por EXPEDIENTE (Directa)
-    else if (options?.searchExpediente) {
-        q = query(colRef, where('expediente', '==', options.searchExpediente.trim()), limit(10));
-    }
-    // 3. Búsqueda por NOMBRE (Prefijo Inteligente)
-    else if (options?.searchName) {
-        const term = options.searchName.toUpperCase().trim();
-        q = query(colRef, where('nombreCompleto', '>=', term), where('nombreCompleto', '<=', term + '\uf8ff'), limit(100));
-    }
-
-    if (!q) return [];
-    
-    const snap = await getDocs(q);
-    let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
-
-    // Post-filtrado de estatus (para incluir estatus null como Vigente)
-    if (searchStatus) {
-        results = results.filter(p => {
-            const pStatus = p.status || PatientStatus.Vigente;
-            return pStatus === searchStatus;
-        });
-    }
-
-    return serializeData(results);
-}
-
+// --- PACIENTES (CONSULTAS DIRECTAS Y CONTEOS REALES) ---
 export async function getPatientCounts(): Promise<ArchiveCounts> {
     const coll = collection(adminDb, 'patients');
     
-    // Conteos directos desde base de datos (Sin descargar documentos)
+    // Conteos directos desde base de datos sin límites de descarga
     const [totalSnap, bajaSnap, bajaDefSnap] = await Promise.all([
         getCountFromServer(coll),
         getCountFromServer(query(coll, where('status', '==', PatientStatus.Baja))),
@@ -199,9 +161,42 @@ export async function getPatientCounts(): Promise<ArchiveCounts> {
     const bajaDefinitiva = bajaDefSnap.data().count;
     
     // Cualquier paciente sin estatus se considera Vigente automáticamente
-    const vigente = total - bajaTemporal - bajaDefinitiva;
+    const vigente = total - (bajaTemporal + bajaDefinitiva);
 
     return { total, vigente, bajaTemporal, bajaDefinitiva };
+}
+
+export async function getPatientsData(options?: any): Promise<Patient[]> {
+    const colRef = collection(adminDb, 'patients');
+    if (!options?.searchCurp && !options?.searchExpediente && !options?.searchName) return [];
+
+    let q;
+    const searchStatus = options?.status && options.status !== 'Total' ? options.status : null;
+
+    if (options?.searchCurp) {
+        q = query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(20));
+    } 
+    else if (options?.searchExpediente) {
+        q = query(colRef, where('expediente', '==', options.searchExpediente.trim()), limit(20));
+    }
+    else if (options?.searchName) {
+        const term = options.searchName.toUpperCase().trim();
+        q = query(colRef, where('nombreCompleto', '>=', term), where('nombreCompleto', '<=', term + '\uf8ff'), limit(100));
+    }
+
+    if (!q) return [];
+    
+    const snap = await getDocs(q);
+    let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
+
+    if (searchStatus) {
+        results = results.filter(p => {
+            const pStatus = p.status || PatientStatus.Vigente;
+            return pStatus === searchStatus;
+        });
+    }
+
+    return serializeData(results);
 }
 
 export async function rebuildNombreCompletoAction() {
