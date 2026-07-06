@@ -58,7 +58,7 @@ import { startOfDay, subDays } from 'date-fns';
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return '';
   
-  // Detección de Timestamps de Firestore
+  // Detección de Timestamps de Firestore o fechas
   if (typeof data.toDate === 'function') {
     return data.toDate().toISOString();
   }
@@ -88,7 +88,7 @@ export function serializeData(data: any): any {
 
 /**
  * HIDRATACIÓN DE CITAS
- * Vincula citas con pacientes de forma robusta, previniendo registros N/A.
+ * Vincula citas con pacientes de forma robusta.
  */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
@@ -217,24 +217,29 @@ export async function verifyClinicPassword(id: string, password: string) {
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     
+    // 1. PRIORIDAD: Búsqueda exacta por CURP
     if (options?.searchCurp) {
         const s = await getDocs(query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(1)));
         return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
     
+    // 2. PRIORIDAD: Búsqueda exacta por Expediente
     if (options?.searchExpediente) {
         const term = options.searchExpediente.trim();
         const s = await getDocs(query(colRef, where('expediente', 'in', [term, '0' + term]), limit(20)));
         if (!s.empty) return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
 
+    // 3. CONSULTA GENERAL (Con límite amplio para evitar puntos ciegos)
     const snap = await getDocs(query(colRef, limit(10000)));
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
 
+    // 4. FILTRO DE ESTATUS (Se hace en memoria para evitar errores de índice de Firebase)
     if (options?.status && options.status !== 'Total') {
         results = results.filter(p => p.status === options.status);
     }
 
+    // 5. BÚSQUEDA POR NOMBRE (Smart-Match multi-campo)
     if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
         const words = term.split(/\s+/).filter(w => w.length >= 2);
@@ -245,6 +250,7 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
         });
     }
 
+    // 6. ORDENACIÓN EN MEMORIA (Elimina permanentemente el FirebaseError de Índices)
     results.sort((a, b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
     
     return serializeData(results.slice(0, 500));
@@ -330,35 +336,35 @@ export async function bulkInsertPatients(patients: any[]) {
 export async function getAppointmentsData() { 
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(10000))); 
     let apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    apps.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    apps.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
     return hydrateAppointments(apps);
 }
 
 export async function getLabAppointmentsData() {
     const s = await getDocs(query(collection(adminDb, 'labAppointments'), limit(10000)));
     let apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    apps.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    apps.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
     return hydrateAppointments(apps);
 }
 
 export async function getXRayAppointmentsData() {
     const s = await getDocs(query(collection(adminDb, 'xrayAppointments'), limit(10000)));
     let apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    apps.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    apps.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
     return hydrateAppointments(apps);
 }
 
 export async function getUltrasoundAppointmentsData() {
     const s = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), limit(10000)));
     let apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    apps.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    apps.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
     return hydrateAppointments(apps);
 }
 
 export async function getVaccineAppointmentsData() {
     const s = await getDocs(query(collection(adminDb, 'vaccineAppointments'), limit(10000)));
     let apps = s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    apps.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    apps.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
     return hydrateAppointments(apps);
 }
 

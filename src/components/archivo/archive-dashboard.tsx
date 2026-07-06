@@ -25,13 +25,10 @@ import {
   X,
   Upload,
   Download,
-  XCircle,
   Eye,
   Calendar as CalendarIcon,
   FileText,
-  Filter,
-  CalendarSearch,
-  Plus
+  Filter
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -181,7 +178,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
       setColonias(coloniasData || []);
     } catch (error: any) {
       console.error("Dashboard error:", error);
-      toast({ title: 'Error de Consulta', description: 'Ocurrió un problema al cargar los datos.', variant: 'destructive' });
+      toast({ title: 'Error de Consulta', description: 'Ocurrió un problema al cargar los datos de la base de datos.', variant: 'destructive' });
     } finally {
       setIsDataLoading(false);
     }
@@ -437,45 +434,49 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
               <div className="flex flex-col space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 w-full">
                     <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-primary">Buscar por Nombre o Apellidos</Label>
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Buscar por Nombre o Apellidos</Label>
                         <div className="relative group">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input 
-                                placeholder="Nombres o apellidos..." 
+                                placeholder="Escribe nombres o apellidos..." 
                                 value={searchName} 
                                 onChange={e => setSearchName(e.target.value.toUpperCase())} 
                                 onKeyDown={e => e.key === 'Enter' && loadData(true)}
-                                className="pl-9 h-11 border-primary/20"
+                                className="pl-9 h-11 border-primary/20 focus:border-primary transition-colors"
                             />
                         </div>
                     </div>
                     <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-primary">Buscar por CURP</Label>
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Buscar por CURP</Label>
                         <Input 
-                            placeholder="CURP (Exacto)..." 
+                            placeholder="CURP de 18 caracteres..." 
                             value={searchCurp} 
                             onChange={e => setSearchCurp(e.target.value.toUpperCase())} 
                             onKeyDown={e => e.key === 'Enter' && loadData(true)}
-                            className="h-11 border-primary/20"
+                            className="h-11 border-primary/20 focus:border-primary transition-colors"
                             maxLength={18}
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-primary">Buscar por Expediente</Label>
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Buscar por Expediente</Label>
                         <Input 
-                            placeholder="No. Expediente..." 
+                            placeholder="No. de Expediente..." 
                             value={searchExpediente} 
                             onChange={e => setSearchExpediente(e.target.value)} 
                             onKeyDown={e => e.key === 'Enter' && loadData(true)}
-                            className="h-11 border-primary/20"
+                            className="h-11 border-primary/20 focus:border-primary transition-colors"
                         />
                     </div>
                     <div className="flex gap-2 items-end">
-                        <Button onClick={() => loadData(true)} className="h-11 flex-1 font-black bg-primary hover:bg-primary/90" disabled={isDataLoading}>
+                        <Button 
+                            onClick={() => loadData(true)} 
+                            className="h-11 flex-1 font-black bg-primary hover:bg-primary/90 shadow-sm transition-all" 
+                            disabled={isDataLoading}
+                        >
                             {isDataLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />}
                             INICIAR BÚSQUEDA
                         </Button>
-                        <Button variant="outline" onClick={handleClearSearch} className="h-11 border-primary/20" title="Limpiar Todo">
+                        <Button variant="outline" onClick={handleClearSearch} className="h-11 border-primary/20 hover:bg-muted" title="Limpiar Todo">
                             <X className="h-4 w-4" />
                         </Button>
                     </div>
@@ -484,14 +485,14 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                 <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-dashed">
                   {!isReadOnly && (
                     <>
-                        <Button onClick={handleAddNew} size="sm" className="bg-primary hover:bg-primary/90 font-bold">
+                        <Button onClick={handleAddNew} size="sm" className="bg-primary hover:bg-primary/90 font-bold shadow-sm">
                             <PlusCircle className="h-4 w-4 mr-2" /> Nuevo Paciente
                         </Button>
                         <MassUploadDialog isOpen={isUploadOpen} onClose={() => setIsUploadOpen(false)} onUploadSuccess={() => loadData(false)} />
-                        <Button onClick={() => setIsUploadOpen(true)} variant="secondary" size="sm" className="font-bold">
+                        <Button onClick={() => setIsUploadOpen(true)} variant="secondary" size="sm" className="font-bold shadow-sm">
                             <Upload className="h-4 w-4 mr-2" /> Cargar Excel
                         </Button>
-                        <Button onClick={handleDownloadExcel} variant="outline" size="sm" className="font-bold">
+                        <Button onClick={handleDownloadExcel} variant="outline" size="sm" className="font-bold border-primary/20">
                             <Download className="mr-2 h-4 w-4" /> Exportar Padrón
                         </Button>
                     </>
@@ -500,53 +501,53 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
               </div>
             </CardHeader>
             
-            <CardContent className="relative min-h-[400px] pt-4">
+            <CardContent className="relative min-h-[400px] pt-4 px-0 sm:px-6">
               {isDataLoading && (
-                <div className="absolute inset-0 z-50 bg-background/70 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-lg">
+                <div className="absolute inset-0 z-50 bg-background/70 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-lg animate-in fade-in">
                     <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                    <p className="text-xs font-black uppercase tracking-widest text-primary mt-4 animate-pulse">Consultando Padrón...</p>
+                    <p className="text-xs font-black uppercase tracking-[0.2em] text-primary mt-4 animate-pulse">Consultando Base de Datos...</p>
                 </div>
               )}
 
               {patients.length === 0 && !isDataLoading ? (
-                <div className="flex flex-col items-center justify-center py-20 text-center gap-4 opacity-60">
-                  <Users className="h-16 w-16 text-muted-foreground" />
+                <div className="flex flex-col items-center justify-center py-32 text-center gap-4 opacity-40">
+                  <Users className="h-20 w-20 text-muted-foreground" />
                   <div>
-                    <p className="text-lg font-bold">Sin resultados</p>
-                    <p className="text-sm text-muted-foreground">Presiona "INICIAR BÚSQUEDA" para ver los registros.</p>
+                    <p className="text-xl font-bold uppercase tracking-widest">Sin resultados</p>
+                    <p className="text-sm text-muted-foreground font-medium mt-1">Presiona "INICIAR BÚSQUEDA" para consultar el servidor.</p>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div className={cn("transition-opacity", isDataLoading ? "opacity-50" : "opacity-100")}>
-                    <PatientList 
-                        patients={paginatedPatients} 
-                        onEdit={handleEdit} 
-                        onDelete={handleDelete} 
-                        onStatusChange={handleStatusChange} 
-                        onSchedule={handleSchedule} 
-                        isSubmitting={isSubmitting}
-                        isReadOnly={isReadOnly}
-                    />
-                  </div>
+                <div className={cn("space-y-4", isDataLoading && "opacity-40 blur-[1px]")}>
+                  <PatientList 
+                      patients={paginatedPatients} 
+                      onEdit={handleEdit} 
+                      onDelete={handleDelete} 
+                      onStatusChange={handleStatusChange} 
+                      onSchedule={handleSchedule} 
+                      isSubmitting={isSubmitting}
+                      isReadOnly={isReadOnly}
+                  />
                   
-                  <div className="flex flex-col sm:flex-row items-center justify-between border-t pt-4 gap-4">
+                  <div className="flex flex-col sm:flex-row items-center justify-between border-t pt-6 gap-4 pb-6">
                     <div className="flex items-center gap-3">
                       <span className="text-sm text-muted-foreground whitespace-nowrap">Registros por página</span>
                       <Select value={String(rowsPerPage)} onValueChange={(v) => { setRowsPerPage(Number(v)); setCurrentPage(1); }}>
-                        <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="w-24 font-bold"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="50">50</SelectItem>
                           <SelectItem value="100">100</SelectItem>
                           <SelectItem value="200">200</SelectItem>
                         </SelectContent>
                       </Select>
-                      <span className="text-sm text-muted-foreground whitespace-nowrap font-bold">Total encontrados: {patients.length}</span>
+                      <Badge variant="outline" className="h-9 px-4 font-black uppercase tracking-tighter bg-muted/50 border-primary/10">
+                        Total encontrados: {patients.length}
+                      </Badge>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>Anterior</Button>
-                      <div className="bg-muted px-4 py-1 rounded-md text-sm font-black">Página {currentPage} de {totalPages || 1}</div>
-                      <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage >= totalPages || totalPages === 0}>Siguiente</Button>
+                      <Button variant="outline" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>Anterior</Button>
+                      <div className="bg-primary text-white px-5 py-1.5 rounded-full text-xs font-black shadow-inner">Página {currentPage} de {totalPages || 1}</div>
+                      <Button variant="outline" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage >= totalPages || totalPages === 0}>Siguiente</Button>
                     </div>
                   </div>
                 </div>
