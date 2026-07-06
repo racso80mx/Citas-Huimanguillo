@@ -52,12 +52,11 @@ import { startOfDay, subDays } from 'date-fns';
 
 /**
  * MOTOR DE SERIALIZACIÓN PROFUNDA
- * Convierte Timestamps y objetos complejos a tipos primitivos de forma agresiva.
+ * Convierte Timestamps y objetos complejos a tipos primitivos.
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return '';
   
-  // Manejo de Timestamps de Firebase
   if (typeof data.toDate === 'function') {
     return data.toDate().toISOString();
   }
@@ -66,17 +65,14 @@ export function serializeData(data: any): any {
     return new Date(data.seconds * 1000).toISOString();
   }
 
-  // Manejo de Referencias de Documento
   if (data instanceof DocumentReference) {
     return data.id;
   }
 
-  // Manejo recursivo de Arreglos
   if (Array.isArray(data)) {
     return data.map(serializeData);
   }
 
-  // Manejo recursivo de Objetos
   if (typeof data === 'object' && data.constructor === Object) {
     const o: any = {};
     for (const key in data) {
@@ -86,6 +82,10 @@ export function serializeData(data: any): any {
   }
 
   return data;
+}
+
+function generateNombreCompleto(p: any) {
+    return `${p.name || ''} ${p.paternalLastName || ''} ${p.maternalLastName || ''}`.trim().toUpperCase();
 }
 
 /**
@@ -218,36 +218,46 @@ export async function verifyClinicPassword(id: string, password: string) {
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     
+    // PRIORIDAD 1: Búsqueda por CURP (Doc ID directo)
     if (options?.searchCurp) {
         const s = await getDoc(doc(adminDb, 'patients', options.searchCurp.toUpperCase().trim()));
         if (s.exists()) return serializeData([{ ...s.data(), id: s.id }]);
         return [];
     }
 
-    // Búsqueda inteligente DB-First con filtrado en servidor para evitar errores de índices
+    // CARGA DE PADRÓN EN MEMORIA PARA FILTRADO INTELIGENTE (Resuelve error de índices)
     const snap = await getDocs(query(colRef, limit(10000)));
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
 
+    // PRIORIDAD 2: Búsqueda por Expediente (OR)
+    if (options?.searchExpediente) {
+        const exp = options.searchExpediente.trim();
+        results = results.filter(p => p.expediente === exp || p.expediente === '0' + exp);
+        return serializeData(results);
+    }
+
+    // PRIORIDAD 3: Búsqueda Inteligente por Nombre (OR)
+    if (options?.searchName) {
+        const term = options.searchName.toUpperCase().trim();
+        const words = term.split(/\s+/).filter(w => w.length >= 1);
+        
+        results = results.filter(p => {
+            const n = String(p.name || '').toUpperCase();
+            const ap = String(p.paternalLastName || '').toUpperCase();
+            const am = String(p.maternalLastName || '').toUpperCase();
+            const nc = String(p.nombreCompleto || '').toUpperCase();
+            const searchTarget = `${n} ${ap} ${am} ${nc}`.trim();
+            
+            return words.every(word => searchTarget.includes(word));
+        });
+    }
+
+    // FILTRO DE ESTATUS (Si aplica)
     if (options?.status && options.status !== 'Total') {
         results = results.filter(p => p.status === options.status);
     }
 
-    if (options?.searchExpediente) {
-        const exp = options.searchExpediente.trim();
-        results = results.filter(p => p.expediente === exp || p.expediente === '0' + exp);
-    }
-
-    if (options?.searchName) {
-        const term = options.searchName.toUpperCase().trim();
-        const words = term.split(/\s+/).filter(w => w.length >= 2);
-        
-        results = results.filter(p => {
-            const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
-            return words.every(word => fullName.includes(word));
-        });
-    }
-
-    // Ordenación en memoria para evitar FAILED_PRECONDITION de índices compuestos
+    // Ordenación en memoria para evitar errores de índices compuestos
     results.sort((a, b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
     return serializeData(results);
 }
@@ -262,12 +272,16 @@ export async function getPatientByCURP(curp: string) {
 
 export async function savePatient(p: Omit<Patient, 'id'>, id: string) {
     const finalId = id || p.curp.toUpperCase().trim();
-    await setDoc(doc(adminDb, 'patients', finalId), { ...p, id: finalId }, { merge: true });
+    const nombreCompleto = generateNombreCompleto(p);
+    await setDoc(doc(adminDb, 'patients', finalId), { ...p, id: finalId, nombreCompleto }, { merge: true });
     return { success: true };
 }
 
 export async function updatePatient(id: string, p: Partial<Patient>) {
-    await updateDoc(doc(adminDb, 'patients', id), p);
+    const current = await getDoc(doc(adminDb, 'patients', id));
+    const merged = { ...(current.data() || {}), ...p };
+    const nombreCompleto = generateNombreCompleto(merged);
+    await updateDoc(doc(adminDb, 'patients', id), { ...p, nombreCompleto });
     return { success: true };
 }
 
@@ -306,7 +320,7 @@ export async function bulkInsertPatients(patients: any[]) {
         const curp = String(p.CURP || p.curp || '').toUpperCase().trim();
         if (!curp) continue;
         const ref = doc(adminDb, 'patients', curp);
-        const mapped = {
+        const mapped: any = {
             id: curp, curp,
             name: String(p.Nombre || p.name || '').toUpperCase().trim(),
             paternalLastName: String(p.Apaterno || p.paternalLastName || '').toUpperCase().trim(),
@@ -322,6 +336,7 @@ export async function bulkInsertPatients(patients: any[]) {
             registrationDate: String(p.FechaApertura || p.registrationDate || '').trim(),
             derechoAbiencia: String(p.DerechoAbiencia || p.derechoAbiencia || '').toUpperCase().trim(),
         };
+        mapped.nombreCompleto = generateNombreCompleto(mapped);
         batch.set(ref, mapped, { merge: true });
     }
     await batch.commit();
@@ -366,7 +381,8 @@ export async function getVaccineAppointmentsData() {
 
 export async function saveNewAppointment(appointment: any, patient: any, isDouble: boolean, colonia?: string) {
     const patientRef = doc(adminDb, 'patients', patient.curp);
-    await setDoc(patientRef, { ...patient, id: patient.curp }, { merge: true });
+    const nombreCompleto = generateNombreCompleto(patient);
+    await setDoc(patientRef, { ...patient, id: patient.curp, nombreCompleto }, { merge: true });
     
     const id = uuidv4();
     const appointmentNumber = `MED-${uuidv4().split('-')[0].toUpperCase()}`;

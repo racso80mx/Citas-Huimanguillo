@@ -164,8 +164,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
           if (searchName) searchOptions.searchName = searchName.toUpperCase().trim();
       }
 
-      // If it's the initial load or a tab change without search terms, and the user hasn't manually searched yet,
-      // we only fetch counts and metadata, not the full patient list.
+      // Si no es búsqueda manual y no se ha buscado antes, solo traer metadata
       if (!manualSearch && !hasSearched && activeTab === 'patients') {
           const [countsData, clinicsData, serviceTypesData, appointmentsData, coloniasData] = await Promise.all([
             getPatientCounts(),
@@ -206,10 +205,9 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
     }
   }, [statusFilter, searchName, searchCurp, searchExpediente, hasSearched, activeTab, toast]);
   
-  // Update counts periodically or when status changes, but don't auto-fetch patients
   useEffect(() => {
     loadData(false);
-  }, [statusFilter]); 
+  }, [statusFilter, loadData]); 
 
   const handleClearSearch = () => {
       setSearchName('');

@@ -30,6 +30,7 @@ export type Patient = {
   name: string;
   paternalLastName: string;
   maternalLastName: string;
+  nombreCompleto?: string; // Search-optimized field
   birthDate?: string;
   sex: 'Hombre' | 'Mujer';
   age: number;
