@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useEffect, useTransition, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
@@ -46,7 +45,7 @@ import { Switch } from '../ui/switch';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Calendar } from '../ui/calendar';
-import { format, isValid, parseISO } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { timeSlots30Min } from '@/lib/time-slots';
 import { Badge } from '../ui/badge';
@@ -128,14 +127,15 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
             return;
         }
 
+        const newDateStrings = Array.from(new Set(dates.map(d => format(d, 'yyyy-MM-dd'))));
+
         // Si se agregó una fecha nueva, validar conflictos de citas
-        if (dates.length > prevDates.length) {
-            const newDate = dates.find(d => !prevDates.includes(format(d, 'yyyy-MM-dd')));
-            if (newDate) {
-                const dateStr = format(newDate, 'yyyy-MM-dd');
-                const count = await getAppointmentCountOnDate(editedClinic.id, dateStr);
+        if (newDateStrings.length > prevDates.length) {
+            const addedDateStr = newDateStrings.find(d => !prevDates.includes(d));
+            if (addedDateStr) {
+                const count = await getAppointmentCountOnDate(editedClinic.id, addedDateStr);
                 if (count > 0) {
-                    setConflictInfo({ date: format(newDate, 'dd/MM/yyyy'), count });
+                    setConflictInfo({ date: addedDateStr, count });
                     setPendingDates(dates);
                     setIsConfirmingBlock(true);
                     return;
@@ -143,7 +143,6 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
             }
         }
 
-        const newDateStrings = Array.from(new Set(dates.map(d => format(d, 'yyyy-MM-dd'))));
         handleFieldChange('unavailableDates', newDateStrings);
     };
 
@@ -307,7 +306,7 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {editedClinic.unavailableDates?.length ? editedClinic.unavailableDates.map(dateStr => (
+                                    {(editedClinic.unavailableDates || []).length ? (editedClinic.unavailableDates || []).map(dateStr => (
                                         <TableRow key={dateStr} className="hover:bg-muted/30 transition-colors">
                                             <TableCell className="font-black text-sm uppercase">
                                                 {format(new Date(dateStr + 'T12:00:00'), "eeee dd 'de' MMMM, yyyy", { locale: es })}
@@ -366,7 +365,7 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {editedClinic.customSchedules?.length ? editedClinic.customSchedules.map(sched => (
+                                    {(editedClinic.customSchedules || []).length ? (editedClinic.customSchedules || []).map(sched => (
                                         <TableRow key={sched.date} className="hover:bg-muted/30 transition-colors">
                                             <TableCell className="font-black text-sm uppercase">
                                                 {format(new Date(sched.date + 'T12:00:00'), "eeee dd 'de' MMMM", { locale: es })}
@@ -613,7 +612,7 @@ export function ClinicsManager() {
                                     <div className="flex items-center gap-2 text-xs font-black text-muted-foreground">
                                         <Clock className="h-3 w-3" /> {clinic.startTime} - {clinic.endTime}
                                         <Badge className="bg-primary/5 text-primary text-[10px] h-5 border-primary/20">{clinic.dailySlots} Citas</Badge>
-                                        {(clinic.unavailableDates?.length || 0) > 0 && <Badge className="bg-red-50 text-red-600 text-[10px] border-red-200">VACACIONES</Badge>}
+                                        {(clinic.unavailableDates?.length || 0) > 0 && <Badge className="bg-red-50 text-red-600 text-[10px] border-red-200 uppercase font-black px-1.5">Vacaciones</Badge>}
                                     </div>
                                 </TableCell>
                                 <TableCell className="text-right pr-6">

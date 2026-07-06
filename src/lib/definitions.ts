@@ -105,6 +105,15 @@ export type CustomSchedule = {
     reason?: string;
 };
 
+export type ClinicBlock = {
+    id: string; // clinicId_date
+    clinicId: string;
+    date: string; // YYYY-MM-DD
+    type: 'vacation' | 'custom';
+    endTime?: string;
+    reason?: string;
+};
+
 export const ClinicSchema = z.object({
   id: z.string(),
   name: z.string().min(1, "El nombre de la unidad es requerido."),
@@ -445,7 +454,7 @@ export type MedicalConsultation = {
     pregestationalCare?: 'Primera vez' | 'Subsecuente';
     pregestationalRisk?: string;
     
-    // Embarazada (Control prenatal)
+    // Control Prenatal
     pregnancyTrimester?: string;
     pregnancyHighRisk?: boolean;
     pregnancyComplications?: string[];
@@ -492,12 +501,6 @@ export type MedicalConsultation = {
     
     nextAppointmentDate?: string;
     createdAt: string;
-};
-
-export type Cie10Glossary = {
-    id: string;
-    campo: string;
-    descripcion: string;
 };
 
 export type Cie10Record = {
