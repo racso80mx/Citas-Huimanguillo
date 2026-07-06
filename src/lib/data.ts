@@ -14,8 +14,7 @@ import {
   DocumentReference,
   query,
   where,
-  limit,
-  getCountFromServer
+  limit
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -52,7 +51,6 @@ import { startOfDay, subDays } from 'date-fns';
 
 /**
  * MOTOR DE SERIALIZACIÓN PROFUNDA
- * Convierte Timestamps y objetos complejos a tipos primitivos antes de enviarlos al cliente.
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return '';
@@ -84,9 +82,6 @@ export function serializeData(data: any): any {
   return data;
 }
 
-/**
- * Genera el nombre completo normalizado para búsquedas.
- */
 function generateNombreCompleto(p: any) {
     const n = (p.name || '').trim();
     const ap = (p.paternalLastName || '').trim();
@@ -94,10 +89,6 @@ function generateNombreCompleto(p: any) {
     return `${n} ${ap} ${am}`.replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
-/**
- * HIDRATACIÓN DE CITAS EN MEMORIA
- * Resuelve la información del paciente vinculada a las citas.
- */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     
@@ -331,7 +322,7 @@ export async function deletePatients(ids: string[]) {
 
 export async function getPatientCounts(): Promise<ArchiveCounts> {
     const colRef = collection(adminDb, 'patients');
-    const snap = await getDocs(query(colRef, limit(20000)));
+    const snap = await getDocs(query(colRef, limit(10000)));
     const patients = snap.docs.map(d => d.data());
     
     return {

@@ -164,7 +164,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
           if (searchName) searchOptions.searchName = searchName.toUpperCase().trim();
       }
 
-      // Si no es búsqueda manual y no se ha buscado antes, solo traer metadata básica de catálogos y counts
+      // Si no es búsqueda manual y no se ha buscado antes, solo traer metadata básica
       if (!manualSearch && !hasSearched && activeTab === 'patients') {
           const [countsData, clinicsData, serviceTypesData, appointmentsData, coloniasData] = await Promise.all([
             getPatientCounts(),
