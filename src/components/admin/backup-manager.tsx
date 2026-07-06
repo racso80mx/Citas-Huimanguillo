@@ -11,7 +11,7 @@ import {
 import { Button } from '../ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { downloadBackupAction, cleanupOldRecords, logActivity, rebuildNombreCompletoAction } from '@/lib/actions';
-import { Loader2, Download, Trash, Database, ShieldAlert, CheckCircle2, UserRound, RefreshCcw } from 'lucide-react';
+import { Loader2, Download, Trash, Database, ShieldAlert, CheckCircle2, RefreshCw } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -164,7 +164,7 @@ export function BackupManager({ onRestoreSuccess }: { onRestoreSuccess?: () => v
             variant="outline"
             className="w-full h-11 font-bold border-primary/20 text-primary hover:bg-primary/5 shadow-sm"
           >
-            {isRebuilding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-2 h-4 w-4" />}
+            {isRebuilding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             Reconstruir Nombres Completos
           </Button>
 

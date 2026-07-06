@@ -229,34 +229,28 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
         return [];
     }
 
+    let results: Patient[] = [];
+
     // 1. Prioridad: Búsqueda exacta por CURP (ID del documento)
     if (options?.searchCurp) {
         const s = await getDoc(doc(adminDb, 'patients', options.searchCurp.toUpperCase().trim()));
-        if (s.exists()) return serializeData([{ ...s.data(), id: s.id }]);
-        return [];
-    }
-
+        if (s.exists()) results = [{ ...s.data(), id: s.id } as Patient];
+    } 
     // 2. Prioridad: Búsqueda exacta por Expediente
-    if (options?.searchExpediente) {
+    else if (options?.searchExpediente) {
         const exp = options.searchExpediente.trim();
         const q = query(colRef, where('expediente', '==', exp), limit(50));
         const snap = await getDocs(q);
-        if (!snap.empty) return serializeData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
-        
-        // Intento con 0 inicial si no se encontró
-        const qAlt = query(colRef, where('expediente', '==', '0' + exp), limit(50));
-        const snapAlt = await getDocs(qAlt);
-        return serializeData(snapAlt.docs.map(d => ({ ...d.data(), id: d.id })));
+        results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
     }
-
     // 3. Búsqueda por Nombre (Smart-Match en Servidor)
-    const snap = await getDocs(query(colRef, limit(10000)));
-    let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
-
-    if (options?.searchName) {
+    else if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
         const searchWords = term.split(/\s+/).filter(w => w.length > 0);
         
+        const snap = await getDocs(query(colRef, limit(10000)));
+        results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
+
         results = results.filter(p => {
             const nc = (p.nombreCompleto || generateNombreCompleto(p)).toUpperCase();
             return searchWords.every(word => nc.includes(word));
@@ -269,7 +263,7 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
 
     results.sort((a, b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
     
-    return serializeData(results.slice(0, 300)); // Limitar resultados de búsqueda por nombre
+    return serializeData(results.slice(0, 500)); 
 }
 
 export async function rebuildNombreCompletoAction() {
@@ -648,15 +642,6 @@ export async function getServiceTypesData() { const s = await getDocs(collection
 export async function updateServiceTypes(t: any[]) { const b = writeBatch(adminDb); t.forEach(x => b.set(doc(adminDb, 'serviceTypes', x.id), x)); await b.commit(); return { success: true }; }
 export async function getSpecialtiesData() { const s = await getDocs(collection(adminDb, 'specialties')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateSpecialties(t: any[]) { const b = writeBatch(adminDb); t.forEach(x => b.set(doc(adminDb, 'specialties', x.id), x)); await b.commit(); return { success: true }; }
-
-export async function getLabSettings() { const s = await getDoc(doc(adminDb, 'settings', 'labSettings')); return s.exists() ? serializeData(s.data()) : { dailySlots: 10 }; }
-export async function updateLabSettings(s: any) { await setDoc(doc(adminDb, 'settings', 'labSettings'), s, { merge: true }); return { success: true }; }
-export async function getXRaySettings() { const s = await getDoc(doc(adminDb, 'settings', 'xraySettings')); return s.exists() ? serializeData(s.data()) : { dailySlots: 10 }; }
-export async function updateXRaySettings(s: any) { await setDoc(doc(adminDb, 'settings', 'xraySettings'), s, { merge: true }); return { success: true }; }
-export async function getUltrasoundSettings() { const s = await getDoc(doc(adminDb, 'settings', 'ultrasoundSettings')); return s.exists() ? serializeData(s.data()) : { dailySlots: 10 }; }
-export async function updateUltrasoundSettings(s: any) { await setDoc(doc(adminDb, 'settings', 'ultrasoundSettings'), s, { merge: true }); return { success: true }; }
-export async function getVaccineSettings() { const s = await getDoc(doc(adminDb, 'settings', 'vaccineSettings')); return s.exists() ? serializeData(s.data()) : { dailySlots: 10 }; }
-export async function updateVaccineSettings(s: any) { await setDoc(doc(adminDb, 'settings', 'vaccineSettings'), s, { merge: true }); return { success: true }; }
 
 export async function getLabStudies() { const s = await getDocs(collection(adminDb, 'labStudies')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateLabStudies(s: any[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'labStudies', x.id), x)); await b.commit(); return { success: true }; }
