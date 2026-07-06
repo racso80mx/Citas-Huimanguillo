@@ -243,9 +243,10 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
         });
     }
 
+    // Ordenación en memoria para evitar errores de índice compuesto
     results.sort((a, b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
     
-    return serializeData(results.slice(0, 500));
+    return serializeData(results.slice(0, 1000));
 }
 
 export async function getPatientByCURP(curp: string) {
@@ -383,7 +384,7 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
 export async function getAppointmentsForClinic(cid: string) {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(10000)));
     let apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    apps.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    apps.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
     return hydrateAppointments(apps);
 }
 
@@ -449,7 +450,6 @@ export async function getClinicsData() {
 export async function updateClinics(clinics: Clinic[]) { 
     const b = writeBatch(adminDb);
     
-    // Obtener bloqueos actuales para manejar eliminaciones
     const currentBlocksSnap = await getDocs(collection(adminDb, 'clinicBlocks'));
     const currentBlocks = currentBlocksSnap.docs.map(d => ({ id: d.id, ...serializeData(d.data()) }));
 
@@ -463,7 +463,6 @@ export async function updateClinics(clinics: Clinic[]) {
 
         const newBlockIds = new Set<string>();
         
-        // Guardar en tabla aparte: Vacaciones
         if (unavailableDates) {
             for (const date of unavailableDates) {
                 const blockId = `${x.id}_${date}`;
@@ -472,7 +471,6 @@ export async function updateClinics(clinics: Clinic[]) {
             }
         }
 
-        // Guardar en tabla aparte: Horarios Especiales
         if (customSchedules) {
             for (const sched of customSchedules) {
                 const blockId = `${x.id}_${sched.date}`;
@@ -487,7 +485,6 @@ export async function updateClinics(clinics: Clinic[]) {
             }
         }
 
-        // Limpiar bloqueos obsoletos de esta clínica
         const blocksToDelete = currentBlocks.filter((cb: any) => cb.clinicId === x.id && !newBlockIds.has(cb.id));
         blocksToDelete.forEach(block => b.delete(doc(adminDb, 'clinicBlocks', block.id)));
     }
@@ -500,7 +497,6 @@ export async function deleteClinic(id: string) {
     const b = writeBatch(adminDb);
     b.delete(doc(adminDb, 'clinics', id));
     
-    // Borrar bloqueos asociados en la tabla aparte
     const blocksSnap = await getDocs(query(collection(adminDb, 'clinicBlocks'), where('clinicId', '==', id)));
     blocksSnap.forEach(d => b.delete(d.ref));
     
@@ -667,9 +663,15 @@ export async function getBIData() {
 }
 
 export async function getAttendedPatientsForClinic(cid: string) {
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), where('status', '==', 'Atendido'), limit(5000));
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(10000));
     const snap = await getDocs(q);
-    const ids = Array.from(new Set(snap.docs.map(d => d.data().patientId)));
+    
+    // Filtrado de estatus "Atendido" en memoria para evitar índices compuestos
+    const ids = Array.from(new Set(snap.docs
+        .filter(d => d.data().status === 'Atendido')
+        .map(d => d.data().patientId)
+    ));
+
     if (ids.length === 0) return [];
     const patients: Patient[] = [];
     for (let i = 0; i < ids.length; i += 30) {
@@ -735,9 +737,10 @@ export async function applyStatusUpdateChunk(expedientes: string[], status: stri
 
 export async function getPatientPrescriptionsCountTodayAction(pid: string) {
     const today = startOfDay(new Date()).toISOString();
-    const q = query(collection(adminDb, 'prescriptions'), where('patientId', '==', pid), where('date', '>=', today));
+    // Consulta simple + filtrado en memoria
+    const q = query(collection(adminDb, 'prescriptions'), where('patientId', '==', pid));
     const s = await getDocs(q);
-    return s.size;
+    return s.docs.filter(d => (d.data().date || '') >= today).length;
 }
 
 export async function bulkInsertCie10Glossary(data: any[]) { const b = writeBatch(adminDb); data.forEach(d => b.set(doc(adminDb, 'cie10Glossary', uuidv4()), d)); await b.commit(); return { success: true, processedCount: data.length }; }
@@ -793,7 +796,12 @@ export async function getAvailableSlotsForDate(cid: string, d: string) {
 }
 
 export async function getAppointmentCountOnDate(clinicId: string, date: string) {
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId), where('date', '>=', date), where('date', '<=', date + 'T23:59:59'));
-    const snap = await getCountFromServer(q);
-    return snap.data().count;
+    // Consulta simple + filtrado en memoria para evitar errores de índice compuesto
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId));
+    const snap = await getDocs(q);
+    const count = snap.docs.filter(d => {
+        const appDate = d.data().date;
+        return typeof appDate === 'string' && appDate.startsWith(date);
+    }).length;
+    return count;
 }
