@@ -375,7 +375,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                                 </div>
                                 <Popover>
                                     <PopoverTrigger asChild><Button variant="outline" size="sm" className="h-9 border-primary/20"><CalendarIcon className="mr-2 h-4 w-4" /> Selector Rango</Button></PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="end"><Calendar mode="range" selected={dateRange} onSelect={r => { setDateRange(r); setDateFilter('range'); }} numberOfMonths={2} locale={es} /></PopoverContent>
+                                    <PopoverContent className="w-auto p-0" align="end"><Calendar mode="range" selected={dateRange} onSelect={r => { setDateRange(r); setFilterType('range'); }} numberOfMonths={2} locale={es} /></PopoverContent>
                                 </Popover>
                                 <Button onClick={async () => await generateArchiveListPDF(appointmentsToDisplay, 'LISTADO DE CITAS', `Filtro: ${dateFilter.toUpperCase()}`)} variant="secondary" size="sm" className="font-bold"><FileText className="mr-2 h-4 w-4" /> Exportar PDF</Button>
                             </div>

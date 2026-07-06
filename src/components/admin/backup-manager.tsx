@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useTransition } from 'react';
 import {
@@ -11,8 +10,8 @@ import {
 } from '../ui/card';
 import { Button } from '../ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { downloadBackupAction, cleanupOldRecords, logActivity } from '@/lib/actions';
-import { Loader2, Download, Trash, Database, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { downloadBackupAction, cleanupOldRecords, logActivity, rebuildNombreCompletoAction } from '@/lib/actions';
+import { Loader2, Download, Trash, Database, ShieldAlert, CheckCircle2, UserRound, RefreshCcw } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +29,7 @@ import { Label } from '../ui/label';
 export function BackupManager({ onRestoreSuccess }: { onRestoreSuccess?: () => void }) {
   const [isDownloading, startDownloadTransition] = useTransition();
   const [isCleaning, startCleanTransition] = useTransition();
+  const [isRebuilding, startRebuildTransition] = useTransition();
   const [cleanupPassword, setCleanupPassword] = useState('');
   const { toast } = useToast();
   
@@ -98,6 +98,20 @@ export function BackupManager({ onRestoreSuccess }: { onRestoreSuccess?: () => v
     });
   };
 
+  const handleRebuildNames = () => {
+    startRebuildTransition(async () => {
+        const result = await rebuildNombreCompletoAction();
+        if (result.success) {
+            toast({ 
+                title: "Reconstrucción Finalizada", 
+                description: `Se han actualizado ${result.count} pacientes con su campo de nombre completo normalizado.` 
+            });
+        } else {
+            toast({ title: 'Error al reconstruir nombres', variant: 'destructive' });
+        }
+    });
+  };
+
   const handleConfirmCleanup = () => {
     if (cleanupPassword !== 'Hu1m4ngu1ll0') {
       toast({
@@ -124,7 +138,7 @@ export function BackupManager({ onRestoreSuccess }: { onRestoreSuccess?: () => v
   };
 
   return (
-      <Card className="shadow-lg border-primary/20">
+      <Card className="shadow-lg border-primary/10">
         <CardHeader className="bg-muted/5">
           <CardTitle className='flex items-center gap-2 text-primary font-black uppercase text-sm'>
             <Database className="h-5 w-5" /> Mantenimiento de Datos
@@ -142,6 +156,16 @@ export function BackupManager({ onRestoreSuccess }: { onRestoreSuccess?: () => v
           >
             {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
             Descargar Respaldo (Excel)
+          </Button>
+
+          <Button 
+            onClick={handleRebuildNames} 
+            disabled={isRebuilding} 
+            variant="outline"
+            className="w-full h-11 font-bold border-primary/20 text-primary hover:bg-primary/5 shadow-sm"
+          >
+            {isRebuilding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-2 h-4 w-4" />}
+            Reconstruir Nombres Completos
           </Button>
 
           <AlertDialog onOpenChange={(open) => !open && setCleanupPassword('')}>
