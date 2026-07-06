@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -16,7 +17,9 @@ import {
   limit,
   orderBy,
   getCountFromServer,
-  or
+  or,
+  startAt,
+  endAt
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -52,6 +55,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 /**
  * MOTOR DE SERIALIZACIÓN PROFUNDA
+ * Garantiza que los objetos de Firebase sean legibles por NextJS Server Actions
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return '';
@@ -76,6 +80,10 @@ function generateNombreCompleto(p: any) {
     return `${n} ${ap} ${am}`.replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
+/**
+ * HIDRATACIÓN DE CITAS
+ * Vincula el objeto paciente a cada cita mediante su ID de referencia
+ */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     const patientIds = Array.from(new Set(appointments.map(a => {
@@ -114,15 +122,22 @@ export async function getLogsData() {
 }
 
 // --- MÓDULOS Y SEGURIDAD ---
+const DEFAULT_MODULE_SETTINGS: ModuleSettings = {
+    citasMedicasEnabled: true, laboratorioEnabled: true, rayosXEnabled: true, ultrasoundEnabled: true, vacunasEnabled: true,
+    archivoEnabled: true, farmaciaEnabled: true, almacenEnabled: true, archivoConsultaEnabled: true,
+    citasMedicasWhatsAppEnabled: true, laboratorioWhatsAppEnabled: true, rayosXWhatsAppEnabled: true,
+    ultrasoundWhatsAppEnabled: true, vacunasWhatsAppEnabled: true, archivoWhatsAppEnabled: true,
+    citasMedicasPassword: '123', archivoConsultaPassword: '123'
+};
+
 export async function getModuleSettings(): Promise<ModuleSettings> {
-    const s = await getDoc(doc(adminDb, 'settings', 'moduleSettings'));
-    return s.exists() ? serializeData(s.data()) : {
-        citasMedicasEnabled: true, laboratorioEnabled: true, rayosXEnabled: true, ultrasoundEnabled: true, vacunasEnabled: true,
-        archivoEnabled: true, farmaciaEnabled: true, almacenEnabled: true, archivoConsultaEnabled: true,
-        citasMedicasWhatsAppEnabled: true, laboratorioWhatsAppEnabled: true, rayosXWhatsAppEnabled: true,
-        ultrasoundWhatsAppEnabled: true, vacunasWhatsAppEnabled: true, archivoWhatsAppEnabled: true,
-        citasMedicasPassword: '123', archivoConsultaPassword: '123'
-    };
+    try {
+        const s = await getDoc(doc(adminDb, 'settings', 'moduleSettings'));
+        if (!s.exists()) return DEFAULT_MODULE_SETTINGS;
+        return { ...DEFAULT_MODULE_SETTINGS, ...serializeData(s.data()) };
+    } catch (e) {
+        return DEFAULT_MODULE_SETTINGS;
+    }
 }
 
 export async function updateModuleSettings(s: ModuleSettings) {
@@ -139,12 +154,24 @@ export async function verifyModulePassword(module: string, password: string) {
     
     if (module === 'medical') {
         const ms = await getModuleSettings();
-        return { success: (ms.citasMedicasPassword || '123') === password || password === 'citas2026' };
+        const validPassword = ms.citasMedicasPassword || '123';
+        return { success: password === validPassword || password === 'citas2026' };
     }
 
-    const docId = { archive: 'archiveSettings', pharmacy: 'pharmacySettings', warehouse: 'warehouseSettings', bi: 'biSettings' }[module] || `${module}Settings`;
+    const docId = { 
+        archive: 'archiveSettings', 
+        pharmacy: 'pharmacySettings', 
+        warehouse: 'warehouseSettings', 
+        bi: 'biSettings',
+        lab: 'labSettings',
+        xray: 'xraySettings',
+        ultrasound: 'ultrasoundSettings',
+        vaccine: 'vaccineSettings'
+    }[module] || `${module}Settings`;
+    
     const snap = await getDoc(doc(adminDb, 'settings', docId));
-    return { success: snap.data()?.password === password };
+    const dbPassword = snap.exists() ? snap.data()?.password : null;
+    return { success: (dbPassword || '123') === password };
 }
 
 export async function verifyClinicPassword(clinicId: string, password: string) {
@@ -155,33 +182,47 @@ export async function verifyClinicPassword(clinicId: string, password: string) {
 
 // --- PACIENTES ---
 export async function getPatientCounts(): Promise<ArchiveCounts> {
-    const coll = collection(adminDb, 'patients');
-    const [totalSnap, bajaSnap, bajaDefSnap] = await Promise.all([
-        getCountFromServer(coll),
-        getCountFromServer(query(coll, where('status', '==', PatientStatus.Baja))),
-        getCountFromServer(query(coll, where('status', '==', PatientStatus.BajaDefinitiva)))
-    ]);
-    const total = totalSnap.data().count;
-    const bajaTemporal = bajaSnap.data().count;
-    const bajaDefinitiva = bajaDefSnap.data().count;
-    const vigente = Math.max(0, total - (bajaTemporal + bajaDefinitiva));
-    return { total, vigente, bajaTemporal, bajaDefinitiva };
+    try {
+        const coll = collection(adminDb, 'patients');
+        // Usamos getCountFromServer para evitar descargar los miles de registros
+        const [totalSnap, bajaSnap, bajaDefSnap] = await Promise.all([
+            getCountFromServer(coll),
+            getCountFromServer(query(coll, where('status', '==', PatientStatus.Baja))),
+            getCountFromServer(query(coll, where('status', '==', PatientStatus.BajaDefinitiva)))
+        ]);
+        const total = totalSnap.data().count;
+        const bajaTemporal = bajaSnap.data().count;
+        const bajaDefinitiva = bajaDefSnap.data().count;
+        // Los vigentes son el total menos los que tienen estatus de baja explícito
+        const vigente = Math.max(0, total - (bajaTemporal + bajaDefinitiva));
+        return { total, vigente, bajaTemporal, bajaDefinitiva };
+    } catch (e) {
+        console.error("Error en conteo atómico:", e);
+        return { total: 0, vigente: 0, bajaTemporal: 0, bajaDefinitiva: 0 };
+    }
 }
 
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     if (!options?.searchCurp && !options?.searchExpediente && !options?.searchName) return [];
+    
     let q;
-    if (options?.searchCurp) q = query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(50));
-    else if (options?.searchExpediente) q = query(colRef, where('expediente', '==', options.searchExpediente.trim()), limit(50));
-    else if (options?.searchName) {
+    if (options?.searchCurp) {
+        q = query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(20));
+    } else if (options?.searchExpediente) {
+        q = query(colRef, where('expediente', '==', options.searchExpediente.trim()), limit(20));
+    } else if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
-        q = query(colRef, where('nombreCompleto', '>=', term), where('nombreCompleto', '<=', term + '\uf8ff'), limit(100));
+        q = query(colRef, where('nombreCompleto', '>=', term), where('nombreCompleto', '<=', term + '\uf8ff'), limit(50));
     }
+    
     if (!q) return [];
     const snap = await getDocs(q);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
-    if (options?.status && options.status !== 'Total') results = results.filter(p => (p.status || PatientStatus.Vigente) === options.status);
+    
+    if (options?.status && options.status !== 'Total') {
+        results = results.filter(p => (p.status || PatientStatus.Vigente) === options.status);
+    }
     return serializeData(results);
 }
 
@@ -270,7 +311,7 @@ export async function rebuildNombreCompletoAction() {
 
 // --- CITAS ---
 export async function getAppointmentsData() { 
-    const snap = await getDocs(query(collection(adminDb, 'appointments'), orderBy('date', 'desc'), limit(5000))); 
+    const snap = await getDocs(query(collection(adminDb, 'appointments'), orderBy('date', 'desc'), limit(2000))); 
     return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
 }
 
@@ -328,22 +369,22 @@ export async function saveNewVaccineAppointment(appointment: any, patient: any) 
 }
 
 export async function getLabAppointmentsData() {
-    const snap = await getDocs(query(collection(adminDb, 'labAppointments'), orderBy('date', 'desc'), limit(2000)));
+    const snap = await getDocs(query(collection(adminDb, 'labAppointments'), orderBy('date', 'desc'), limit(1000)));
     return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
 }
 
 export async function getXRayAppointmentsData() {
-    const snap = await getDocs(query(collection(adminDb, 'xrayAppointments'), orderBy('date', 'desc'), limit(2000)));
+    const snap = await getDocs(query(collection(adminDb, 'xrayAppointments'), orderBy('date', 'desc'), limit(1000)));
     return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
 }
 
 export async function getUltrasoundAppointmentsData() {
-    const snap = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), orderBy('date', 'desc'), limit(2000)));
+    const snap = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), orderBy('date', 'desc'), limit(1000)));
     return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
 }
 
 export async function getVaccineAppointmentsData() {
-    const snap = await getDocs(query(collection(adminDb, 'vaccineAppointments'), orderBy('date', 'desc'), limit(2000)));
+    const snap = await getDocs(query(collection(adminDb, 'vaccineAppointments'), orderBy('date', 'desc'), limit(1000)));
     return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
 }
 
