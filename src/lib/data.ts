@@ -15,8 +15,7 @@ import {
   where,
   limit,
   orderBy,
-  startAt,
-  endAt
+  getCountFromServer
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -43,9 +42,7 @@ import type {
   ServiceType,
   Specialty,
   Prescription,
-  ArchiveCounts,
-  MedicalConsultation,
-  Cie10Record
+  ArchiveCounts
 } from './definitions';
 import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
@@ -147,28 +144,27 @@ export async function verifyClinicPassword(id: string, password: string) {
     return { success: false, message: 'Contraseña de unidad médica incorrecta.' };
 }
 
-// --- PACIENTES (BÚSQUEDA DIRECTA A DB) ---
+// --- PACIENTES (CONSULTAS DIRECTAS SIN CARGA MASIVA) ---
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     
-    // Si no hay búsqueda, no cargar nada (solicitado por usuario)
+    // Si no hay búsqueda, no cargar nada para ahorrar recursos
     if (!options?.searchCurp && !options?.searchExpediente && !options?.searchName) return [];
 
     let q;
     const searchStatus = options?.status && options.status !== 'Total' ? options.status : null;
 
-    // Búsqueda DIRECTA por CURP
+    // 1. Búsqueda por CURP (Directa)
     if (options?.searchCurp) {
         q = query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(10));
     } 
-    // Búsqueda DIRECTA por EXPEDIENTE
+    // 2. Búsqueda por EXPEDIENTE (Directa)
     else if (options?.searchExpediente) {
         q = query(colRef, where('expediente', '==', options.searchExpediente.trim()), limit(10));
     }
-    // Búsqueda INTELIGENTE por NOMBRE (Prefijo o Filtrado masivo controlado)
+    // 3. Búsqueda por NOMBRE (Prefijo Inteligente)
     else if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
-        // Si el término es corto, usamos prefijo. Si es largo, consultamos un set y filtramos.
         q = query(colRef, where('nombreCompleto', '>=', term), where('nombreCompleto', '<=', term + '\uf8ff'), limit(100));
     }
 
@@ -186,6 +182,26 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     }
 
     return serializeData(results);
+}
+
+export async function getPatientCounts(): Promise<ArchiveCounts> {
+    const coll = collection(adminDb, 'patients');
+    
+    // Conteos directos desde base de datos (Sin descargar documentos)
+    const [totalSnap, bajaSnap, bajaDefSnap] = await Promise.all([
+        getCountFromServer(coll),
+        getCountFromServer(query(coll, where('status', '==', PatientStatus.Baja))),
+        getCountFromServer(query(coll, where('status', '==', PatientStatus.BajaDefinitiva)))
+    ]);
+
+    const total = totalSnap.data().count;
+    const bajaTemporal = bajaSnap.data().count;
+    const bajaDefinitiva = bajaDefSnap.data().count;
+    
+    // Cualquier paciente sin estatus se considera Vigente automáticamente
+    const vigente = total - bajaTemporal - bajaDefinitiva;
+
+    return { total, vigente, bajaTemporal, bajaDefinitiva };
 }
 
 export async function rebuildNombreCompletoAction() {
@@ -240,17 +256,6 @@ export async function deletePatients(ids: string[]) {
     return { success: true };
 }
 
-export async function getPatientCounts(): Promise<ArchiveCounts> {
-    const snap = await getDocs(query(collection(adminDb, 'patients'), limit(10000)));
-    const patients = snap.docs.map(d => d.data());
-    return {
-        total: patients.length,
-        vigente: patients.filter(p => (p.status || PatientStatus.Vigente) === PatientStatus.Vigente).length,
-        bajaTemporal: patients.filter(p => p.status === PatientStatus.Baja).length,
-        bajaDefinitiva: patients.filter(p => p.status === PatientStatus.BajaDefinitiva).length
-    };
-}
-
 export async function bulkInsertPatients(patients: any[]) {
     const batch = writeBatch(adminDb);
     patients.forEach(p => {
@@ -276,7 +281,7 @@ export async function bulkInsertPatients(patients: any[]) {
     return { success: true, processedCount: patients.length };
 }
 
-// --- CITAS (HIBRIDACIÓN SERVIDOR/CLIENTE PARA EVITAR ÍNDICES) ---
+// --- CITAS ---
 export async function getAppointmentsData() { 
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(10000))); 
     const apps = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
