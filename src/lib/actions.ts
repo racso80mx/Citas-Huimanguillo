@@ -1,3 +1,4 @@
+
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -72,7 +73,6 @@ export async function updatePatientStatus(id: string, s: string) {
     return res;
 }
 export async function deletePatient(id: string) { return data.deletePatient(id); }
-export async function deletePatients(ids: string[]) { return data.deletePatients(ids); }
 export async function getPatientByCURP(c: string) { return data.getPatientByCURP(c); }
 export async function bulkInsertPatients(p: any[]) { 
     const res = await data.bulkInsertPatients(p);
@@ -123,6 +123,10 @@ export async function deleteVaccineAppointment(id: string) {
 export async function rescheduleAppointment(id: string, d: string, t: any) { return data.rescheduleAppointment(id, d, t); }
 export async function cloneAppointment(id: string, d: string, t: any, ti?: string) { return data.cloneAppointment(id, d, t, ti); }
 export async function saveNewAppointment(a: any, p: any, isD: boolean, c?: string) { return data.saveNewAppointment(a, p, isD, c); }
+export async function saveNewLabAppointment(a: any, p: any) { return data.saveNewLabAppointment(a, p); }
+export async function saveNewXRayAppointment(a: any, p: any) { return data.saveNewXRayAppointment(a, p); }
+export async function saveNewUltrasoundAppointment(a: any, p: any) { return data.saveNewUltrasoundAppointment(a, p); }
+export async function saveNewVaccineAppointment(a: any, p: any) { return data.saveNewVaccineAppointment(a, p); }
 export async function getAppointmentsForClinic(cid: string) { return data.getAppointmentsForClinic(cid); }
 export async function getAppointmentCountOnDate(cid: string, d: string) { return data.getAppointmentCountOnDate(cid, d); }
 
@@ -206,10 +210,8 @@ export async function searchCie10(t: string) { return data.searchCie10(t); }
 export async function getBIData() { return data.getBIData(); }
 export async function getAttendedPatientsForClinic(c: string) { return data.getAttendedPatientsForClinic(c); }
 export async function cleanupOldRecords() { return data.cleanupOldRecords(); }
-
-// --- MANTENIMIENTO ---
-export async function normalizeExpedientesAction() { return data.normalizeExpedientesAction(); }
-export async function scanDuplicates(c: string) { return data.scanDuplicates(c); }
+export async function deletePatients(ids: string[]) { return data.deletePatients(ids); }
+export async function scanDuplicates(c: 'expediente' | 'curp' | 'name') { return data.scanDuplicates(c); }
 export async function applyStatusUpdateChunk(e: string[], s: string) { return data.applyStatusUpdateChunk(e, s); }
 export async function getPatientPrescriptionsCountTodayAction(p: string) { return data.getPatientPrescriptionsCountTodayAction(p); }
 export async function bulkInsertCie10Glossary(d: any[]) { return data.bulkInsertCie10Glossary(d); }
@@ -218,3 +220,5 @@ export async function deleteAllCie10Glossary() { return data.deleteAllCie10Gloss
 export async function deleteAllCie10Catalog() { return data.deleteAllCie10Catalog(); }
 export async function bulkInsertDoctors(d: any[]) { return data.bulkInsertDoctors(d); }
 export async function downloadBackupAction() { return data.downloadBackupAction(); }
+export async function normalizeExpedientesAction() { return data.normalizeExpedientesAction(); }
+
