@@ -80,6 +80,7 @@ export async function bulkInsertPatients(p: any[]) {
     revalidatePath('/', 'layout');
     return res;
 }
+export async function rebuildNombreCompletoAction() { return data.rebuildNombreCompletoAction(); }
 
 // --- CITAS ---
 export async function getAppointments() { return data.getAppointmentsData(); }
