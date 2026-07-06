@@ -52,13 +52,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { startOfDay, subDays } from 'date-fns';
 
 /**
- * MOTOR DE SERIALIZACIÓN INFALIBLE
+ * MOTOR DE SERIALIZACIÓN ROBUSTO
  * Convierte Timestamps y objetos complejos a tipos primitivos seguros.
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return '';
   
-  // Manejo de Timestamps de Firestore
   if (typeof data.toDate === 'function') {
     return data.toDate().toISOString();
   }
@@ -88,7 +87,7 @@ export function serializeData(data: any): any {
 
 /**
  * HIDRATACIÓN DE CITAS
- * Vincula citas con pacientes de forma robusta.
+ * Vincula citas con pacientes de forma robusta usando respaldo de cita si el vínculo falla.
  */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
@@ -115,7 +114,7 @@ async function hydrateAppointments(appointments: any[]) {
         const pid = typeof app.patientId === 'object' ? app.patientId?.id : app.patientId;
         const patientData = patientsMap[pid] || app.patient || { 
             name: 'PACIENTE', 
-            paternalLastName: 'DESCONOCIDO', 
+            paternalLastName: 'N/A', 
             maternalLastName: '',
             curp: pid || 'S/C', 
             phoneNumber: '---' 
@@ -210,52 +209,47 @@ export async function verifyClinicPassword(clinicId: string, password: string) {
     return { success: snap.exists() && snap.data()?.password === password };
 }
 
-// --- PACIENTES (BÚSQUEDA INTELIGENTE) ---
+// --- PACIENTES (MOTOR DE BÚSQUEDA INTELIGENTE) ---
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     
+    // Búsqueda por CURP (Exacta)
     if (options?.searchCurp) {
         const s = await getDocs(query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(1)));
-        if (!s.empty) return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
+        return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
     
+    // Búsqueda por Expediente (Tolerante a ceros)
     if (options?.searchExpediente) {
         const term = options.searchExpediente.trim();
         const s = await getDocs(query(colRef, where('expediente', 'in', [term, '0' + term]), limit(20)));
         if (!s.empty) return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
 
+    // Búsqueda por Nombre (Smart Match - No importa el orden)
     if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
         const words = term.split(/\s+/).filter(w => w.length >= 2);
         
-        if (words.length > 0) {
-            const first = words[0];
-            const qNames = [
-                query(colRef, where('name', '>=', first), where('name', '<=', first + '\uf8ff'), limit(500)),
-                query(colRef, where('paternalLastName', '>=', first), where('paternalLastName', '<=', first + '\uf8ff'), limit(500)),
-                query(colRef, where('maternalLastName', '>=', first), where('maternalLastName', '<=', first + '\uf8ff'), limit(500))
-            ];
-            
-            const snaps = await Promise.all(qNames.map(q => getDocs(q)));
-            const map = new Map<string, Patient>();
-            snaps.forEach(s => s.docs.forEach(d => map.set(d.id, { ...d.data(), id: d.id } as Patient)));
-            
-            let res = Array.from(map.values());
-            if (words.length > 1) {
-                res = res.filter(p => {
-                    const full = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
-                    return words.every(w => full.includes(w));
-                });
-            }
-            if (options.status && options.status !== 'Total') {
-                res = res.filter(p => p.status === options.status);
-            }
-            res.sort((a,b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
-            return serializeData(res.slice(0, 500));
+        // Obtenemos una muestra grande para filtrar en memoria (Evita errores de índice)
+        const snap = await getDocs(query(colRef, limit(5000)));
+        let all = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
+        
+        let filtered = all.filter(p => {
+            const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
+            return words.every(word => fullName.includes(word));
+        });
+
+        if (options.status && options.status !== 'Total') {
+            filtered = filtered.filter(p => p.status === options.status);
         }
+
+        // Ordenación en memoria
+        filtered.sort((a, b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
+        return serializeData(filtered.slice(0, 500));
     }
 
+    // Consulta general sin filtros de búsqueda
     let qBase = query(colRef, limit(10000));
     if (options?.status && options.status !== 'Total') {
         qBase = query(colRef, where('status', '==', options.status), limit(10000));
@@ -263,7 +257,9 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     
     const snap = await getDocs(qBase);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
-    results.sort((a,b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
+    
+    // Ordenación en memoria (Evita Firebase Index Error)
+    results.sort((a, b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
     return serializeData(results);
 }
 
