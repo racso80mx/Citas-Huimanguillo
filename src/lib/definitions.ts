@@ -74,14 +74,36 @@ export type Appointment = {
   createdAt?: string; // ISO date of creation
 };
 
-export enum ClinicType {
-    ConsultaExterna = 'Consulta Externa',
-    Especializada = 'Consulta Externa Especializada',
-    Psicologia = 'Psicología',
-    Nutricion = 'Nutrición',
-    Odontologia = 'Odontología',
-    Externo = 'Médico Externo / Otra Área'
+export enum BookingMode {
+    Time = 'time',
+    Token = 'token'
 }
+
+export type Clinic = {
+  id: string;
+  name: string;
+  doctorName: string;
+  doctorCurp?: string;
+  professionalLicense?: string;
+  password: string;
+  dailySlots: number;
+  waitlistSlots: number;
+  startTime: string;
+  endTime: string;
+  breakTime?: string;
+  weekendBookingEnabled: boolean;
+  daysOfAction?: string[];
+  unavailableDates?: string[];
+  customSchedules?: {
+      date: string;
+      endTime: string;
+      reason?: string;
+  }[];
+  serviceTypeId: string;
+  specialtyId?: string;
+  bookingMode: BookingMode;
+  consultationDuration?: number;
+};
 
 export type ServiceType = {
     id: string;
@@ -96,54 +118,6 @@ export type Specialty = {
     available: boolean;
 };
 
-export enum BookingMode {
-    Time = 'time',
-    Token = 'token'
-}
-
-export type CustomSchedule = {
-    date: string; // YYYY-MM-DD
-    endTime: string; // HH:mm
-    reason?: string;
-};
-
-export type ClinicBlock = {
-    id: string; // clinicId_date
-    clinicId: string;
-    date: string; // YYYY-MM-DD
-    type: 'vacation' | 'custom';
-    endTime?: string;
-    reason?: string;
-};
-
-export const ClinicSchema = z.object({
-  id: z.string(),
-  name: z.string().min(1, "El nombre de la unidad es requerido."),
-  doctorName: z.string().min(1, "El nombre del doctor es requerido."),
-  doctorCurp: z.string().optional(),
-  professionalLicense: z.string().optional(),
-  password: z.string().min(1, "La contraseña es requerida."),
-  dailySlots: z.number().min(1, "Debe haber al menos 1 cita."),
-  waitlistSlots: z.number().default(0),
-  startTime: z.string(),
-  endTime: z.string(),
-  breakTime: z.string().optional(),
-  weekendBookingEnabled: z.boolean(),
-  daysOfAction: z.array(z.string()).optional(),
-  unavailableDates: z.array(z.string()).optional(),
-  customSchedules: z.array(z.object({
-      date: z.string(),
-      endTime: z.string(),
-      reason: z.string().optional()
-  })).optional(),
-  serviceTypeId: z.string().min(1, "El tipo de consulta es requerido."),
-  specialtyId: z.string().optional(),
-  bookingMode: z.nativeEnum(BookingMode),
-  consultationDuration: z.number().min(1).optional(),
-});
-
-export type Clinic = z.infer<typeof ClinicSchema>;
-
 export type Colonia = {
   id: string; // UUID
   name: string;
@@ -157,26 +131,15 @@ export type DailyAvailability = {
   takenTimesByClinic: { [key: string]: any[] }; 
 };
 
-export type Report = {
+export type LabStudy = {
     id: string;
-    clinicId: string;
-    date: string; // YYYY-MM-DD
-    totalAppointments: number;
-    attended: number;
-    pending: number;
-    cancelled: number;
-}
-
-export const LabStudySchema = z.object({
-    id: z.string(),
-    code: z.string().optional(),
-    section: z.string().min(1, 'La sección es requerida.'),
-    name: z.string().min(1, 'El nombre es requerido.'),
-    sampleType: z.string().min(1, 'El tipo de muestra es requerido.'),
-    fastingHours: z.string(),
-    available: z.boolean(),
-});
-export type LabStudy = z.infer<typeof LabStudySchema>;
+    code?: string;
+    section: string;
+    name: string;
+    sampleType: string;
+    fastingHours: string;
+    available: boolean;
+};
 
 export type LabAppointment = {
     id: string;
@@ -201,13 +164,12 @@ export type LabSettings = {
     breakTime?: string;
 }
 
-export const XRayStudySchema = z.object({
-  id: z.string(),
-  name: z.string().min(1, 'El nombre del estudio es requerido.'),
-  indications: z.string().min(1, 'Las indicaciones son requeridas.'),
-  available: z.boolean(),
-});
-export type XRayStudy = z.infer<typeof XRayStudySchema>;
+export type XRayStudy = {
+  id: string;
+  name: string;
+  indications: string;
+  available: boolean;
+};
 
 export type XRayAppointment = {
     id: string;
@@ -233,13 +195,12 @@ export type XRaySettings = {
     breakTime?: string;
 }
 
-export const UltrasoundStudySchema = z.object({
-  id: z.string(),
-  name: z.string().min(1, 'El nombre del estudio es requerido.'),
-  indications: z.string().min(1, 'Las indicaciones son requeridas.'),
-  available: z.boolean(),
-});
-export type UltrasoundStudy = z.infer<typeof UltrasoundStudySchema>;
+export type UltrasoundStudy = {
+  id: string;
+  name: string;
+  indications: string;
+  available: boolean;
+};
 
 export type UltrasoundAppointment = {
     id: string;
@@ -265,15 +226,14 @@ export type UltrasoundSettings = {
     breakTime?: string;
 }
 
-export const VaccineSchema = z.object({
-  id: z.string(),
-  name: z.string().min(1, "El nombre es requerido"),
-  applicationAge: z.string(),
-  sex: z.string(),
-  description: z.string().min(1, "La descripción es requerida."),
-  available: z.boolean(),
-});
-export type Vaccine = z.infer<typeof VaccineSchema>;
+export type Vaccine = {
+  id: string;
+  name: string;
+  applicationAge: string;
+  sex: string;
+  description: string;
+  available: boolean;
+};
 
 export type VaccineAppointment = {
   id: string;
@@ -320,25 +280,11 @@ export type ModuleSettings = {
   archivoConsultaPassword?: string;
 };
 
-export type ArchiveSettings = {
-    password?: string;
-}
-
-export type PharmacySettings = {
-    password?: string;
-}
-
-export type WarehouseSettings = {
-    password?: string;
-}
-
-export type BISettings = {
-    password?: string;
-}
-
-export type AdminSettings = {
-    password?: string;
-}
+export type ArchiveSettings = { password?: string; }
+export type PharmacySettings = { password?: string; }
+export type WarehouseSettings = { password?: string; }
+export type BISettings = { password?: string; }
+export type AdminSettings = { password?: string; }
 
 export type ArchiveCounts = {
   total: number;
@@ -397,7 +343,7 @@ export type Prescription = {
     folio: string;
     patientId: string;
     patientName: string;
-    clinicId: string; // 'externo' for external doctors
+    clinicId: string; 
     doctorName: string;
     doctorLicense?: string;
     unitName?: string;
@@ -420,8 +366,6 @@ export type MedicalConsultation = {
     doctorName: string;
     date: string;
     service: string;
-    
-    // Signos Vitales
     weight?: number;
     height?: number;
     imc?: number;
@@ -434,35 +378,23 @@ export type MedicalConsultation = {
     oxygenSaturation?: number;
     glucose?: number;
     fastingGlucose?: boolean;
-    
-    // Clínica
     tbSymptomatic?: string;
     firstTimeOfYear?: boolean;
     motiveRelation: string;
-    
-    // Diagnósticos
     diagnosis1: string;
     diagnosis1Type: string;
     diagnosis2?: string;
     diagnosis2Type?: string;
     diagnosis3?: string;
     diagnosis3Type?: string;
-    
-    // Salud Mental
     mentalHealthAction?: string;
     recipeFolio?: string;
-    
-    // Atención Pregestacional
     pregestationalCare?: 'Primera vez' | 'Subsecuente';
     pregestationalRisk?: string;
-    
-    // Control Prenatal
     pregnancyTrimester?: string;
     pregnancyHighRisk?: boolean;
     pregnancyComplications?: string[];
     pregnancyActions?: string[];
-
-    // Atención Obstétrica (Atención del evento)
     obstetricAttentionDate?: string;
     obstetricAttentionTime?: string;
     gestationalWeeks?: number;
@@ -477,30 +409,18 @@ export type MedicalConsultation = {
     birthType?: string;
     withProduct?: string;
     familyPlanningMethods?: string[];
-    
-    // Puerperio
     puerperiumType?: 'Puérpera 1ra' | 'Puérpera Sub';
     puerperiumInfection?: boolean;
-    puerperiumInfectionDetails?: string;
     puerperiumPlanning?: boolean;
-    
-    // Otros eventos
     otherEvents?: string[];
-    
-    // Promoción
     vsoPackets?: number;
     lifeLine?: boolean;
     healthCard?: boolean;
     vaccinationComplete?: boolean;
-    
-    // Referencia
     referredBy?: string;
     counterReferred?: boolean;
-    
-    // Telemedicina
     telemedicineRole?: string;
     telemedicineStudies?: boolean;
-    
     nextAppointmentDate?: string;
     createdAt: string;
 };
