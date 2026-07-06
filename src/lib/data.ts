@@ -410,8 +410,11 @@ export async function getAvailableSlotsForDate(clinicId: string, dateIso: string
         .filter(a => a.clinicId === clinicId && a.date.startsWith(dateStr));
     
     if (clinic.bookingMode === BookingMode.Time) {
-        const customSchedules = await getDocs(query(collection(adminDb, 'clinicBlocks'), where('clinicId', '==', clinicId), where('type', '==', 'custom')));
-        const customSchedule = customSchedules.docs.map(d => d.data()).find(s => s.date === dateStr);
+        const customSchedulesSnap = await getDocs(query(collection(adminDb, 'clinicBlocks'), where('clinicId', '==', clinicId)));
+        const customSchedule = customSchedulesSnap.docs
+            .map(d => d.data())
+            .find(s => s.type === 'custom' && s.date === dateStr);
+        
         const endTime = customSchedule ? customSchedule.endTime : clinic.endTime;
         
         const generateSlots = (start: string, end: string, dur: number) => {
