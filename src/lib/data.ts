@@ -87,7 +87,7 @@ export function serializeData(data: any): any {
 
 /**
  * HIDRATACIÓN DE CITAS
- * Vincula citas con pacientes de forma robusta usando respaldo de cita si el vínculo falla.
+ * Vincula citas con pacientes de forma robusta.
  */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
@@ -149,7 +149,7 @@ export async function getLogsData() {
     return serializeData(logs);
 }
 
-// --- MÓDULOS Y SEGURIDAD ---
+// --- MÓDULOS ---
 export async function getModuleSettings(): Promise<ModuleSettings> {
     const s = await getDoc(doc(adminDb, 'settings', 'moduleSettings'));
     return s.exists() ? serializeData(s.data()) : {
@@ -209,58 +209,45 @@ export async function verifyClinicPassword(clinicId: string, password: string) {
     return { success: snap.exists() && snap.data()?.password === password };
 }
 
-// --- PACIENTES (MOTOR DE BÚSQUEDA INTELIGENTE) ---
+// --- PACIENTES (BÚSQUEDA INTELIGENTE SMART-MATCH) ---
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     
-    // Búsqueda por CURP (Exacta)
+    // 1. CURP Exacto
     if (options?.searchCurp) {
         const s = await getDocs(query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(1)));
         return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
     
-    // Búsqueda por Expediente (Tolerante a ceros)
+    // 2. Expediente (Tolerante)
     if (options?.searchExpediente) {
         const term = options.searchExpediente.trim();
         const s = await getDocs(query(colRef, where('expediente', 'in', [term, '0' + term]), limit(20)));
         if (!s.empty) return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })));
     }
 
-    // Búsqueda por Nombre (Smart Match - No importa el orden)
+    // 3. Búsqueda por Nombre Inteligente (Filtrado en memoria para evitar errores de índice)
+    const limitNum = options?.limitNum || 10000;
+    const snap = await getDocs(query(colRef, limit(limitNum)));
+    let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
+
     if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
         const words = term.split(/\s+/).filter(w => w.length >= 2);
         
-        // Obtenemos una muestra grande para filtrar en memoria (Evita errores de índice)
-        const snap = await getDocs(query(colRef, limit(5000)));
-        let all = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
-        
-        let filtered = all.filter(p => {
+        results = results.filter(p => {
             const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
             return words.every(word => fullName.includes(word));
         });
-
-        if (options.status && options.status !== 'Total') {
-            filtered = filtered.filter(p => p.status === options.status);
-        }
-
-        // Ordenación en memoria
-        filtered.sort((a, b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
-        return serializeData(filtered.slice(0, 500));
     }
 
-    // Consulta general sin filtros de búsqueda
-    let qBase = query(colRef, limit(10000));
     if (options?.status && options.status !== 'Total') {
-        qBase = query(colRef, where('status', '==', options.status), limit(10000));
+        results = results.filter(p => p.status === options.status);
     }
-    
-    const snap = await getDocs(qBase);
-    let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
-    
-    // Ordenación en memoria (Evita Firebase Index Error)
+
+    // Ordenación en memoria
     results.sort((a, b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
-    return serializeData(results);
+    return serializeData(results.slice(0, 500));
 }
 
 export async function getPatientByCURP(curp: string) {
