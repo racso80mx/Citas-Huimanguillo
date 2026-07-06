@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -109,6 +110,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
   const [searchName, setSearchName] = useState('');
   const [searchCurp, setSearchCurp] = useState('');
   const [searchExpediente, setSearchExpediente] = useState('');
+  const [hasSearched, setHasSearched] = useState(false);
   
   // Table state
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -148,6 +150,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
 
   const loadData = useCallback(async (manualSearch = false) => {
     setIsDataLoading(true);
+    if (manualSearch) setHasSearched(true);
     setCurrentPage(1); 
     
     try {
@@ -159,6 +162,25 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
           if (searchCurp) searchOptions.searchCurp = searchCurp.toUpperCase().trim();
           if (searchExpediente) searchOptions.searchExpediente = searchExpediente.trim();
           if (searchName) searchOptions.searchName = searchName.toUpperCase().trim();
+      }
+
+      // If it's the initial load or a tab change without search terms, and the user hasn't manually searched yet,
+      // we only fetch counts and metadata, not the full patient list.
+      if (!manualSearch && !hasSearched && activeTab === 'patients') {
+          const [countsData, clinicsData, serviceTypesData, appointmentsData, coloniasData] = await Promise.all([
+            getPatientCounts(),
+            getClinics(),
+            getServiceTypes(),
+            getAppointments(),
+            getColonias()
+          ]);
+          setCounts(countsData);
+          setClinics(clinicsData || []);
+          setServiceTypes(serviceTypesData || []);
+          setAllAppointments(appointmentsData || []);
+          setColonias(coloniasData || []);
+          setIsDataLoading(false);
+          return;
       }
 
       const [patientsData, countsData, clinicsData, serviceTypesData, appointmentsData, coloniasData] = await Promise.all([
@@ -178,13 +200,13 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
       setColonias(coloniasData || []);
     } catch (error: any) {
       console.error("Dashboard error:", error);
-      toast({ title: 'Error de Consulta', description: 'Ocurrió un problema al cargar los datos de la base de datos.', variant: 'destructive' });
+      toast({ title: 'Error de Consulta', description: 'Ocurrió un problema al cargar los datos.', variant: 'destructive' });
     } finally {
       setIsDataLoading(false);
     }
-  }, [statusFilter, searchName, searchCurp, searchExpediente, toast]);
+  }, [statusFilter, searchName, searchCurp, searchExpediente, hasSearched, activeTab, toast]);
   
-  // Initial load only
+  // Update counts periodically or when status changes, but don't auto-fetch patients
   useEffect(() => {
     loadData(false);
   }, [statusFilter]); 
@@ -193,7 +215,8 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
       setSearchName('');
       setSearchCurp('');
       setSearchExpediente('');
-      loadData(false);
+      setPatients([]);
+      setHasSearched(false);
   };
 
   const paginatedPatients = useMemo(() => {
@@ -213,7 +236,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
       const result = await deletePatient(patientId);
       if(result.success) {
         toast({ title: "Paciente Eliminado"});
-        loadData();
+        loadData(true);
       }
     });
   }
@@ -224,7 +247,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
         const result = await deleteAppointment(appointmentId);
         if (result.success) {
             toast({ title: 'Cita Eliminada' });
-            loadData();
+            loadData(true);
         }
     });
   };
@@ -235,7 +258,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
       const result = await updatePatientStatus(patientId, newStatus);
        if(result.success) {
         toast({ title: "Estado Actualizado" });
-        loadData();
+        loadData(true);
       }
     });
   }
@@ -251,14 +274,14 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
         toast({ title: "Paciente Guardado" });
         setIsEditOpen(false);
         setEditingPatient(null);
-        loadData();
+        loadData(true);
       }
     });
   }
 
   const handleDownloadExcel = async () => {
     if (patients.length === 0) {
-        toast({ title: "No hay datos", variant: "destructive"});
+        toast({ title: "No hay datos para exportar", variant: "destructive"});
         return;
     }
     const xlsx = await import('xlsx');
@@ -383,9 +406,9 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
             </div>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Button variant="outline" onClick={() => loadData(false)} disabled={isDataLoading}>
+            <Button variant="outline" onClick={() => loadData(true)} disabled={isDataLoading}>
               <RefreshCw className={cn("mr-2 h-4 w-4", isDataLoading && "animate-spin")} />
-              Sincronizar
+              Refrescar
             </Button>
             <Button variant="outline" onClick={onLogout} className="flex-1 sm:flex-none">
               <LogOut className="mr-2 h-4 w-4" />
@@ -488,7 +511,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                         <Button onClick={handleAddNew} size="sm" className="bg-primary hover:bg-primary/90 font-bold shadow-sm">
                             <PlusCircle className="h-4 w-4 mr-2" /> Nuevo Paciente
                         </Button>
-                        <MassUploadDialog isOpen={isUploadOpen} onClose={() => setIsUploadOpen(false)} onUploadSuccess={() => loadData(false)} />
+                        <MassUploadDialog isOpen={isUploadOpen} onClose={() => setIsUploadOpen(false)} onUploadSuccess={() => loadData(true)} />
                         <Button onClick={() => setIsUploadOpen(true)} variant="secondary" size="sm" className="font-bold shadow-sm">
                             <Upload className="h-4 w-4 mr-2" /> Cargar Excel
                         </Button>
@@ -509,12 +532,25 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                 </div>
               )}
 
-              {patients.length === 0 && !isDataLoading ? (
-                <div className="flex flex-col items-center justify-center py-32 text-center gap-4 opacity-40">
-                  <Users className="h-20 w-20 text-muted-foreground" />
+              {!hasSearched ? (
+                  <div className="flex flex-col items-center justify-center py-32 text-center gap-4">
+                      <div className="bg-primary/5 p-8 rounded-full">
+                        <Users className="h-16 w-16 text-primary/40" />
+                      </div>
+                      <div className="max-w-xs">
+                        <p className="text-lg font-black uppercase tracking-widest text-primary">Módulo de Búsqueda</p>
+                        <p className="text-sm text-muted-foreground font-medium mt-2">
+                          Utiliza los campos superiores para buscar pacientes por nombre, CURP o expediente.
+                        </p>
+                      </div>
+                  </div>
+              ) : patients.length === 0 && !isDataLoading ? (
+                <div className="flex flex-col items-center justify-center py-32 text-center gap-4 opacity-60">
+                  <UserX className="h-20 w-20 text-muted-foreground" />
                   <div>
-                    <p className="text-xl font-bold uppercase tracking-widest">Sin resultados</p>
-                    <p className="text-sm text-muted-foreground font-medium mt-1">Presiona "INICIAR BÚSQUEDA" para consultar el servidor.</p>
+                    <p className="text-xl font-bold uppercase tracking-widest">Sin coincidencias</p>
+                    <p className="text-sm text-muted-foreground font-medium mt-1">No se encontraron pacientes con los criterios ingresados.</p>
+                    <Button variant="link" onClick={handleClearSearch} className="mt-4 font-bold">Limpiar búsqueda y reintentar</Button>
                   </div>
                 </div>
               ) : (
@@ -667,7 +703,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
                           clinics={clinics} 
                           isAdmin={!isReadOnly} 
                           onDelete={handleAppointmentDelete} 
-                          onEditSuccess={() => loadData(false)} 
+                          onEditSuccess={() => loadData(true)} 
                         />
                     )}
                 </CardContent>
@@ -676,7 +712,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: ArchiveDashbo
       </Tabs>
 
       {isEditOpen && <EditPatientDialog isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} patient={editingPatient} onSave={handleSavePatient} isSaving={isSubmitting} />}
-      {schedulingPatient && <ScheduleAppointmentDialog patient={schedulingPatient} isOpen={!!schedulingPatient} onClose={() => setSchedulingPatient(null)} onBookingSuccess={() => { setSchedulingPatient(null); loadData(false); }} clinics={clinics} colonias={colonias} isDoctorBypass={true} />}
+      {schedulingPatient && <ScheduleAppointmentDialog patient={schedulingPatient} isOpen={!!schedulingPatient} onClose={() => setSchedulingPatient(null)} onBookingSuccess={() => { setSchedulingPatient(null); loadData(true); }} clinics={clinics} colonias={colonias} isDoctorBypass={true} />}
     </div>
   );
 }

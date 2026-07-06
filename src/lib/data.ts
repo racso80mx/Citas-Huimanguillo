@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -223,6 +224,7 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
         return [];
     }
 
+    // Búsqueda inteligente DB-First con filtrado en servidor para evitar errores de índices
     const snap = await getDocs(query(colRef, limit(10000)));
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
 
@@ -245,6 +247,7 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
         });
     }
 
+    // Ordenación en memoria para evitar FAILED_PRECONDITION de índices compuestos
     results.sort((a, b) => String(a.paternalLastName || '').localeCompare(String(b.paternalLastName || '')));
     return serializeData(results);
 }
