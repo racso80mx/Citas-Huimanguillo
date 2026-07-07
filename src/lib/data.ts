@@ -55,7 +55,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 /**
  * MOTOR DE SERIALIZACIÓN PROFUNDA
- * Garantiza que los objetos de Firebase sean legibles por NextJS Server Actions
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return '';
@@ -183,7 +182,6 @@ export async function verifyClinicPassword(clinicId: string, password: string) {
 export async function getPatientCounts(): Promise<ArchiveCounts> {
     try {
         const coll = collection(adminDb, 'patients');
-        // Usamos getCountFromServer() para obtener la cifra real sin límites de consulta
         const [totalSnap, bajaSnap, bajaDefSnap] = await Promise.all([
             getCountFromServer(coll),
             getCountFromServer(query(coll, where('status', '==', PatientStatus.Baja))),
@@ -197,7 +195,6 @@ export async function getPatientCounts(): Promise<ArchiveCounts> {
         
         return { total, vigente, bajaTemporal, bajaDefinitiva };
     } catch (e) {
-        console.error("Error al contar pacientes:", e);
         return { total: 0, vigente: 0, bajaTemporal: 0, bajaDefinitiva: 0 };
     }
 }
@@ -220,7 +217,6 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     const snap = await getDocs(q);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
     
-    // Tratamos a los pacientes sin estatus como "Vigentes"
     if (options?.status && options.status !== 'Total') {
         results = results.filter(p => {
             const currentStatus = p.status || PatientStatus.Vigente;
@@ -289,7 +285,6 @@ export async function bulkInsertPatients(patients: any[]) {
                 derechoAbiencia: String(p.DerechoAbiencia || p.derechoAbiencia || '').toUpperCase().trim(),
             };
             mapped.nombreCompleto = generateNombreCompleto(mapped);
-            // Usamos la CURP como ID para permitir actualizaciones por Excel sin duplicados
             batch.set(doc(adminDb, 'patients', curp), mapped, { merge: true });
         });
         await batch.commit();
@@ -315,7 +310,6 @@ export async function rebuildNombreCompletoAction() {
 }
 
 // --- CITAS ---
-// Simplificamos consultas para eliminar el error de "The query requires an index"
 export async function getAppointmentsData() { 
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(1500))); 
     const results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
@@ -326,7 +320,6 @@ export async function getAppointmentsData() {
 export async function getAppointmentsForClinic(cid: string) {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid)));
     const results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    // Ordenamos en memoria para no requerir índices compuestos
     results.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.time).localeCompare(String(b.time)));
     return hydrateAppointments(results);
 }
@@ -646,7 +639,6 @@ export async function getBIData() { const [apps, lab, xr, us, vac, clinics, colo
 
 export async function getAttendedPatientsForClinic(cid: string) { 
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid)));
-    // Filtramos Atendidos y obtenemos IDs en memoria para evitar errores de índices
     const ids = Array.from(new Set(snap.docs.filter(d => d.data().status === 'Atendido').map(d => d.data().patientId))); 
     if (ids.length === 0) return []; 
     const patients: Patient[] = []; 
