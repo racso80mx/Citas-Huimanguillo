@@ -184,7 +184,7 @@ export async function verifyClinicPassword(clinicId: string, password: string) {
 export async function getPatientCounts(): Promise<ArchiveCounts> {
     try {
         const coll = collection(adminDb, 'patients');
-        // Usamos getCountFromServer para evitar descargar los miles de registros
+        // ATENCIÓN: getCountFromServer elimina el límite de 10,000 registros
         const [totalSnap, bajaSnap, bajaDefSnap] = await Promise.all([
             getCountFromServer(coll),
             getCountFromServer(query(coll, where('status', '==', PatientStatus.Baja))),
@@ -193,7 +193,6 @@ export async function getPatientCounts(): Promise<ArchiveCounts> {
         const total = totalSnap.data().count;
         const bajaTemporal = bajaSnap.data().count;
         const bajaDefinitiva = bajaDefSnap.data().count;
-        // Los vigentes son el total menos los que tienen estatus de baja explícito
         const vigente = Math.max(0, total - (bajaTemporal + bajaDefinitiva));
         return { total, vigente, bajaTemporal, bajaDefinitiva };
     } catch (e) {
@@ -310,9 +309,12 @@ export async function rebuildNombreCompletoAction() {
 }
 
 // --- CITAS ---
+// ATENCIÓN: Se eliminaron orderBy para evitar el error de índices. El ordenamiento se hace en TS.
 export async function getAppointmentsData() { 
-    const snap = await getDocs(query(collection(adminDb, 'appointments'), orderBy('date', 'desc'), limit(2000))); 
-    return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
+    const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(2000))); 
+    const results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    results.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    return hydrateAppointments(results);
 }
 
 export async function saveNewAppointment(appointment: any, patient: any, isDoubleSlot: boolean, coloniaName?: string) {
@@ -369,23 +371,31 @@ export async function saveNewVaccineAppointment(appointment: any, patient: any) 
 }
 
 export async function getLabAppointmentsData() {
-    const snap = await getDocs(query(collection(adminDb, 'labAppointments'), orderBy('date', 'desc'), limit(1000)));
-    return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
+    const snap = await getDocs(query(collection(adminDb, 'labAppointments'), limit(1000)));
+    const results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    results.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    return hydrateAppointments(results);
 }
 
 export async function getXRayAppointmentsData() {
-    const snap = await getDocs(query(collection(adminDb, 'xrayAppointments'), orderBy('date', 'desc'), limit(1000)));
-    return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
+    const snap = await getDocs(query(collection(adminDb, 'xrayAppointments'), limit(1000)));
+    const results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    results.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    return hydrateAppointments(results);
 }
 
 export async function getUltrasoundAppointmentsData() {
-    const snap = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), orderBy('date', 'desc'), limit(1000)));
-    return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
+    const snap = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), limit(1000)));
+    const results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    results.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    return hydrateAppointments(results);
 }
 
 export async function getVaccineAppointmentsData() {
-    const snap = await getDocs(query(collection(adminDb, 'vaccineAppointments'), orderBy('date', 'desc'), limit(1000)));
-    return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
+    const snap = await getDocs(query(collection(adminDb, 'vaccineAppointments'), limit(1000)));
+    const results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    results.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    return hydrateAppointments(results);
 }
 
 export async function getAvailableSlotsForDate(clinicId: string, dateIso: string) {
@@ -445,8 +455,10 @@ export async function cloneAppointment(id: string, date: string, type: string, t
 }
 
 export async function getAppointmentsForClinic(cid: string) {
-    const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), orderBy('date', 'desc'), limit(1000)));
-    return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
+    const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(1000)));
+    const results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    results.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    return hydrateAppointments(results);
 }
 
 export async function getAppointmentCountOnDate(clinicId: string, dateStr: string) {
