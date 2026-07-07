@@ -314,10 +314,8 @@ export async function getAppointmentsData() {
 }
 
 export async function getAppointmentsForClinic(cid: string) {
-    // ELIMINADO orderBy PARA EVITAR ERROR DE ÍNDICES
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(1000)));
     const results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    // ORDENAMIENTO EN SERVIDOR (JS)
     results.sort((a, b) => String(a.time).localeCompare(String(b.time)));
     return hydrateAppointments(results);
 }
@@ -555,7 +553,7 @@ export async function getPrescriptionsByPatientId(pid: string) {
 }
 
 export async function updatePrescription(id: string, p: any) { await updateDoc(doc(adminDb, 'prescriptions', id), p); return { success: true }; }
-export async function deletePrescription(id: string) { await deleteDoc(doc(adminDb, 'prescriptions', id)); return { true: true }; }
+export async function deletePrescription(id: string) { await deleteDoc(doc(adminDb, 'prescriptions', id)); return { success: true }; }
 
 export async function dispensePrescription(id: string, items: any[]) { 
     const b = writeBatch(adminDb); 
@@ -621,9 +619,7 @@ export async function deleteAllCie10Catalog() { const s = await getDocs(collecti
 export async function getBIData() { const [apps, lab, xr, us, vac, clinics, colonias] = await Promise.all([getDocs(query(collection(adminDb, 'appointments'), limit(5000))), getDocs(query(collection(adminDb, 'labAppointments'), limit(2000))), getDocs(query(collection(adminDb, 'xrayAppointments'), limit(2000))), getDocs(query(collection(adminDb, 'ultrasoundAppointments'), limit(2000))), getDocs(query(collection(adminDb, 'vaccineAppointments'), limit(2000))), getClinicsData(), getColoniasData()]); return { appointments: apps.docs.map(d => serializeData(d.data())), labAppointments: lab.docs.map(d => serializeData(d.data())), xRayAppointments: xr.docs.map(d => serializeData(d.data())), ultrasoundAppointments: us.docs.map(d => serializeData(d.data())), vaccineAppointments: vac.docs.map(d => serializeData(d.data())), clinics, colonias }; }
 
 export async function getAttendedPatientsForClinic(cid: string) { 
-    // ELIMINADO orderBy PARA EVITAR ERROR DE ÍNDICES
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(5000)));
-    // FILTRADO EN SERVIDOR
     const ids = Array.from(new Set(snap.docs.filter(d => d.data().status === 'Atendido').map(d => d.data().patientId))); 
     if (ids.length === 0) return []; 
     const patients: Patient[] = []; 
@@ -666,5 +662,5 @@ export async function getPharmacySettings(): Promise<PharmacySettings> { const s
 export async function updatePharmacySettings(s: PharmacySettings) { await setDoc(doc(adminDb, 'settings', 'pharmacySettings'), s, { merge: true }); return { success: true }; }
 export async function getWarehouseSettings(): Promise<WarehouseSettings> { const s = await getDoc(doc(adminDb, 'settings', 'warehouseSettings')); return s.exists() ? serializeData(s.data()) : { password: 'almacen2026' }; }
 export async function updateWarehouseSettings(s: WarehouseSettings) { await setDoc(doc(adminDb, 'settings', 'warehouseSettings'), s, { merge: true }); return { success: true }; }
-export async function getBISettings(): Promise<BISettings> { const s = await getDoc(doc(adminDb, 'settings', 'biSettings')); return s.exists() ? serializeData(s.data()) : { password: 'bi2026' }; }
+export async function getBISettings(): Promise<BISettings> { const s = await getDoc(doc(adminDb, 'settings', 'biSettings')); return s.exists() ? serializeData(snap.data()) : { password: 'bi2026' }; }
 export async function updateBISettings(s: BISettings) { await setDoc(doc(adminDb, 'settings', 'biSettings'), s, { merge: true }); return { success: true }; }
