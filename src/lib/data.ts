@@ -309,6 +309,7 @@ export async function rebuildNombreCompletoAction() {
 export async function getAppointmentsData() { 
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(2000))); 
     const results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    // Sort in memory to avoid index errors
     results.sort((a, b) => String(b.date).localeCompare(String(a.date)));
     return hydrateAppointments(results);
 }
@@ -316,7 +317,8 @@ export async function getAppointmentsData() {
 export async function getAppointmentsForClinic(cid: string) {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(1000)));
     const results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    results.sort((a, b) => String(a.time).localeCompare(String(b.time)));
+    // Sort in memory to avoid index errors
+    results.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.time).localeCompare(String(b.time)));
     return hydrateAppointments(results);
 }
 
@@ -611,7 +613,22 @@ export async function deleteAllSupplies() { const s = await getDocs(collection(a
 
 // --- CIE-10 Y CATÁLOGOS TÉCNICOS ---
 export async function bulkInsertCie10Glossary(d: any[]) { const b = writeBatch(adminDb); d.forEach(x => b.set(doc(adminDb, 'cie10Glossary', uuidv4()), x)); await b.commit(); return { success: true, processedCount: d.length }; }
-export async function bulkInsertCie10Catalog(d: any[]) { const b = writeBatch(adminDb); d.forEach(x => b.set(doc(adminDb, 'cie10Catalog', x.catalogKey || uuidv4()), x)); await b.commit(); return { success: true, processedCount: d.length }; }
+export async function bulkInsertCie10Catalog(d: any[]) { 
+    const total = d.length;
+    let processed = 0;
+    const CHUNK_SIZE = 200;
+    for (let i = 0; i < total; i += CHUNK_SIZE) {
+        const b = writeBatch(adminDb);
+        const chunk = d.slice(i, i + CHUNK_SIZE);
+        chunk.forEach(x => {
+            const id = x.catalogKey || uuidv4();
+            b.set(doc(adminDb, 'cie10Catalog', id), x, { merge: true });
+        });
+        await b.commit();
+        processed += chunk.length;
+    }
+    return { success: true, processedCount: processed };
+}
 export async function deleteAllCie10Glossary() { const s = await getDocs(collection(adminDb, 'cie10Glossary')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 export async function deleteAllCie10Catalog() { const s = await getDocs(collection(adminDb, 'cie10Catalog')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 
@@ -662,5 +679,5 @@ export async function getPharmacySettings(): Promise<PharmacySettings> { const s
 export async function updatePharmacySettings(s: PharmacySettings) { await setDoc(doc(adminDb, 'settings', 'pharmacySettings'), s, { merge: true }); return { success: true }; }
 export async function getWarehouseSettings(): Promise<WarehouseSettings> { const s = await getDoc(doc(adminDb, 'settings', 'warehouseSettings')); return s.exists() ? serializeData(s.data()) : { password: 'almacen2026' }; }
 export async function updateWarehouseSettings(s: WarehouseSettings) { await setDoc(doc(adminDb, 'settings', 'warehouseSettings'), s, { merge: true }); return { success: true }; }
-export async function getBISettings(): Promise<BISettings> { const s = await getDoc(doc(adminDb, 'settings', 'biSettings')); return s.exists() ? serializeData(snap.data()) : { password: 'bi2026' }; }
+export async function getBISettings(): Promise<BISettings> { const s = await getDoc(doc(adminDb, 'settings', 'biSettings')); return s.exists() ? serializeData(s.data()) : { password: 'bi2026' }; }
 export async function updateBISettings(s: BISettings) { await setDoc(doc(adminDb, 'settings', 'biSettings'), s, { merge: true }); return { success: true }; }
