@@ -408,7 +408,13 @@ export async function getVaccineAppointmentsData() {
 export async function getAvailableSlotsForDate(clinicId: string, dateIso: string) {
     const dateStr = dateIso.split('T')[0];
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId)));
-    const booked = snap.docs.filter(d => d.data().date.startsWith(dateStr)).map(d => d.data().time);
+    
+    // Fix startsWith by ensuring we compare strings
+    const booked = snap.docs.filter(d => {
+        const appDate = serializeData(d.data().date);
+        return appDate && String(appDate).startsWith(dateStr);
+    }).map(d => d.data().time);
+
     const clinicSnap = await getDoc(doc(adminDb, 'clinics', clinicId));
     const clinic = clinicSnap.data() as Clinic;
     if (clinic.bookingMode === BookingMode.Token) {
@@ -464,7 +470,11 @@ export async function cloneAppointment(id: string, date: string, type: string, t
 export async function getAppointmentCountOnDate(clinicId: string, dateStr: string) {
     const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId));
     const s = await getDocs(q);
-    return s.docs.filter(d => d.data().date.startsWith(dateStr)).length;
+    // Fix startsWith here too
+    return s.docs.filter(d => {
+        const appDate = serializeData(d.data().date);
+        return appDate && String(appDate).startsWith(dateStr);
+    }).length;
 }
 
 // --- CONFIG GLOBALES ---
