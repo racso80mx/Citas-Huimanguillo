@@ -191,7 +191,7 @@ export async function verifyClinicPassword(clinicId: string, password: string) {
 export async function getPatientCounts(): Promise<ArchiveCounts> {
     try {
         const coll = collection(adminDb, 'patients');
-        // Total físico real sin límites de consulta
+        // Total físico real utilizando tecnología atómica de servidor de Google
         const totalSnap = await getCountFromServer(coll);
         const total = totalSnap.data().count;
 
@@ -320,7 +320,6 @@ export async function rebuildNombreCompletoAction() {
 export async function getAppointmentsData() { 
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(1500))); 
     const results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    // Ordenamiento en memoria para evitar errores de índices
     results.sort((a, b) => String(b.date).localeCompare(String(a.date)));
     return hydrateAppointments(results);
 }
@@ -328,7 +327,6 @@ export async function getAppointmentsData() {
 export async function getAppointmentsForClinic(cid: string) {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid)));
     const results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-    // Ordenamiento en memoria por fecha y hora
     results.sort((a, b) => {
         const dateCompare = String(a.date).localeCompare(String(b.date));
         if (dateCompare !== 0) return dateCompare;
@@ -422,7 +420,6 @@ export async function getAvailableSlotsForDate(clinicId: string, dateIso: string
     const dateStr = dateIso.split('T')[0];
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId)));
     
-    // Serialización robusta de la fecha antes de comparar
     const booked = snap.docs.filter(d => {
         const appDate = serializeData(d.data().date);
         return appDate && String(appDate).startsWith(dateStr);
@@ -483,7 +480,6 @@ export async function cloneAppointment(id: string, date: string, type: string, t
 export async function getAppointmentCountOnDate(clinicId: string, dateStr: string) {
     const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId));
     const s = await getDocs(q);
-    // Serialización robusta de la fecha antes de filtrar
     return s.docs.filter(d => {
         const appDate = serializeData(d.data().date);
         return appDate && String(appDate).startsWith(dateStr);
