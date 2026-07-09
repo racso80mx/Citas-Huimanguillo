@@ -21,7 +21,8 @@ import {
     Search,
     RefreshCw,
     Download,
-    Plus
+    Plus,
+    PackageCheck
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -29,6 +30,7 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const DEPARTMENTS = [
     'URGENCIAS', 'PEDIATRÍA', 'GINECOLOGÍA', 'CONSULTA EXTERNA', 
@@ -150,7 +152,7 @@ export function VoucherForm({ onVoucherCreated }: { onVoucherCreated: () => void
                                     <p className="text-[10px] font-black text-primary uppercase">Existencia Real</p>
                                     <p className="text-2xl font-black">{selectedMed.existencia}</p>
                                 </div>
-                                <Badge variant="outline" className={cn("text-[9px] font-black uppercase", selectedMed.fuenteFinanciamiento === 'EXTERNO' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-green-50 text-green-700 border-green-200')}>
+                                <Badge variant="outline" className={cn("text-[9px] font-black uppercase", selectedMed.fuenteFinanciamiento === 'EXTERNO' ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-green-50 text-green-700 border-green-200")}>
                                     {selectedMed.fuenteFinanciamiento || 'IMSS-BIENESTAR'}
                                 </Badge>
                              </div>
@@ -182,7 +184,7 @@ export function VoucherForm({ onVoucherCreated }: { onVoucherCreated: () => void
                 </CardContent>
                 <CardFooter>
                     <Button onClick={handleCreateVoucher} disabled={isSaving || !selectedMed} className="w-full h-14 text-lg font-black uppercase shadow-lg bg-primary hover:bg-primary/90 text-white">
-                        {isSaving ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <ClipboardCheck className="mr-2 h-5 w-5" />}
+                        {isSaving ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <PackageCheck className="mr-2 h-5 w-5" />}
                         GENERAR VALE Y DESCONTAR
                     </Button>
                 </CardFooter>
