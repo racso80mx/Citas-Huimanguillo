@@ -621,13 +621,18 @@ export async function bulkInsertMedications(items: any[], source: 'IMSS-BIENESTA
 export async function deleteAllMedications() { const s = await getDocs(collection(adminDb, 'medications')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 
 export async function deleteMedicationsBySource(source: 'IMSS-BIENESTAR' | 'EXTERNO') {
-    const q = query(collection(adminDb, 'medications'), where('fuenteFinanciamiento', '==', source));
-    const snap = await getDocs(q);
-    const docs = snap.docs;
+    const colRef = collection(adminDb, 'medications');
+    const snap = await getDocs(colRef);
+    const docsToDelete = snap.docs.filter(d => {
+        const data = d.data();
+        const f = String(data.fuenteFinanciamiento || '').toUpperCase();
+        return f === source.toUpperCase();
+    });
+
     const CHUNK_SIZE = 450;
-    for (let i = 0; i < docs.length; i += CHUNK_SIZE) {
+    for (let i = 0; i < docsToDelete.length; i += CHUNK_SIZE) {
         const batch = writeBatch(adminDb);
-        const chunk = docs.slice(i, i + CHUNK_SIZE);
+        const chunk = docsToDelete.slice(i, i + CHUNK_SIZE);
         chunk.forEach(d => batch.delete(d.ref));
         await batch.commit();
     }

@@ -168,7 +168,10 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
           const res = await deleteMedicationsBySource(source);
           if (res.success) {
               toast({ title: `Inventario ${source} eliminado` });
-              loadMedications();
+              setMedications([]); // Clear locally first
+              await loadMedications(); // Then refetch
+          } else {
+              toast({ title: 'Error al eliminar', variant: 'destructive' });
           }
       });
   };
@@ -189,7 +192,10 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
     
     // Filtro por Fuente
     if (sourceFilter !== 'all') {
-        result = result.filter(m => m.fuenteFinanciamiento === sourceFilter);
+        result = result.filter(m => {
+            const f = String(m.fuenteFinanciamiento || '').toUpperCase();
+            return f === sourceFilter.toUpperCase();
+        });
     }
 
     // Filtro por Caducidad
@@ -309,19 +315,19 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                 <CardHeader className="pb-3"><CardTitle className="text-lg flex items-center gap-2 uppercase font-black"><CalendarClock className="h-5 w-5 text-primary" /> Semáforo de Almacén</CardTitle></CardHeader>
                 <CardContent className="space-y-6">
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <button onClick={() => setStatusFilter(statusFilter === 'red' ? null : 'red')} className={cn("bg-red-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'red' ? "border-red-500 ring-4 ring-red-200" : "border-red-100")}>
+                        <button onClick={() => setStatusFilter(statusFilter === 'red' ? null : 'red')} className={cn("bg-red-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'red' ? "border-red-500 ring-4 ring-red-200 shadow-md scale-105" : "border-red-100 opacity-70")}>
                             <div className="text-[10px] text-red-600 uppercase font-black mb-1">CRÍTICO (&lt; 6M)</div>
                             <div className="text-3xl font-black text-red-700">{stats.red}</div>
                         </button>
-                        <button onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')} className={cn("bg-yellow-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'yellow' ? "border-yellow-500 ring-4 ring-yellow-200" : "border-yellow-100")}>
+                        <button onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')} className={cn("bg-yellow-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'yellow' ? "border-yellow-500 ring-4 ring-yellow-200 shadow-md scale-105" : "border-yellow-100 opacity-70")}>
                             <div className="text-[10px] text-yellow-600 uppercase font-black mb-1">PRÓXIMO (1 AÑO)</div>
                             <div className="text-3xl font-black text-yellow-700">{stats.yellow}</div>
                         </button>
-                        <button onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')} className={cn("bg-green-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'green' ? "border-green-500 ring-4 ring-green-200" : "border-green-100")}>
+                        <button onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')} className={cn("bg-green-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'green' ? "border-green-500 ring-4 ring-green-200 shadow-md scale-105" : "border-green-100 opacity-70")}>
                             <div className="text-[10px] text-green-600 uppercase font-black mb-1">ÓPTIMO (&gt; 1 AÑO)</div>
                             <div className="text-3xl font-black text-green-700">{stats.green}</div>
                         </button>
-                        <button onClick={() => setStatusFilter(null)} className={cn("bg-muted/30 border p-4 rounded-xl text-center transition-all", !statusFilter ? "border-primary ring-4 ring-primary/10" : "border-transparent")}>
+                        <button onClick={() => setStatusFilter(null)} className={cn("bg-muted/30 border p-4 rounded-xl text-center transition-all", !statusFilter ? "border-primary ring-4 ring-primary/10 shadow-md scale-105" : "border-transparent opacity-70")}>
                             <div className="text-[10px] text-muted-foreground uppercase font-black mb-1">TOTAL REGISTROS</div>
                             <div className="text-3xl font-black">{stats.total}</div>
                         </button>
