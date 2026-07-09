@@ -52,7 +52,7 @@ import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * MOTOR DE SERIALIZACIÓN - VERSIÓN ÚNICA Y ROBUSTA
+ * MOTOR DE SERIALIZACIÓN
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return '';
@@ -71,7 +71,7 @@ export function serializeData(data: any): any {
 }
 
 /**
- * NORMALIZACIÓN DE FECHAS SEGURA PARA COMPARACIONES
+ * NORMALIZACIÓN DE FECHAS SEGURA
  */
 export function safeGetDateString(val: any): string {
     if (val === null || val === undefined) return '';
@@ -620,13 +620,29 @@ export async function bulkInsertMedications(items: any[], source: 'IMSS-BIENESTA
 }
 export async function deleteAllMedications() { const s = await getDocs(collection(adminDb, 'medications')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 
+/**
+ * BORRADO DIFERENCIADO POR FUENTE
+ * Identificación: Usamos el campo 'fuenteFinanciamiento' guardado en cada documento.
+ */
 export async function deleteMedicationsBySource(source: 'IMSS-BIENESTAR' | 'EXTERNO') {
     const colRef = collection(adminDb, 'medications');
     const snap = await getDocs(colRef);
+    
     const docsToDelete = snap.docs.filter(d => {
         const data = d.data();
         const f = String(data.fuenteFinanciamiento || '').toUpperCase();
-        return f === source.toUpperCase();
+        const targetSource = source.toUpperCase();
+        
+        // Identificar si pertenece a la fuente solicitada
+        if (f !== targetSource) return false;
+        
+        // Lógica: Si es EXTERNO, solo borrar si la existencia es 0.
+        if (targetSource === 'EXTERNO') {
+            return Number(data.existencia || 0) <= 0;
+        }
+        
+        // Lógica: Si es IMSS-BIENESTAR, borrar todos los de esa fuente.
+        return true;
     });
 
     const CHUNK_SIZE = 450;
@@ -636,7 +652,7 @@ export async function deleteMedicationsBySource(source: 'IMSS-BIENESTAR' | 'EXTE
         chunk.forEach(d => batch.delete(d.ref));
         await batch.commit();
     }
-    return { success: true };
+    return { success: true, deletedCount: docsToDelete.length };
 }
 
 export async function createPharmacyVoucher(v: Omit<PharmacyVoucher, 'id' | 'folio' | 'createdAt'>) {

@@ -167,9 +167,11 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
       startDeleteTransition(async () => {
           const res = await deleteMedicationsBySource(source);
           if (res.success) {
-              toast({ title: `Inventario ${source} eliminado` });
-              setMedications([]); // Clear locally first
-              await loadMedications(); // Then refetch
+              const msg = source === 'EXTERNO' 
+                ? `Se eliminaron ${res.deletedCount} registros con existencia 0.` 
+                : `Se eliminó todo el inventario de IMSS-BIENESTAR.`;
+              toast({ title: `Proceso completado`, description: msg });
+              await loadMedications();
           } else {
               toast({ title: 'Error al eliminar', variant: 'destructive' });
           }
@@ -291,20 +293,30 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                                 </Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
-                                <AlertDialogHeader><AlertDialogTitle>¿Borrar fuente IMSS-BIENESTAR?</AlertDialogTitle><AlertDialogDescription>Se eliminarán permanentemente los registros de esta fuente de la base de datos.</AlertDialogDescription></AlertDialogHeader>
-                                <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteBySource('IMSS-BIENESTAR')} className="bg-destructive hover:bg-destructive/90">SÍ, BORRAR FUENTE</AlertDialogAction></AlertDialogFooter>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>¿Borrar fuente IMSS-BIENESTAR?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Esta acción eliminará <strong>TODOS</strong> los registros marcados como IMSS-BIENESTAR para permitir una carga limpia desde el nuevo archivo.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteBySource('IMSS-BIENESTAR')} className="bg-destructive hover:bg-destructive/90">SÍ, BORRAR TODO</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
 
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                 <Button variant="ghost" size="sm" className="w-full text-red-700 hover:bg-red-50 font-black text-[9px] uppercase border" disabled={isDeleting}>
-                                    <Trash2 className="h-3 w-3 mr-1" /> Borrar Externos
+                                    <Trash2 className="h-3 w-3 mr-1" /> Borrar Externos (0)
                                 </Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
-                                <AlertDialogHeader><AlertDialogTitle>¿Borrar fuente EXTERNA?</AlertDialogTitle><AlertDialogDescription>Se eliminarán permanentemente los registros de esta fuente de la base de datos.</AlertDialogDescription></AlertDialogHeader>
-                                <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteBySource('EXTERNO')} className="bg-destructive hover:bg-destructive/90">SÍ, BORRAR FUENTE</AlertDialogAction></AlertDialogFooter>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>¿Borrar Externos con Existencia 0?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Esta acción <strong>SOLO</strong> eliminará los registros de fuente EXTERNA que tengan <strong>existencia en cero</strong>. Los medicamentos con stock se mantendrán.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteBySource('EXTERNO')} className="bg-destructive hover:bg-destructive/90">SÍ, BORRAR SIN STOCK</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
                         </div>
