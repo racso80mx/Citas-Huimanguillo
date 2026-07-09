@@ -72,6 +72,7 @@ export function serializeData(data: any): any {
 
 /**
  * Normaliza fechas de Firestore (Timestamp o String) a texto ISO.
+ * Esto evita el error ".startsWith is not a function" al tratar con objetos Timestamp.
  */
 export function safeGetDateString(val: any): string {
     if (val === null || val === undefined) return '';
@@ -414,7 +415,7 @@ export async function deleteVaccineAppointment(id: string) { await deleteDoc(doc
 export async function rescheduleAppointment(id: string, date: string, type: string) {
     const coll = { medical: 'appointments', lab: 'labAppointments', xray: 'xrayAppointments', ultrasound: 'ultrasoundAppointments', vaccine: 'vaccineAppointments' }[type as any] || 'appointments';
     await updateDoc(doc(adminDb, coll, id), { date });
-    return { success: true, message: 'Fecha actualizada.' };
+    return { success: true, message: 'Fecha actualizada correctamente.' };
 }
 
 export async function cloneAppointment(id: string, date: string, type: string, time?: string) {
@@ -424,7 +425,7 @@ export async function cloneAppointment(id: string, date: string, type: string, t
     const newId = uuidv4();
     const folio = data?.appointmentNumber ? `${data.appointmentNumber.split('-')[0]}-${uuidv4().split('-')[0].toUpperCase()}` : `CLON-${uuidv4().split('-')[0].toUpperCase()}`;
     await setDoc(doc(adminDb, coll, newId), { ...data, id: newId, date, time: time || data?.time, appointmentNumber: folio, status: 'Agendada', createdAt: new Date().toISOString() });
-    return { success: true, message: `Generada folio ${folio}` };
+    return { success: true, message: `Nueva cita generada con folio ${folio}` };
 }
 
 export async function getAppointmentCountOnDate(clinicId: string, dateStr: string) {
