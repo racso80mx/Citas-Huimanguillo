@@ -28,6 +28,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { Separator } from '@/components/ui/separator';
 
 const DEPARTMENTS = [
     'URGENCIAS', 'PEDIATRÍA', 'GINECOLOGÍA', 'CONSULTA EXTERNA', 
@@ -181,7 +182,7 @@ export function VoucherForm({ onVoucherCreated }: { onVoucherCreated: () => void
                 </CardContent>
                 <CardFooter>
                     <Button onClick={handleCreateVoucher} disabled={isSaving || !selectedMed} className="w-full h-14 text-lg font-black uppercase shadow-lg bg-primary hover:bg-primary/90 text-white">
-                        {isSaving ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <ClipboardCheck className="mr-2 h-5 w-5" />}
+                        {isSaving ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <ClipboardCheck className="mr-2 h-5 w-5" />}
                         GENERAR VALE Y DESCONTAR
                     </Button>
                 </CardFooter>
