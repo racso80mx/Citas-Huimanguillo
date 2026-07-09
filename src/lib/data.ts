@@ -588,15 +588,25 @@ export async function deleteMedicationsBySource(source: 'IMSS-BIENESTAR' | 'EXTE
     
     const docsToDelete = snap.docs.filter(d => {
         const data = d.data();
-        const fEtiqueta = String(data.fuenteEtiqueta || '').toUpperCase();
-        const fFinanc = String(data.fuenteFinanciamiento || '').toUpperCase();
-        const match = fEtiqueta === source || fFinanc === source;
+        const id = d.id;
+        
+        // Identificación robusta: por ID compuesto, por etiqueta inyectada o por texto de fuente
+        const isFromSource = id.includes(`_${source}_`) || 
+                           data.fuenteEtiqueta === source || 
+                           String(data.fuenteFinanciamiento || '').toUpperCase().includes(source);
 
-        if (match && source === 'EXTERNO') {
+        if (!isFromSource) return false;
+
+        // Regla: Si es EXTERNO, solo borrar si existencia es 0
+        if (source === 'EXTERNO') {
             return Number(data.existencia || 0) <= 0;
         }
-        return match;
+        
+        // Para IMSS, borrar todos los de esa fuente
+        return true;
     });
+
+    if (docsToDelete.length === 0) return { success: true, deletedCount: 0 };
 
     const CHUNK_SIZE = 450;
     for (let i = 0; i < docsToDelete.length; i += CHUNK_SIZE) {
