@@ -15,9 +15,7 @@ import {
   where,
   limit,
   orderBy,
-  getCountFromServer,
-  DocumentData,
-  QueryDocumentSnapshot
+  getCountFromServer
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -53,7 +51,7 @@ import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * MOTOR DE SERIALIZACIÓN - VERSIÓN ÚNICA SANEADA
+ * MOTOR DE SERIALIZACIÓN - VERSIÓN ÚNICA
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return '';
@@ -72,7 +70,7 @@ export function serializeData(data: any): any {
 }
 
 /**
- * NORMALIZACIÓN DE FECHAS SEGURA - EVITA TypeError startsWith
+ * NORMALIZACIÓN DE FECHAS SEGURA
  */
 export function safeGetDateString(val: any): string {
     if (val === null || val === undefined) return '';
@@ -276,19 +274,6 @@ export async function bulkInsertPatients(patients: any[]) {
         processed += chunk.length;
     }
     return { success: true, processedCount: processed };
-}
-
-export async function rebuildNombreCompletoAction() {
-    const snap = await getDocs(collection(adminDb, 'patients'));
-    const batch = writeBatch(adminDb);
-    let count = 0;
-    snap.docs.forEach(d => {
-        const data = d.data();
-        const nc = generateNombreCompleto(data);
-        if (data.nombreCompleto !== nc) { batch.update(d.ref, { nombreCompleto: nc }); count++; }
-    });
-    await batch.commit(); 
-    return { success: true, count };
 }
 
 // --- CITAS ---
@@ -803,4 +788,20 @@ export async function getAttendedPatientsForClinic(cid: string) {
         psnap.forEach(d => patients.push({ ...d.data(), id: d.id } as Patient)); 
     } 
     return serializeData(patients); 
+}
+
+export async function rebuildNombreCompletoAction() {
+    const snap = await getDocs(collection(adminDb, 'patients'));
+    const batch = writeBatch(adminDb);
+    let count = 0;
+    snap.docs.forEach(d => {
+        const data = d.data();
+        const nc = generateNombreCompleto(data);
+        if (data.nombreCompleto !== nc) {
+            batch.update(d.ref, { nombreCompleto: nc });
+            count++;
+        }
+    });
+    await batch.commit();
+    return { success: true, count };
 }

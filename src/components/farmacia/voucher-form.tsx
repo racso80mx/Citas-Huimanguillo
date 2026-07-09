@@ -1,7 +1,6 @@
-
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,12 +20,14 @@ import {
     CheckCircle2,
     Search,
     RefreshCw,
-    Download
+    Download,
+    Plus
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 const DEPARTMENTS = [
     'URGENCIAS', 'PEDIATRÍA', 'GINECOLOGÍA', 'CONSULTA EXTERNA', 
@@ -69,7 +70,7 @@ export function VoucherForm({ onVoucherCreated }: { onVoucherCreated: () => void
         content: (
             <div className="flex flex-col gap-0.5 py-1">
                 <div className="flex justify-between items-center gap-4">
-                    <span className="font-bold text-xs uppercase">{m.descripcion}</span>
+                    <span className="font-bold text-sm uppercase">{m.descripcion}</span>
                     <Badge variant={m.existencia > 0 ? "secondary" : "destructive"} className="text-[10px] font-black h-5">STOCK: {m.existencia}</Badge>
                 </div>
                 <div className="flex items-center gap-3 text-[9px] font-mono font-bold text-muted-foreground uppercase">
@@ -161,7 +162,7 @@ export function VoucherForm({ onVoucherCreated }: { onVoucherCreated: () => void
                         </div>
                     )}
 
-                    <Separator />
+                    <Separator className="my-2" />
 
                     <div className="space-y-4">
                         <div className="space-y-2">
@@ -179,7 +180,7 @@ export function VoucherForm({ onVoucherCreated }: { onVoucherCreated: () => void
                     </div>
                 </CardContent>
                 <CardFooter>
-                    <Button onClick={handleCreateVoucher} disabled={isSaving || !selectedMed} className="w-full h-14 text-lg font-black uppercase shadow-lg bg-primary hover:bg-primary/90">
+                    <Button onClick={handleCreateVoucher} disabled={isSaving || !selectedMed} className="w-full h-14 text-lg font-black uppercase shadow-lg bg-primary hover:bg-primary/90 text-white">
                         {isSaving ? <Loader2 className="animate-spin mr-2 h-5 w-5" /> : <ClipboardCheck className="mr-2 h-5 w-5" />}
                         GENERAR VALE Y DESCONTAR
                     </Button>
@@ -246,12 +247,4 @@ export function VoucherForm({ onVoucherCreated }: { onVoucherCreated: () => void
             </Card>
         </div>
     );
-}
-
-function cn(...inputs: any[]) {
-    return inputs.filter(Boolean).join(' ');
-}
-
-function useCallback(arg0: () => Promise<void>, arg1: any[]): () => void {
-    return React.useCallback(arg0, arg1);
 }
