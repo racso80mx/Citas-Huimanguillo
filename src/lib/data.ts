@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -602,7 +603,7 @@ export async function deleteMedicationsBySource(source: 'IMSS-BIENESTAR' | 'EXTE
             return Number(data.existencia || 0) <= 0;
         }
         
-        // Para IMSS, borrar todos los de esa fuente
+        // Para IMSS, borrar todos los de esa fuente, sin importar existencia (REGLA SOLICITADA)
         return true;
     });
 
