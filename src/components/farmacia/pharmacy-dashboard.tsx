@@ -34,9 +34,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   CalendarClock,
-  X,
-  FileText,
-  Plus
+  X
 } from 'lucide-react';
 import { getMedications, bulkInsertMedications, deleteMedicationsBySource } from '@/lib/actions';
 import type { Medication } from '@/lib/definitions';
@@ -69,7 +67,6 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
   const [uploadStatus, setUploadStatus] = useState({ processed: 0, total: 0, message: '' });
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<ExpirationStatus | null>(null);
-  const [sourceFilter, setSourceFilter] = useState<'IMSS-BIENESTAR' | 'EXTERNO' | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Medication; direction: 'asc' | 'desc' } | null>(null);
 
   const { toast } = useToast();
@@ -93,9 +90,14 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
   const getExpirationStatus = (dateStr: string): ExpirationStatus => {
     if (!dateStr || dateStr.toUpperCase() === 'SIN FECHA' || dateStr.trim() === '') return 'unknown';
     let expiryDate: Date | null = null;
-    if (dateStr.includes('/')) expiryDate = parse(dateStr, 'dd/MM/yyyy', new Date());
-    else if (dateStr.includes('-')) expiryDate = new Date(dateStr);
-    else expiryDate = new Date(dateStr);
+    
+    try {
+        if (dateStr.includes('/')) expiryDate = parse(dateStr, 'dd/MM/yyyy', new Date());
+        else if (dateStr.includes('-')) expiryDate = new Date(dateStr);
+        else expiryDate = new Date(dateStr);
+    } catch (e) {
+        return 'unknown';
+    }
 
     if (!expiryDate || !isValid(expiryDate)) return 'unknown';
     const now = new Date();
@@ -179,21 +181,32 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
   const filtered = useMemo(() => {
     let result = [...medications];
     if (statusFilter) result = result.filter(m => getExpirationStatus(m.fechaCaducidad) === statusFilter);
-    if (sourceFilter) result = result.filter(m => m.fuenteFinanciamiento === sourceFilter);
+    
     if (searchTerm) {
       const term = searchTerm.toUpperCase();
       result = result.filter(m => (m.descripcion || '').includes(term) || (m.claveCuadroBasico || '').includes(term) || (m.lote || '').includes(term));
     }
+    
     if (sortConfig) {
       result.sort((a, b) => {
         const valA = a[sortConfig.key];
         const valB = b[sortConfig.key];
         if (valA === valB) return 0;
+        if (valA === undefined) return 1;
+        if (valB === undefined) return -1;
         return sortConfig.direction === 'asc' ? (valA < valB ? -1 : 1) : (valA > valB ? -1 : 1);
       });
     }
     return result;
-  }, [medications, searchTerm, statusFilter, sourceFilter, sortConfig]);
+  }, [medications, searchTerm, statusFilter, sortConfig]);
+
+  const handleSort = (key: keyof Medication) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
 
   return (
     <div className="space-y-6">
@@ -293,12 +306,6 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                             <div className="text-3xl font-black">{stats.total}</div>
                         </button>
                     </div>
-                    
-                    <div className="flex gap-2">
-                        <Button variant={sourceFilter === 'IMSS-BIENESTAR' ? 'default' : 'outline'} size="sm" onClick={() => setSourceFilter(sourceFilter === 'IMSS-BIENESTAR' ? null : 'IMSS-BIENESTAR')} className="h-8 text-[10px] font-black uppercase">IMSS-BIENESTAR</Button>
-                        <Button variant={sourceFilter === 'EXTERNO' ? 'default' : 'outline'} size="sm" onClick={() => setSourceFilter(sourceFilter === 'EXTERNO' ? null : 'EXTERNO')} className="h-8 text-[10px] font-black uppercase">EXTERNO</Button>
-                        {sourceFilter && <Button variant="ghost" size="sm" onClick={() => setSourceFilter(null)} className="h-8"><X className="h-3 w-3" /></Button>}
-                    </div>
                 </CardContent>
                 </Card>
             </div>
@@ -321,11 +328,19 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                     <Table>
                         <TableHeader className="bg-muted/50">
                         <TableRow>
-                            <TableHead className="font-black text-[10px] uppercase">Clave</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase">Descripción</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase cursor-pointer hover:bg-muted" onClick={() => handleSort('claveCuadroBasico')}>
+                                Clave {sortConfig?.key === 'claveCuadroBasico' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
+                            </TableHead>
+                            <TableHead className="font-black text-[10px] uppercase cursor-pointer hover:bg-muted" onClick={() => handleSort('descripcion')}>
+                                Descripción {sortConfig?.key === 'descripcion' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
+                            </TableHead>
                             <TableHead className="font-black text-[10px] uppercase">Fuente</TableHead>
-                            <TableHead className="text-right font-black text-[10px] uppercase">Existencia</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase">Caducidad</TableHead>
+                            <TableHead className="text-right font-black text-[10px] uppercase cursor-pointer hover:bg-muted" onClick={() => handleSort('existencia')}>
+                                Existencia {sortConfig?.key === 'existencia' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
+                            </TableHead>
+                            <TableHead className="font-black text-[10px] uppercase cursor-pointer hover:bg-muted" onClick={() => handleSort('fechaCaducidad')}>
+                                Caducidad {sortConfig?.key === 'fechaCaducidad' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
+                            </TableHead>
                             <TableHead className="font-black text-[10px] uppercase">Lote</TableHead>
                         </TableRow>
                         </TableHeader>

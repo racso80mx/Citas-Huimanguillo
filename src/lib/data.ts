@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -53,7 +52,7 @@ import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * MOTOR DE SERIALIZACIÓN - VERSIÓN ÚNICA
+ * MOTOR DE SERIALIZACIÓN - VERSIÓN ÚNICA Y ROBUSTA
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return '';
@@ -72,7 +71,7 @@ export function serializeData(data: any): any {
 }
 
 /**
- * NORMALIZACIÓN DE FECHAS SEGURA
+ * NORMALIZACIÓN DE FECHAS SEGURA PARA COMPARACIONES
  */
 export function safeGetDateString(val: any): string {
     if (val === null || val === undefined) return '';
