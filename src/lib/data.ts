@@ -73,7 +73,6 @@ export function serializeData(data: any): any {
 
 /**
  * NORMALIZACIÓN DE FECHAS SEGURA
- * Previene el error "date.startsWith is not a function"
  */
 export function safeGetDateString(val: any): string {
     if (val === null || val === undefined) return '';
@@ -590,32 +589,28 @@ export async function deleteMedicationsBySource(source: 'IMSS-BIENESTAR' | 'EXTE
     
     const docsToDelete = snap.docs.filter(d => {
         const data = d.data();
-        const id = d.id;
         
-        // Identificación ultra-robusta:
-        // 1. Por la etiqueta inyectada internamente (para cargas nuevas)
-        const tagMatch = data.fuenteEtiqueta === source;
-        
-        // 2. Por el contenido del campo fuente (para datos cargados anteriormente)
-        const financeField = String(data.fuenteFinanciamiento || '').toUpperCase();
-        const financeMatch = financeField.includes(source.toUpperCase());
-        
-        // 3. Heurística específica basada en tu imagen ("U013-EF" para Externos)
-        const heuristicMatch = source === 'EXTERNO' && financeField.includes('-EF');
-        const imssHeuristic = source === 'IMSS-BIENESTAR' && (financeField.includes('IMSS') || financeField.includes('BIENESTAR'));
-
-        const isFromSource = tagMatch || financeMatch || heuristicMatch || imssHeuristic;
-
-        if (!isFromSource) return false;
-
-        // LÓGICA DE NEGOCIO:
-        // Si es EXTERNO, solo borrar si existencia es 0
-        if (source === 'EXTERNO') {
-            return Number(data.existencia || 0) <= 0;
+        // IDENTIFICACIÓN AGRESIVA PARA IMSS (Incluye registros sin etiqueta como IMSS por defecto)
+        if (source === 'IMSS-BIENESTAR') {
+            // Si tiene etiqueta explícita de IMSS
+            if (data.fuenteEtiqueta === 'IMSS-BIENESTAR') return true;
+            // Si NO tiene etiqueta interna, asumimos que es IMSS (registros antiguos)
+            if (!data.fuenteEtiqueta) return true;
+            // Backup por texto en fuente de financiamiento
+            const fin = String(data.fuenteFinanciamiento || '').toUpperCase();
+            if (fin.includes('IMSS') || fin.includes('BIENESTAR')) return true;
         }
-        
-        // Para IMSS, borrar todos los de esa fuente, sin importar existencia
-        return true;
+
+        // IDENTIFICACIÓN PARA EXTERNO (Solo borra si existencia es 0)
+        if (source === 'EXTERNO') {
+            const isTaggedExterno = data.fuenteEtiqueta === 'EXTERNO';
+            const isFinExterno = String(data.fuenteFinanciamiento || '').toUpperCase().includes('EXTERNO');
+            const hasZeroStock = Number(data.existencia || 0) <= 0;
+            
+            if ((isTaggedExterno || isFinExterno) && hasZeroStock) return true;
+        }
+
+        return false;
     });
 
     if (docsToDelete.length === 0) return { success: true, deletedCount: 0 };
