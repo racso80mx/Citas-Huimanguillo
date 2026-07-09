@@ -73,6 +73,7 @@ export function serializeData(data: any): any {
 
 /**
  * NORMALIZACIÓN DE FECHAS SEGURA
+ * Previene el error "date.startsWith is not a function"
  */
 export function safeGetDateString(val: any): string {
     if (val === null || val === undefined) return '';
@@ -591,19 +592,29 @@ export async function deleteMedicationsBySource(source: 'IMSS-BIENESTAR' | 'EXTE
         const data = d.data();
         const id = d.id;
         
-        // Identificación robusta: por ID compuesto, por etiqueta inyectada o por texto de fuente
-        const isFromSource = id.includes(`_${source}_`) || 
-                           data.fuenteEtiqueta === source || 
-                           String(data.fuenteFinanciamiento || '').toUpperCase().includes(source);
+        // Identificación ultra-robusta:
+        // 1. Por la etiqueta inyectada internamente (para cargas nuevas)
+        const tagMatch = data.fuenteEtiqueta === source;
+        
+        // 2. Por el contenido del campo fuente (para datos cargados anteriormente)
+        const financeField = String(data.fuenteFinanciamiento || '').toUpperCase();
+        const financeMatch = financeField.includes(source.toUpperCase());
+        
+        // 3. Heurística específica basada en tu imagen ("U013-EF" para Externos)
+        const heuristicMatch = source === 'EXTERNO' && financeField.includes('-EF');
+        const imssHeuristic = source === 'IMSS-BIENESTAR' && (financeField.includes('IMSS') || financeField.includes('BIENESTAR'));
+
+        const isFromSource = tagMatch || financeMatch || heuristicMatch || imssHeuristic;
 
         if (!isFromSource) return false;
 
-        // Regla: Si es EXTERNO, solo borrar si existencia es 0
+        // LÓGICA DE NEGOCIO:
+        // Si es EXTERNO, solo borrar si existencia es 0
         if (source === 'EXTERNO') {
             return Number(data.existencia || 0) <= 0;
         }
         
-        // Para IMSS, borrar todos los de esa fuente, sin importar existencia (REGLA SOLICITADA)
+        // Para IMSS, borrar todos los de esa fuente, sin importar existencia
         return true;
     });
 
