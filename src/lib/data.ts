@@ -53,6 +53,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 /**
  * MOTOR DE SERIALIZACIÓN
+ * Convierte objetos complejos de Firebase (Timestamps, Refs) a tipos primitivos de JS.
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return '';
@@ -71,8 +72,8 @@ export function serializeData(data: any): any {
 }
 
 /**
- * Normaliza fechas de Firestore (Timestamp o String) a texto ISO.
- * Esto evita el error ".startsWith is not a function" al tratar con objetos Timestamp.
+ * NORMALIZACIÓN DE FECHAS
+ * Garantiza que d.data().date sea siempre un string para usar .startsWith()
  */
 export function safeGetDateString(val: any): string {
     if (val === null || val === undefined) return '';
@@ -86,6 +87,9 @@ export function safeGetDateString(val: any): string {
     return String(val);
 }
 
+/**
+ * Genera el campo de búsqueda optimizada NOMBRE + APELLIDOS
+ */
 function generateNombreCompleto(p: any) {
     const n = (p.name || '').trim();
     const ap = (p.paternalLastName || '').trim();
@@ -93,6 +97,9 @@ function generateNombreCompleto(p: any) {
     return `${n} ${ap} ${am}`.replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
+/**
+ * Cruza datos de citas con datos de pacientes para vistas de reporte
+ */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     const patientIds = Array.from(new Set(appointments.map(a => {
