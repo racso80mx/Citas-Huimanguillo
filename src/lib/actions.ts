@@ -207,6 +207,7 @@ export async function updateVaccines(s: any[]) { return data.updateVaccines(s); 
 export async function getMedications() { return data.getMedications(); }
 export async function bulkInsertMedications(i: any[], source: 'IMSS-BIENESTAR' | 'EXTERNO') { return data.bulkInsertMedications(i, source); }
 export async function deleteAllMedications() { return data.deleteAllMedications(); }
+export async function deleteMedicationsBySource(source: 'IMSS-BIENESTAR' | 'EXTERNO') { return data.deleteMedicationsBySource(source); }
 export async function createPharmacyVoucher(v: any) { return data.createPharmacyVoucher(v); }
 export async function getPharmacyVouchers() { return data.getPharmacyVouchers(); }
 

@@ -387,7 +387,8 @@ export async function getAvailableSlotsForDate(clinicId: string, dateIso: string
     const dStr = dateIso.split('T')[0];
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId)));
     const booked = snap.docs.filter(d => safeGetDateString(d.data()?.date).startsWith(dStr)).map(d => d.data().time);
-    const clinic = (await getDoc(doc(adminDb, 'clinics', clinicId))).data() as Clinic;
+    const clinicDoc = await getDoc(doc(adminDb, 'clinics', clinicId));
+    const clinic = clinicDoc.data() as Clinic;
     if (clinic.bookingMode === BookingMode.Token) {
         const total = (clinic.dailySlots || 15) + (clinic.waitlistSlots || 0);
         return { tokens: Array.from({ length: total }, (_, i) => i + 1).filter(t => !booked.includes(`Ficha ${t}`)) };
@@ -563,8 +564,8 @@ export async function getPrescriptionHistory(filters: any) {
 
 export async function getPatientPrescriptionsCountTodayAction(patientId: string) {
     const now = new Date();
-    const start = startOfDay(now).toISOString();
-    const end = endOfDay(now).toISOString();
+    const start = new Date(now.setHours(0,0,0,0)).toISOString();
+    const end = new Date(now.setHours(23,59,59,999)).toISOString();
     const q = query(
         collection(adminDb, 'prescriptions'),
         where('patientId', '==', patientId),
@@ -619,6 +620,15 @@ export async function bulkInsertMedications(items: any[], source: 'IMSS-BIENESTA
     await batch.commit(); return { success: true, processedCount: items.length }; 
 }
 export async function deleteAllMedications() { const s = await getDocs(collection(adminDb, 'medications')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
+
+export async function deleteMedicationsBySource(source: 'IMSS-BIENESTAR' | 'EXTERNO') {
+    const q = query(collection(adminDb, 'medications'), where('fuenteFinanciamiento', '==', source));
+    const snap = await getDocs(q);
+    const batch = writeBatch(adminDb);
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+    return { success: true };
+}
 
 export async function createPharmacyVoucher(v: Omit<PharmacyVoucher, 'id' | 'folio' | 'createdAt'>) {
     const id = uuidv4();
@@ -793,16 +803,4 @@ export async function getAttendedPatientsForClinic(cid: string) {
         psnap.forEach(d => patients.push({ ...d.data(), id: d.id } as Patient)); 
     } 
     return serializeData(patients); 
-}
-
-function startOfDay(date: Date): Date {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    return d;
-}
-
-function endOfDay(date: Date): Date {
-    const d = new Date(date);
-    d.setHours(23, 59, 59, 999);
-    return d;
 }

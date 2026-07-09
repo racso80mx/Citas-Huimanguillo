@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useTransition, useMemo } from 'react';
@@ -39,7 +38,7 @@ import {
   FileText,
   Plus
 } from 'lucide-react';
-import { getMedications, bulkInsertMedications, deleteAllMedications } from '@/lib/actions';
+import { getMedications, bulkInsertMedications, deleteMedicationsBySource } from '@/lib/actions';
 import type { Medication } from '@/lib/definitions';
 import { 
   AlertDialog,
@@ -66,7 +65,6 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, startUploadTransition] = useTransition();
   const [isDeleting, startDeleteTransition] = useTransition();
-  const [uploadSource, setUploadSource] = useState<'IMSS-BIENESTAR' | 'EXTERNO'>('IMSS-BIENESTAR');
   const [progress, setProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState({ processed: 0, total: 0, message: '' });
   const [searchTerm, setSearchTerm] = useState('');
@@ -157,6 +155,16 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
     });
   };
 
+  const handleDeleteBySource = (source: 'IMSS-BIENESTAR' | 'EXTERNO') => {
+      startDeleteTransition(async () => {
+          const res = await deleteMedicationsBySource(source);
+          if (res.success) {
+              toast({ title: `Inventario ${source} eliminado` });
+              loadMedications();
+          }
+      });
+  };
+
   const stats = useMemo(() => {
     const counts = { red: 0, yellow: 0, green: 0, total: medications.length };
     medications.forEach(m => {
@@ -235,17 +243,32 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                                 <Progress value={progress} className="h-2" />
                             </div>
                         )}
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="sm" className="w-full text-destructive hover:bg-destructive/10 font-bold uppercase" disabled={isDeleting || medications.length === 0}>
-                                <Trash2 className="h-4 w-4 mr-2" /> Borrar Todo
-                            </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                            <AlertDialogHeader><AlertDialogTitle>¿Está seguro?</AlertDialogTitle><AlertDialogDescription>Se eliminarán permanentemente los registros actuales de Farmacia.</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { startDeleteTransition(async () => { await deleteAllMedications(); loadMedications(); }); }} className="bg-destructive hover:bg-destructive/90">SÍ, VACIAR TODO</AlertDialogAction></AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="sm" className="w-full text-red-700 hover:bg-red-50 font-black text-[9px] uppercase border" disabled={isDeleting}>
+                                    <Trash2 className="h-3 w-3 mr-1" /> Borrar IMSS
+                                </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                <AlertDialogHeader><AlertDialogTitle>¿Borrar fuente IMSS-BIENESTAR?</AlertDialogTitle><AlertDialogDescription>Se eliminarán permanentemente los registros de esta fuente.</AlertDialogDescription></AlertDialogHeader>
+                                <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteBySource('IMSS-BIENESTAR')} className="bg-destructive hover:bg-destructive/90">SÍ, BORRAR FUENTE</AlertDialogAction></AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="sm" className="w-full text-red-700 hover:bg-red-50 font-black text-[9px] uppercase border" disabled={isDeleting}>
+                                    <Trash2 className="h-3 w-3 mr-1" /> Borrar Externos
+                                </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                <AlertDialogHeader><AlertDialogTitle>¿Borrar fuente EXTERNA?</AlertDialogTitle><AlertDialogDescription>Se eliminarán permanentemente los registros de esta fuente.</AlertDialogDescription></AlertDialogHeader>
+                                <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteBySource('EXTERNO')} className="bg-destructive hover:bg-destructive/90">SÍ, BORRAR FUENTE</AlertDialogAction></AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </div>
                     </CardContent>
                 </Card>
 
