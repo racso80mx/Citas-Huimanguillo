@@ -76,7 +76,7 @@ export function serializeData(data: any): any {
 }
 
 /**
- * Función auxiliar para obtener un string de fecha seguro desde un campo de Firestore
+ * Normaliza cualquier valor de fecha (String o Timestamp) a String ISO
  */
 function safeGetDateString(val: any): string {
     if (!val) return '';
@@ -166,7 +166,7 @@ export async function verifyModulePassword(module: string, password: string) {
     
     if (module === 'medical') {
         const ms = await getModuleSettings();
-        const dbPassword = ms.citasMedicasPassword;
+        const dbPassword = ms.citasMedicasPassword || '123';
         return { success: password === dbPassword || password === '123' || password === 'citas2026' };
     }
 
