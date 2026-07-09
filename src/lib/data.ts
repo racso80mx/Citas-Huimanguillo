@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -45,7 +46,8 @@ import type {
   ArchiveCounts,
   MedicalConsultation,
   Cie10Record,
-  PharmacyVoucher
+  PharmacyVoucher,
+  Department
 } from './definitions';
 import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
@@ -70,7 +72,7 @@ export function serializeData(data: any): any {
 }
 
 /**
- * NORMALIZACIÓN DE FECHAS SEGURA - EVITA ERROR .startsWith()
+ * NORMALIZACIÓN DE FECHAS SEGURA
  */
 export function safeGetDateString(val: any): string {
     if (val === null || val === undefined) return '';
@@ -574,6 +576,8 @@ export async function getServiceTypesData() { const s = await getDocs(collection
 export async function updateServiceTypes(t: any[]) { const b = writeBatch(adminDb); t.forEach(x => b.set(doc(adminDb, 'serviceTypes', x.id), x)); await b.commit(); return { success: true }; }
 export async function getSpecialtiesData() { const s = await getDocs(collection(adminDb, 'specialties')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateSpecialties(t: any[]) { const b = writeBatch(adminDb); t.forEach(x => b.set(doc(adminDb, 'specialties', x.id), x)); await b.commit(); return { success: true }; }
+export async function getDepartmentsData() { const s = await getDocs(collection(adminDb, 'departments')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
+export async function updateDepartments(t: Department[]) { const b = writeBatch(adminDb); t.forEach(x => b.set(doc(adminDb, 'departments', x.id), x)); await b.commit(); return { success: true }; }
 
 // --- SETTINGS ---
 export async function getAdminSettingsData(): Promise<AdminSettings> { const s = await getDoc(doc(adminDb, 'settings', 'adminSettings')); return s.exists() ? serializeData(s.data()) : { password: 'Hu1m4ngu1ll0' }; }
@@ -601,7 +605,7 @@ export async function updateLabStudies(s: any[]) { const b = writeBatch(adminDb)
 export async function getXRayStudies() { const s = await getDocs(collection(adminDb, 'xrayStudies')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateXRayStudies(s: XRayStudy[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'xrayStudies', x.id), x)); await b.commit(); return { success: true }; }
 export async function getUltrasoundStudies() { const s = await getDocs(collection(adminDb, 'ultrasoundStudies')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
-export async function updateUltrasoundStudies(s: any[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'ultrasoundStudies', x.id), x)); await b.commit(); return { success: true }; }
+export async function updateUltrasoundStudies(s: any[]) { b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'ultrasoundStudies', x.id), x)); await b.commit(); return { success: true }; }
 export async function getVaccines() { const s = await getDocs(collection(adminDb, 'vaccines')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateVaccines(s: any[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'vaccines', x.id), x)); await b.commit(); return { success: true }; }
 
@@ -631,7 +635,13 @@ export async function createPharmacyVoucher(v: Omit<PharmacyVoucher, 'id' | 'fol
     const folio = `VALE-${uuidv4().split('-')[0].toUpperCase()}`;
     const batch = writeBatch(adminDb);
     batch.set(doc(adminDb, 'pharmacyVouchers', id), { ...v, id, folio, createdAt: new Date().toISOString() });
-    batch.update(doc(adminDb, 'medications', v.medicationId), { existencia: increment(-v.quantity) });
+    
+    v.items.forEach(item => {
+        batch.update(doc(adminDb, 'medications', item.medicationId), { 
+            existencia: increment(-item.quantity) 
+        });
+    });
+    
     await batch.commit();
     return { success: true, folio };
 }

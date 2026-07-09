@@ -42,6 +42,7 @@ import { BackupManager } from './backup-manager';
 import { DoctorsCatalog } from './doctors-catalog';
 import { SpecialtiesManager } from './specialties-manager';
 import { ColoniasManager } from './colonias-manager';
+import { DepartmentsManager } from './departments-manager';
 import { Input } from '../ui/input';
 import { v4 as uuidv4 } from 'uuid';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -399,11 +400,13 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                     <TabsTrigger value="specialties" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary px-6 py-3 font-bold">Especialidades</TabsTrigger>
                     <TabsTrigger value="colonias" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary px-6 py-3 font-bold">Localidades</TabsTrigger>
                     <TabsTrigger value="medicos" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary px-6 py-3 font-bold">Médicos</TabsTrigger>
+                    <TabsTrigger value="destinos" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary px-6 py-3 font-bold">Destinos Vales</TabsTrigger>
                 </TabsList>
                 <TabsContent value="service-types"><ServiceTypesManager /></TabsContent>
                 <TabsContent value="specialties"><SpecialtiesManager /></TabsContent>
                 <TabsContent value="colonias"><ColoniasManager /></TabsContent>
                 <TabsContent value="medicos"><DoctorsCatalog /></TabsContent>
+                <TabsContent value="destinos"><DepartmentsManager /></TabsContent>
             </Tabs>
         </TabsContent>
         <TabsContent value="citas" className="animate-in fade-in">

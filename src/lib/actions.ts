@@ -1,3 +1,4 @@
+
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -26,7 +27,8 @@ import type {
     ServiceType,
     Specialty,
     Prescription,
-    PharmacyVoucher
+    PharmacyVoucher,
+    Department
 } from './definitions';
 
 // --- LOGS ---
@@ -184,6 +186,8 @@ export async function getServiceTypes() { return data.getServiceTypesData(); }
 export async function updateServiceTypes(t: any[]) { return data.updateServiceTypes(t); }
 export async function getSpecialties() { return data.getSpecialtiesData(); }
 export async function updateSpecialties(t: any[]) { return data.updateSpecialties(t); }
+export async function getDepartments() { return data.getDepartmentsData(); }
+export async function updateDepartments(t: Department[]) { return data.updateDepartments(t); }
 
 export async function getLabSettings() { return data.getLabSettings(); }
 export async function updateLabSettings(s: LabSettings) { return data.updateLabSettings(s); }

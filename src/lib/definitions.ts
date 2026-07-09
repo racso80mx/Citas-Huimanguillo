@@ -119,6 +119,12 @@ export type Specialty = {
     available: boolean;
 };
 
+export type Department = {
+    id: string;
+    name: string;
+    available: boolean;
+};
+
 export type Colonia = {
   id: string; // UUID
   name: string;
@@ -505,16 +511,20 @@ export type Cie10Record = {
     codAdiMort: string;
 };
 
+export type VoucherItem = {
+    medicationId: string;
+    medicationName: string;
+    lote: string;
+    quantity: number;
+    source: 'IMSS-BIENESTAR' | 'EXTERNO';
+};
+
 export type PharmacyVoucher = {
     id: string;
     folio: string;
     date: string;
     department: string;
-    source: 'IMSS-BIENESTAR' | 'EXTERNO';
-    medicationId: string;
-    medicationName: string;
-    lote: string;
-    quantity: number;
+    items: VoucherItem[];
     responsible: string;
     createdAt: string;
 };
