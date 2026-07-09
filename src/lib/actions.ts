@@ -26,7 +26,8 @@ import type {
     Colonia,
     ServiceType,
     Specialty,
-    Prescription
+    Prescription,
+    PharmacyVoucher
 } from './definitions';
 
 // --- LOGS ---
@@ -200,25 +201,29 @@ export async function updateUltrasoundStudies(s: any[]) { return data.updateUltr
 export async function getVaccines() { return data.getVaccines(); }
 export async function updateVaccines(s: any[]) { return data.updateVaccines(s); }
 
+// --- FARMACIA NUEVOS ---
 export async function getMedications() { return data.getMedications(); }
-export async function getSupplies() { return data.getSupplies(); }
-export async function bulkInsertMedications(i: any[]) { return data.bulkInsertMedications(i); }
-export async function bulkInsertSupplies(i: any[]) { return data.bulkInsertSupplies(i); }
+export async function bulkInsertMedications(i: any[], source: 'IMSS-BIENESTAR' | 'EXTERNO') { 
+    const res = await data.bulkInsertMedications(i, source);
+    revalidatePath('/farmacia');
+    return res;
+}
 export async function deleteAllMedications() { return data.deleteAllMedications(); }
+
+export async function createPharmacyVoucher(v: Omit<PharmacyVoucher, 'id' | 'folio' | 'createdAt'>) {
+    const res = await data.createPharmacyVoucher(v);
+    revalidatePath('/farmacia');
+    return res;
+}
+
+export async function getPharmacyVouchers() { return data.getPharmacyVouchers(); }
+
+// --- ALMACÉN ---
+export async function getSupplies() { return data.getSupplies(); }
+export async function bulkInsertSupplies(i: any[]) { return data.bulkInsertSupplies(i); }
 export async function deleteAllSupplies() { return data.deleteAllSupplies(); }
+
+// --- BI ---
 export async function searchCie10(t: string) { return data.searchCie10(t); }
 export async function getBIData() { return data.getBIData(); }
 export async function getAttendedPatientsForClinic(c: string) { return data.getAttendedPatientsForClinic(c); }
-export async function cleanupOldRecords() { return data.cleanupOldRecords(); }
-export async function deletePatients(ids: string[]) { return data.deletePatients(ids); }
-export async function scanDuplicates(c: 'expediente' | 'curp' | 'name') { return data.scanDuplicates(c); }
-export async function applyStatusUpdateChunk(e: string[], s: string) { return data.applyStatusUpdateChunk(e, s); }
-export async function getPatientPrescriptionsCountTodayAction(p: string) { return data.getPatientPrescriptionsCountTodayAction(p); }
-export async function bulkInsertCie10Glossary(d: any[]) { return data.bulkInsertCie10Glossary(d); }
-export async function bulkInsertCie10Catalog(d: any[]) { return data.bulkInsertCie10Catalog(d); }
-export async function deleteAllCie10Glossary() { return data.deleteAllCie10Glossary(); }
-export async function deleteAllCie10Catalog() { return data.deleteAllCie10Catalog(); }
-export async function bulkInsertDoctors(d: any[]) { return data.bulkInsertDoctors(d); }
-export async function downloadBackupAction() { return data.downloadBackupAction(); }
-export async function normalizeExpedientesAction() { return data.normalizeExpedientesAction(); }
-

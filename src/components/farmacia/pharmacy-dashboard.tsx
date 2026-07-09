@@ -35,7 +35,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   CalendarClock,
-  X
+  X,
+  FileText,
+  Plus
 } from 'lucide-react';
 import { getMedications, bulkInsertMedications, deleteAllMedications } from '@/lib/actions';
 import type { Medication } from '@/lib/definitions';
@@ -55,6 +57,7 @@ import { differenceInMonths, isValid, parse, isDate } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PrescriptionDispenser } from './prescription-dispenser';
+import { VoucherForm } from './voucher-form';
 
 type ExpirationStatus = 'red' | 'yellow' | 'green' | 'unknown';
 
@@ -63,10 +66,12 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, startUploadTransition] = useTransition();
   const [isDeleting, startDeleteTransition] = useTransition();
+  const [uploadSource, setUploadSource] = useState<'IMSS-BIENESTAR' | 'EXTERNO'>('IMSS-BIENESTAR');
   const [progress, setProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState({ processed: 0, total: 0, message: '' });
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<ExpirationStatus | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<'IMSS-BIENESTAR' | 'EXTERNO' | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Medication; direction: 'asc' | 'desc' } | null>(null);
 
   const { toast } = useToast();
@@ -89,33 +94,26 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
 
   const getExpirationStatus = (dateStr: string): ExpirationStatus => {
     if (!dateStr || dateStr.toUpperCase() === 'SIN FECHA' || dateStr.trim() === '') return 'unknown';
-    
     let expiryDate: Date | null = null;
-    if (dateStr.includes('/')) {
-        expiryDate = parse(dateStr, 'dd/MM/yyyy', new Date());
-    } else if (dateStr.includes('-')) {
-        expiryDate = new Date(dateStr);
-    } else {
-        expiryDate = new Date(dateStr);
-    }
+    if (dateStr.includes('/')) expiryDate = parse(dateStr, 'dd/MM/yyyy', new Date());
+    else if (dateStr.includes('-')) expiryDate = new Date(dateStr);
+    else expiryDate = new Date(dateStr);
 
     if (!expiryDate || !isValid(expiryDate)) return 'unknown';
-
     const now = new Date();
-    const monthsUntilExpiry = differenceInMonths(expiryDate, now);
-
-    if (monthsUntilExpiry < 6) return 'red';
-    if (monthsUntilExpiry < 12) return 'yellow';
+    const months = differenceInMonths(expiryDate, now);
+    if (months < 6) return 'red';
+    if (months < 12) return 'yellow';
     return 'green';
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, source: 'IMSS-BIENESTAR' | 'EXTERNO') => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     startUploadTransition(async () => {
       setProgress(0);
-      setUploadStatus({ processed: 0, total: 0, message: 'Analizando estructura del archivo...' });
+      setUploadStatus({ processed: 0, total: 0, message: 'Analizando archivo...' });
 
       try {
         const xlsx = await import('xlsx');
@@ -125,37 +123,32 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
         const json = xlsx.utils.sheet_to_json(sheet);
 
         if (json.length === 0) {
-          toast({ title: 'El archivo está vacío', variant: 'destructive' });
+          toast({ title: 'Archivo vacío', variant: 'destructive' });
           return;
         }
 
         const totalRecords = json.length;
-        setUploadStatus({ processed: 0, total: totalRecords, message: 'Sincronizando con base de datos...' });
+        setUploadStatus({ processed: 0, total: totalRecords, message: `Cargando fuente: ${source}...` });
 
         const CHUNK_SIZE = 400;
         let processedCount = 0;
 
         for (let i = 0; i < totalRecords; i += CHUNK_SIZE) {
           const chunk = json.slice(i, i + CHUNK_SIZE);
-          const result = await bulkInsertMedications(JSON.parse(JSON.stringify(chunk)));
-
+          const result = await bulkInsertMedications(JSON.parse(JSON.stringify(chunk)), source);
           if (result.success) {
             processedCount += result.processedCount || 0;
             setProgress(Math.round((processedCount / totalRecords) * 100));
-            setUploadStatus({ 
-              processed: processedCount, 
-              total: totalRecords, 
-              message: `Procesando: ${processedCount} de ${totalRecords}...` 
-            });
+            setUploadStatus({ processed: processedCount, total: totalRecords, message: `Procesando: ${processedCount} de ${totalRecords}...` });
           } else {
             throw new Error(result.message);
           }
         }
 
-        toast({ title: 'Farmacia actualizada correctamente' });
+        toast({ title: `Inventario ${source} actualizado con éxito` });
         loadMedications();
       } catch (error: any) {
-        toast({ title: 'Error crítico de carga', description: error.message, variant: 'destructive' });
+        toast({ title: 'Error en la carga', description: error.message, variant: 'destructive' });
       } finally {
         setUploadStatus({ processed: 0, total: 0, message: '' });
         setProgress(0);
@@ -164,53 +157,35 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
     });
   };
 
-  const handleDeleteAll = () => {
-    startDeleteTransition(async () => {
-      const res = await deleteAllMedications();
-      if (res.success) {
-        toast({ title: 'Inventario vaciado' });
-        loadMedications();
-      }
-    });
-  };
-
   const stats = useMemo(() => {
-    const counts = { red: 0, yellow: 0, green: 0, unknown: 0, total: medications.length };
+    const counts = { red: 0, yellow: 0, green: 0, total: medications.length };
     medications.forEach(m => {
         const status = getExpirationStatus(m.fechaCaducidad);
         if (status === 'red') counts.red++;
         else if (status === 'yellow') counts.yellow++;
         else if (status === 'green') counts.green++;
-        else counts.unknown++;
     });
     return counts;
   }, [medications]);
 
   const filtered = useMemo(() => {
     let result = [...medications];
-    if (statusFilter) {
-      result = result.filter(m => getExpirationStatus(m.fechaCaducidad) === statusFilter);
-    }
+    if (statusFilter) result = result.filter(m => getExpirationStatus(m.fechaCaducidad) === statusFilter);
+    if (sourceFilter) result = result.filter(m => m.fuenteFinanciamiento === sourceFilter);
     if (searchTerm) {
       const term = searchTerm.toUpperCase();
-      result = result.filter(m => 
-        (m.descripcion || '').includes(term) || 
-        (m.claveCuadroBasico || '').includes(term) ||
-        (m.lote || '').includes(term)
-      );
+      result = result.filter(m => (m.descripcion || '').includes(term) || (m.claveCuadroBasico || '').includes(term) || (m.lote || '').includes(term));
     }
     if (sortConfig) {
       result.sort((a, b) => {
         const valA = a[sortConfig.key];
         const valB = b[sortConfig.key];
         if (valA === valB) return 0;
-        if (valA === undefined) return 1;
-        if (valB === undefined) return -1;
         return sortConfig.direction === 'asc' ? (valA < valB ? -1 : 1) : (valA > valB ? -1 : 1);
       });
     }
     return result;
-  }, [medications, searchTerm, statusFilter, sortConfig]);
+  }, [medications, searchTerm, statusFilter, sourceFilter, sortConfig]);
 
   return (
     <div className="space-y-6">
@@ -219,37 +194,37 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
             <h1 className="text-3xl font-bold font-headline flex items-center gap-2 text-primary">
                 <Pill className="h-8 w-8" /> Gestión de Farmacia
             </h1>
-            <p className="text-muted-foreground font-medium">Control de caducidades con lectura exacta de FECHA CADUCIDAD.</p>
+            <p className="text-muted-foreground font-medium">Control unificado de fuentes: IMSS-BIENESTAR y EXTERNO.</p>
         </div>
         <div className="flex items-center gap-2">
             <Button variant="outline" onClick={loadMedications} disabled={isLoading}>
                 <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
             </Button>
             {onLogout && (
-                <Button variant="outline" onClick={onLogout}>
-                    <LogOut className="mr-2 h-4 w-4" /> Salir
-                </Button>
+                <Button variant="outline" onClick={onLogout}><LogOut className="mr-2 h-4 w-4" /> Salir</Button>
             )}
         </div>
       </div>
 
       <Tabs defaultValue="inventario" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md h-auto p-1 bg-muted/20">
-            <TabsTrigger value="inventario" className="py-2.5 font-bold">Control de Inventario</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-3 max-w-xl h-auto p-1 bg-muted/20">
+            <TabsTrigger value="inventario" className="py-2.5 font-bold">Inventario</TabsTrigger>
             <TabsTrigger value="recetas" className="py-2.5 font-bold">Surtir Recetas</TabsTrigger>
+            <TabsTrigger value="vales" className="py-2.5 font-bold">Vales de Salida</TabsTrigger>
         </TabsList>
 
         <TabsContent value="inventario" className="space-y-6 mt-6 animate-in fade-in duration-300">
-            <div className="grid md:grid-cols-3 gap-6">
-                <Card className="md:col-span-1 shadow-md border-primary/10">
-                    <CardHeader>
-                        <CardTitle className="text-lg">Carga de Medicamentos</CardTitle>
-                        <CardDescription>Búsqueda estricta de columna "FECHA CADUCIDAD".</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <Label className="text-[10px] font-black uppercase opacity-60">Seleccionar Excel (.xlsx)</Label>
-                            <Input type="file" accept=".xlsx" onChange={handleFileUpload} disabled={isUploading} className="h-11" />
+            <div className="grid md:grid-cols-12 gap-6">
+                <Card className="md:col-span-4 shadow-md border-primary/10">
+                    <CardHeader className="pb-3"><CardTitle className="text-lg">Entrada de Medicamentos</CardTitle></CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="p-4 border rounded-xl bg-green-50/50 space-y-3">
+                            <Label className="text-[10px] font-black uppercase text-green-700">Fuente: IMSS-BIENESTAR</Label>
+                            <Input type="file" accept=".xlsx" onChange={(e) => handleFileUpload(e, 'IMSS-BIENESTAR')} disabled={isUploading} className="h-10 bg-white" />
+                        </div>
+                        <div className="p-4 border rounded-xl bg-blue-50/50 space-y-3">
+                            <Label className="text-[10px] font-black uppercase text-blue-700">Fuente: EXTERNA</Label>
+                            <Input type="file" accept=".xlsx" onChange={(e) => handleFileUpload(e, 'EXTERNO')} disabled={isUploading} className="h-10 bg-white" />
                         </div>
                         {isUploading && (
                             <div className="space-y-2 pt-2">
@@ -262,47 +237,44 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                         )}
                         <AlertDialog>
                             <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="sm" className="w-full h-11 font-black uppercase tracking-wider" disabled={isDeleting || medications.length === 0}>
-                                <Trash2 className="h-4 w-4 mr-2" /> VACIAR INVENTARIO
+                            <Button variant="ghost" size="sm" className="w-full text-destructive hover:bg-destructive/10 font-bold uppercase" disabled={isDeleting || medications.length === 0}>
+                                <Trash2 className="h-4 w-4 mr-2" /> Borrar Todo
                             </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>¿Está seguro?</AlertDialogTitle>
-                                <AlertDialogDescription>Se eliminarán permanentemente los registros actuales de Farmacia.</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleDeleteAll} className="bg-destructive hover:bg-destructive/90">SÍ, VACIAR TODO</AlertDialogAction>
-                            </AlertDialogFooter>
+                            <AlertDialogHeader><AlertDialogTitle>¿Está seguro?</AlertDialogTitle><AlertDialogDescription>Se eliminarán permanentemente los registros actuales de Farmacia.</AlertDialogDescription></AlertDialogHeader>
+                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => { startDeleteTransition(async () => { await deleteAllMedications(); loadMedications(); }); }} className="bg-destructive hover:bg-destructive/90">SÍ, VACIAR TODO</AlertDialogAction></AlertDialogFooter>
                             </AlertDialogContent>
                         </AlertDialog>
                     </CardContent>
                 </Card>
 
-                <Card className="md:col-span-2 shadow-md border-primary/10">
-                <CardHeader className="pb-3">
-                    <CardTitle className="text-lg flex items-center gap-2 uppercase font-black"><CalendarClock className="h-5 w-5 text-primary" /> Semáforo de Caducidades</CardTitle>
-                    <CardDescription>Filtros rápidos por estado de vencimiento.</CardDescription>
-                </CardHeader>
-                <CardContent>
+                <Card className="md:col-span-8 shadow-md border-primary/10">
+                <CardHeader className="pb-3"><CardTitle className="text-lg flex items-center gap-2 uppercase font-black"><CalendarClock className="h-5 w-5 text-primary" /> Semáforo de Almacén</CardTitle></CardHeader>
+                <CardContent className="space-y-6">
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <button onClick={() => setStatusFilter(statusFilter === 'red' ? null : 'red')} className={cn("bg-red-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'red' ? "border-red-500 ring-4 ring-red-200 shadow-md" : "border-red-100 opacity-70")}>
+                        <button onClick={() => setStatusFilter(statusFilter === 'red' ? null : 'red')} className={cn("bg-red-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'red' ? "border-red-500 ring-4 ring-red-200" : "border-red-100")}>
                             <div className="text-[10px] text-red-600 uppercase font-black mb-1">CRÍTICO (&lt; 6M)</div>
                             <div className="text-3xl font-black text-red-700">{stats.red}</div>
                         </button>
-                        <button onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')} className={cn("bg-yellow-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'yellow' ? "border-yellow-500 ring-4 ring-yellow-200 shadow-md" : "border-yellow-100 opacity-70")}>
-                            <div className="text-[10px] text-yellow-600 uppercase font-black mb-1">PREVENCION (1 AÑO)</div>
+                        <button onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')} className={cn("bg-yellow-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'yellow' ? "border-yellow-500 ring-4 ring-yellow-200" : "border-yellow-100")}>
+                            <div className="text-[10px] text-yellow-600 uppercase font-black mb-1">PRÓXIMO (1 AÑO)</div>
                             <div className="text-3xl font-black text-yellow-700">{stats.yellow}</div>
                         </button>
-                        <button onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')} className={cn("bg-green-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'green' ? "border-green-500 ring-4 ring-green-200 shadow-md" : "border-green-100 opacity-70")}>
+                        <button onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')} className={cn("bg-green-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'green' ? "border-green-500 ring-4 ring-green-200" : "border-green-100")}>
                             <div className="text-[10px] text-green-600 uppercase font-black mb-1">ÓPTIMO (&gt; 1 AÑO)</div>
                             <div className="text-3xl font-black text-green-700">{stats.green}</div>
                         </button>
-                        <button onClick={() => setStatusFilter(null)} className={cn("bg-muted/30 border p-4 rounded-xl text-center transition-all", !statusFilter ? "border-primary ring-4 ring-primary/10 shadow-md" : "border-transparent opacity-70")}>
+                        <button onClick={() => setStatusFilter(null)} className={cn("bg-muted/30 border p-4 rounded-xl text-center transition-all", !statusFilter ? "border-primary ring-4 ring-primary/10" : "border-transparent")}>
                             <div className="text-[10px] text-muted-foreground uppercase font-black mb-1">TOTAL REGISTROS</div>
                             <div className="text-3xl font-black">{stats.total}</div>
                         </button>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                        <Button variant={sourceFilter === 'IMSS-BIENESTAR' ? 'default' : 'outline'} size="sm" onClick={() => setSourceFilter(sourceFilter === 'IMSS-BIENESTAR' ? null : 'IMSS-BIENESTAR')} className="h-8 text-[10px] font-black uppercase">IMSS-BIENESTAR</Button>
+                        <Button variant={sourceFilter === 'EXTERNO' ? 'default' : 'outline'} size="sm" onClick={() => setSourceFilter(sourceFilter === 'EXTERNO' ? null : 'EXTERNO')} className="h-8 text-[10px] font-black uppercase">EXTERNO</Button>
+                        {sourceFilter && <Button variant="ghost" size="sm" onClick={() => setSourceFilter(null)} className="h-8"><X className="h-3 w-3" /></Button>}
                     </div>
                 </CardContent>
                 </Card>
@@ -312,16 +284,9 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                 <CardHeader className="pb-3 border-b bg-muted/10">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <CardTitle className="uppercase font-black text-sm">Inventario de Medicamentos</CardTitle>
-                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                        <div className="relative w-full sm:w-96">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input placeholder="Buscar por Clave, Descripción o Lote..." className="pl-9 h-11 border-primary/20 bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                        </div>
-                        {statusFilter && (
-                            <Badge variant="secondary" className="h-11 px-4 gap-2 text-sm font-black border-primary/20 bg-primary/5 text-primary">
-                                FILTRO ACTIVO <X className="h-4 w-4 cursor-pointer" onClick={() => setStatusFilter(null)} />
-                            </Badge>
-                        )}
+                    <div className="relative w-full sm:w-96">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input placeholder="Buscar por Clave, Descripción o Lote..." className="pl-9 h-11 border-primary/20 bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                     </div>
                 </div>
                 </CardHeader>
@@ -335,29 +300,34 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                         <TableRow>
                             <TableHead className="font-black text-[10px] uppercase">Clave</TableHead>
                             <TableHead className="font-black text-[10px] uppercase">Descripción</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase">Fuente</TableHead>
                             <TableHead className="text-right font-black text-[10px] uppercase">Existencia</TableHead>
-                            <TableHead className="font-black text-[10px] uppercase">Fecha Caducidad</TableHead>
+                            <TableHead className="font-black text-[10px] uppercase">Caducidad</TableHead>
                             <TableHead className="font-black text-[10px] uppercase">Lote</TableHead>
                         </TableRow>
                         </TableHeader>
                         <TableBody>
                         {filtered.length > 0 ? (
                             filtered.slice(0, 500).map((item) => {
-                            const expiryStatus = getExpirationStatus(item.fechaCaducidad);
+                            const status = getExpirationStatus(item.fechaCaducidad);
                             return (
                                 <TableRow key={item.id} className="hover:bg-muted/50 transition-colors">
                                 <TableCell className="font-mono text-[11px] font-bold text-primary">{item.claveCuadroBasico}</TableCell>
                                 <TableCell className="text-[11px] font-black uppercase leading-tight">{item.descripcion}</TableCell>
+                                <TableCell>
+                                    <Badge variant="outline" className={cn("text-[9px] font-black uppercase", item.fuenteFinanciamiento === 'EXTERNO' ? "border-blue-200 text-blue-700 bg-blue-50" : "border-green-200 text-green-700 bg-green-50")}>
+                                        {item.fuenteFinanciamiento || 'IMSS-BIENESTAR'}
+                                    </Badge>
+                                </TableCell>
                                 <TableCell className="text-right">
                                     <Badge variant={item.existencia > 0 ? 'secondary' : 'destructive'} className="font-black text-sm">{item.existencia}</Badge>
                                 </TableCell>
                                 <TableCell>
                                     <Badge variant="outline" className={cn(
-                                        "font-black text-[11px] px-3 uppercase border-2",
-                                        expiryStatus === 'red' && "bg-red-50 text-red-700 border-red-200",
-                                        expiryStatus === 'yellow' && "bg-yellow-50 text-yellow-700 border-yellow-200",
-                                        expiryStatus === 'green' && "bg-green-50 text-green-700 border-green-200",
-                                        expiryStatus === 'unknown' && "bg-gray-100 text-gray-500"
+                                        "font-black text-[10px] px-3 uppercase border-2",
+                                        status === 'red' && "bg-red-50 text-red-700 border-red-200",
+                                        status === 'yellow' && "bg-yellow-50 text-yellow-700 border-yellow-200",
+                                        status === 'green' && "bg-green-50 text-green-700 border-green-200"
                                     )}>
                                     {item.fechaCaducidad || 'SIN FECHA'}
                                     </Badge>
@@ -367,7 +337,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                             );
                             })
                         ) : (
-                            <TableRow><TableCell colSpan={5} className="text-center py-20 italic font-bold text-muted-foreground uppercase">No se encontraron registros para esta selección.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={6} className="text-center py-20 italic font-bold text-muted-foreground uppercase">Sin registros.</TableCell></TableRow>
                         )}
                         </TableBody>
                     </Table>
@@ -379,6 +349,10 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
 
         <TabsContent value="recetas" className="mt-6 animate-in fade-in duration-300">
             <PrescriptionDispenser />
+        </TabsContent>
+
+        <TabsContent value="vales" className="mt-6 animate-in fade-in duration-300">
+            <VoucherForm onVoucherCreated={loadMedications} />
         </TabsContent>
       </Tabs>
     </div>

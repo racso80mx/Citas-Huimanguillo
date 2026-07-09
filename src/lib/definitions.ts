@@ -504,3 +504,17 @@ export type Cie10Record = {
     descripcionMmSubgrupo: string;
     codAdiMort: string;
 };
+
+export type PharmacyVoucher = {
+    id: string;
+    folio: string;
+    date: string;
+    department: string;
+    source: 'IMSS-BIENESTAR' | 'EXTERNO';
+    medicationId: string;
+    medicationName: string;
+    lote: string;
+    quantity: number;
+    responsible: string;
+    createdAt: string;
+};
