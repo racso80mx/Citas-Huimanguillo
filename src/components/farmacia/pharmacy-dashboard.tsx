@@ -34,7 +34,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   CalendarClock,
-  X
+  X,
+  Filter
 } from 'lucide-react';
 import { getMedications, bulkInsertMedications, deleteMedicationsBySource } from '@/lib/actions';
 import type { Medication } from '@/lib/definitions';
@@ -55,6 +56,7 @@ import { cn } from '@/lib/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PrescriptionDispenser } from './prescription-dispenser';
 import { VoucherForm } from './voucher-form';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type ExpirationStatus = 'red' | 'yellow' | 'green' | 'unknown';
 
@@ -66,7 +68,11 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
   const [progress, setProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState({ processed: 0, total: 0, message: '' });
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Filtros
   const [statusFilter, setStatusFilter] = useState<ExpirationStatus | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  
   const [sortConfig, setSortConfig] = useState<{ key: keyof Medication; direction: 'asc' | 'desc' } | null>(null);
 
   const { toast } = useToast();
@@ -180,11 +186,25 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
 
   const filtered = useMemo(() => {
     let result = [...medications];
-    if (statusFilter) result = result.filter(m => getExpirationStatus(m.fechaCaducidad) === statusFilter);
     
+    // Filtro por Fuente
+    if (sourceFilter !== 'all') {
+        result = result.filter(m => m.fuenteFinanciamiento === sourceFilter);
+    }
+
+    // Filtro por Caducidad
+    if (statusFilter) {
+        result = result.filter(m => getExpirationStatus(m.fechaCaducidad) === statusFilter);
+    }
+    
+    // Filtro por Búsqueda
     if (searchTerm) {
       const term = searchTerm.toUpperCase();
-      result = result.filter(m => (m.descripcion || '').includes(term) || (m.claveCuadroBasico || '').includes(term) || (m.lote || '').includes(term));
+      result = result.filter(m => 
+        (m.descripcion || '').includes(term) || 
+        (m.claveCuadroBasico || '').includes(term) || 
+        (m.lote || '').includes(term)
+      );
     }
     
     if (sortConfig) {
@@ -198,7 +218,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
       });
     }
     return result;
-  }, [medications, searchTerm, statusFilter, sortConfig]);
+  }, [medications, searchTerm, sourceFilter, statusFilter, sortConfig]);
 
   const handleSort = (key: keyof Medication) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -265,7 +285,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                                 </Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
-                                <AlertDialogHeader><AlertDialogTitle>¿Borrar fuente IMSS-BIENESTAR?</AlertDialogTitle><AlertDialogDescription>Se eliminarán permanentemente los registros de esta fuente.</AlertDialogDescription></AlertDialogHeader>
+                                <AlertDialogHeader><AlertDialogTitle>¿Borrar fuente IMSS-BIENESTAR?</AlertDialogTitle><AlertDialogDescription>Se eliminarán permanentemente los registros de esta fuente de la base de datos.</AlertDialogDescription></AlertDialogHeader>
                                 <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteBySource('IMSS-BIENESTAR')} className="bg-destructive hover:bg-destructive/90">SÍ, BORRAR FUENTE</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
@@ -277,7 +297,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                                 </Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
-                                <AlertDialogHeader><AlertDialogTitle>¿Borrar fuente EXTERNA?</AlertDialogTitle><AlertDialogDescription>Se eliminarán permanentemente los registros de esta fuente.</AlertDialogDescription></AlertDialogHeader>
+                                <AlertDialogHeader><AlertDialogTitle>¿Borrar fuente EXTERNA?</AlertDialogTitle><AlertDialogDescription>Se eliminarán permanentemente los registros de esta fuente de la base de datos.</AlertDialogDescription></AlertDialogHeader>
                                 <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteBySource('EXTERNO')} className="bg-destructive hover:bg-destructive/90">SÍ, BORRAR FUENTE</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                             </AlertDialog>
@@ -312,11 +332,30 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
 
             <Card className="shadow-lg border-primary/10">
                 <CardHeader className="pb-3 border-b bg-muted/10">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                     <CardTitle className="uppercase font-black text-sm">Inventario de Medicamentos</CardTitle>
-                    <div className="relative w-full sm:w-96">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Buscar por Clave, Descripción o Lote..." className="pl-9 h-11 border-primary/20 bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                    <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+                        <div className="space-y-1.5 min-w-[180px]">
+                            <Label className="text-[9px] font-black uppercase opacity-60">Filtrar por Fuente</Label>
+                            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                                <SelectTrigger className="h-10 bg-background border-primary/20">
+                                    <SelectValue placeholder="Todas las fuentes" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">TODAS LAS FUENTES</SelectItem>
+                                    <SelectItem value="IMSS-BIENESTAR">IMSS-BIENESTAR</SelectItem>
+                                    <SelectItem value="EXTERNO">EXTERNO</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1.5 flex-1 min-w-[250px]">
+                            <Label className="text-[9px] font-black uppercase opacity-60">Búsqueda Rápida</Label>
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input placeholder="Clave, Descripción o Lote..." className="pl-9 h-10 border-primary/20 bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                                {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>}
+                            </div>
+                        </div>
                     </div>
                 </div>
                 </CardHeader>
@@ -375,7 +414,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
                             );
                             })
                         ) : (
-                            <TableRow><TableCell colSpan={6} className="text-center py-20 italic font-bold text-muted-foreground uppercase">Sin registros.</TableCell></TableRow>
+                            <TableRow><TableCell colSpan={6} className="text-center py-20 italic font-bold text-muted-foreground uppercase">Sin registros coincidentes con los filtros.</TableCell></TableRow>
                         )}
                         </TableBody>
                     </Table>

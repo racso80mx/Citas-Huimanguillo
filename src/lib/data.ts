@@ -604,7 +604,7 @@ export async function updateLabStudies(s: any[]) { const b = writeBatch(adminDb)
 export async function getXRayStudies() { const s = await getDocs(collection(adminDb, 'xrayStudies')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateXRayStudies(s: XRayStudy[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'xrayStudies', x.id), x)); await b.commit(); return { success: true }; }
 export async function getUltrasoundStudies() { const s = await getDocs(collection(adminDb, 'ultrasoundStudies')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
-export async function updateUltrasoundStudies(s: any[]) { b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'ultrasoundStudies', x.id), x)); await b.commit(); return { success: true }; }
+export async function updateUltrasoundStudies(s: any[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'ultrasoundStudies', x.id), x)); await b.commit(); return { success: true }; }
 export async function getVaccines() { const s = await getDocs(collection(adminDb, 'vaccines')); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
 export async function updateVaccines(s: any[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'vaccines', x.id), x)); await b.commit(); return { success: true }; }
 
@@ -623,9 +623,14 @@ export async function deleteAllMedications() { const s = await getDocs(collectio
 export async function deleteMedicationsBySource(source: 'IMSS-BIENESTAR' | 'EXTERNO') {
     const q = query(collection(adminDb, 'medications'), where('fuenteFinanciamiento', '==', source));
     const snap = await getDocs(q);
-    const batch = writeBatch(adminDb);
-    snap.docs.forEach(d => batch.delete(d.ref));
-    await batch.commit();
+    const docs = snap.docs;
+    const CHUNK_SIZE = 450;
+    for (let i = 0; i < docs.length; i += CHUNK_SIZE) {
+        const batch = writeBatch(adminDb);
+        const chunk = docs.slice(i, i + CHUNK_SIZE);
+        chunk.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+    }
     return { success: true };
 }
 
