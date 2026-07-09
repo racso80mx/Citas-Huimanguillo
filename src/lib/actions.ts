@@ -1,4 +1,3 @@
-
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -74,6 +73,7 @@ export async function updatePatientStatus(id: string, s: string) {
     return res;
 }
 export async function deletePatient(id: string) { return data.deletePatient(id); }
+export async function deletePatients(ids: string[]) { return data.deletePatients(ids); }
 export async function getPatientByCURP(c: string) { return data.getPatientByCURP(c); }
 export async function bulkInsertPatients(p: any[]) { 
     const res = await data.bulkInsertPatients(p);
@@ -139,6 +139,7 @@ export async function updateClinics(c: Clinic[]) {
     return res;
 }
 export async function deleteClinic(id: string) { return data.deleteClinic(id); }
+export async function bulkInsertDoctors(p: any[]) { return data.bulkInsertDoctors(p); }
 
 // --- CONSULTAS Y RECETAS ---
 export async function getConsultationsByPatientId(pid: string) { return data.getConsultationsByPatientId(pid); }
@@ -156,6 +157,7 @@ export async function deletePrescription(id: string) { return data.deletePrescri
 export async function dispensePrescription(id: string, i: any[]) { return data.dispensePrescription(id, i); }
 export async function getPendingPrescriptions(f: any) { return data.getPendingPrescriptions(f); }
 export async function getPrescriptionHistory(f: any) { return data.getPrescriptionHistory(f); }
+export async function getPatientPrescriptionsCountTodayAction(p: string) { return data.getPatientPrescriptionsCountTodayAction(p); }
 
 // --- CONFIG ---
 export async function getAdminSettingsData() { return data.getAdminSettingsData(); }
@@ -201,21 +203,11 @@ export async function updateUltrasoundStudies(s: any[]) { return data.updateUltr
 export async function getVaccines() { return data.getVaccines(); }
 export async function updateVaccines(s: any[]) { return data.updateVaccines(s); }
 
-// --- FARMACIA NUEVOS ---
+// --- FARMACIA ---
 export async function getMedications() { return data.getMedications(); }
-export async function bulkInsertMedications(i: any[], source: 'IMSS-BIENESTAR' | 'EXTERNO') { 
-    const res = await data.bulkInsertMedications(i, source);
-    revalidatePath('/farmacia');
-    return res;
-}
+export async function bulkInsertMedications(i: any[], source: 'IMSS-BIENESTAR' | 'EXTERNO') { return data.bulkInsertMedications(i, source); }
 export async function deleteAllMedications() { return data.deleteAllMedications(); }
-
-export async function createPharmacyVoucher(v: Omit<PharmacyVoucher, 'id' | 'folio' | 'createdAt'>) {
-    const res = await data.createPharmacyVoucher(v);
-    revalidatePath('/farmacia');
-    return res;
-}
-
+export async function createPharmacyVoucher(v: any) { return data.createPharmacyVoucher(v); }
 export async function getPharmacyVouchers() { return data.getPharmacyVouchers(); }
 
 // --- ALMACÉN ---
@@ -227,3 +219,14 @@ export async function deleteAllSupplies() { return data.deleteAllSupplies(); }
 export async function searchCie10(t: string) { return data.searchCie10(t); }
 export async function getBIData() { return data.getBIData(); }
 export async function getAttendedPatientsForClinic(c: string) { return data.getAttendedPatientsForClinic(c); }
+
+// --- MANTENIMIENTO ---
+export async function scanDuplicates(c: 'expediente' | 'curp' | 'name') { return data.scanDuplicates(c); }
+export async function normalizeExpedientesAction() { return data.normalizeExpedientesAction(); }
+export async function applyStatusUpdateChunk(e: string[], s: any) { return data.applyStatusUpdateChunk(e, s); }
+export async function bulkInsertCie10Glossary(i: any[]) { return data.bulkInsertCie10Glossary(i); }
+export async function bulkInsertCie10Catalog(i: any[]) { return data.bulkInsertCie10Catalog(i); }
+export async function deleteAllCie10Glossary() { return data.deleteAllCie10Glossary(); }
+export async function deleteAllCie10Catalog() { return data.deleteAllCie10Catalog(); }
+export async function cleanupOldRecords() { return data.cleanupOldRecords(); }
+export async function downloadBackupAction() { return data.downloadBackupAction(); }
