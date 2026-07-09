@@ -198,8 +198,13 @@ export async function getPatientCounts(): Promise<ArchiveCounts> {
         const totalSnap = await getCountFromServer(coll);
         const total = totalSnap.data().count;
 
-        const bajaSnap = await getCountFromServer(query(coll, where('status', '==', PatientStatus.Baja)));
-        const bajaDefSnap = await getCountFromServer(query(coll, where('status', '==', PatientStatus.BajaDefinitiva)));
+        const qBaja = query(coll, where('status', '==', PatientStatus.Baja));
+        const qBajaDef = query(coll, where('status', '==', PatientStatus.BajaDefinitiva));
+        
+        const [bajaSnap, bajaDefSnap] = await Promise.all([
+            getCountFromServer(qBaja),
+            getCountFromServer(qBajaDef)
+        ]);
         
         const countBaja = bajaSnap.data().count;
         const countBajaDef = bajaDefSnap.data().count;
@@ -461,7 +466,7 @@ function generateDynamicTimeSlots(start: string, end: string, dur: number) {
 
 export async function updateAppointmentStatus(id: string, status: string, type: 'medical' | 'lab' | 'xray' | 'ultrasound' | 'vaccine') {
     const coll = { medical: 'appointments', lab: 'labAppointments', xray: 'xrayAppointments', ultrasound: 'ultrasoundAppointments', vaccine: 'vaccineAppointments' }[type];
-    await updateDoc(doc(adminDb, coll, id), { status });
+    await updateDoc(doc(adminDb, coll!, id), { status });
     return { success: true };
 }
 
