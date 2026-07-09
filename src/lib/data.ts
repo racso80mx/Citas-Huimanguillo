@@ -16,10 +16,7 @@ import {
   where,
   limit,
   orderBy,
-  getCountFromServer,
-  or,
-  startAt,
-  endAt
+  getCountFromServer
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -80,13 +77,14 @@ export function serializeData(data: any): any {
 
 /**
  * Función auxiliar para obtener un string de fecha seguro desde un campo de Firestore
- * Maneja Timestamps, Strings ISO y nulos.
  */
 function safeGetDateString(val: any): string {
     if (!val) return '';
     if (typeof val === 'string') return val;
     if (typeof val.toDate === 'function') return val.toDate().toISOString();
-    if (val.seconds !== undefined) return new Date(val.seconds * 1000).toISOString();
+    if (val && typeof val === 'object' && val.seconds !== undefined) {
+        return new Date(val.seconds * 1000).toISOString();
+    }
     return String(val);
 }
 
@@ -337,7 +335,8 @@ export async function getAppointmentsData() {
 }
 
 export async function getAppointmentsForClinic(cid: string) {
-    const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid)));
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid));
+    const snap = await getDocs(q);
     const results = snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
     results.sort((a, b) => {
         const dateCompare = String(a.date).localeCompare(String(b.date));
