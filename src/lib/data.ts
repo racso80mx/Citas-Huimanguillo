@@ -15,7 +15,9 @@ import {
   where,
   limit,
   orderBy,
-  getCountFromServer
+  getCountFromServer,
+  DocumentData,
+  QueryDocumentSnapshot
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -76,14 +78,30 @@ export function serializeData(data: any): any {
 
 /**
  * Normaliza cualquier valor de fecha (String o Timestamp) a String ISO de forma segura.
+ * Esto evita el error ".startsWith is not a function".
  */
-function safeGetDateString(val: any): string {
-    if (!val) return '';
+export function safeGetDateString(val: any): string {
+    if (val === null || val === undefined) return '';
     if (typeof val === 'string') return val;
-    if (typeof val.toDate === 'function') return val.toDate().toISOString();
-    if (val && typeof val === 'object' && val.seconds !== undefined) {
-        return new Date(val.seconds * 1000).toISOString();
+    
+    // Caso: Objeto Timestamp de Firebase
+    if (typeof val.toDate === 'function') {
+        try {
+            return val.toDate().toISOString();
+        } catch (e) {
+            return '';
+        }
     }
+    
+    // Caso: Objeto que parece Timestamp pero perdió el prototipo
+    if (typeof val === 'object' && val.seconds !== undefined) {
+        try {
+            return new Date(val.seconds * 1000).toISOString();
+        } catch (e) {
+            return '';
+        }
+    }
+    
     return String(val);
 }
 
