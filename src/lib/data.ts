@@ -76,7 +76,8 @@ export function serializeData(data: any): any {
 }
 
 /**
- * Normaliza cualquier valor de fecha (String o Timestamp) a String ISO
+ * Normaliza cualquier valor de fecha (String o Timestamp) a String ISO de forma segura.
+ * Evita el error .startsWith is not a function.
  */
 function safeGetDateString(val: any): string {
     if (!val) return '';
@@ -95,6 +96,9 @@ function generateNombreCompleto(p: any) {
     return `${n} ${ap} ${am}`.replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
+/**
+ * Hidrata las citas con la información completa del paciente.
+ */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     
