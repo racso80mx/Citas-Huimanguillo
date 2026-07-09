@@ -85,7 +85,7 @@ export function safeGetDateString(val: any): string {
     if (typeof val === 'string') return val;
     
     // Caso: Objeto Timestamp de Firebase
-    if (typeof val.toDate === 'function') {
+    if (val && typeof val.toDate === 'function') {
         try {
             return val.toDate().toISOString();
         } catch (e) {
@@ -94,7 +94,7 @@ export function safeGetDateString(val: any): string {
     }
     
     // Caso: Objeto que parece Timestamp pero perdió el prototipo
-    if (typeof val === 'object' && val.seconds !== undefined) {
+    if (val && typeof val === 'object' && val.seconds !== undefined) {
         try {
             return new Date(val.seconds * 1000).toISOString();
         } catch (e) {
