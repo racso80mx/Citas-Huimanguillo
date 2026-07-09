@@ -78,6 +78,17 @@ export function serializeData(data: any): any {
   return data;
 }
 
+/**
+ * Función auxiliar para obtener un string de fecha seguro desde un campo de Firestore
+ */
+function safeGetDateString(val: any): string {
+    if (!val) return '';
+    if (typeof val === 'string') return val;
+    if (typeof val.toDate === 'function') return val.toDate().toISOString();
+    if (val.seconds !== undefined) return new Date(val.seconds * 1000).toISOString();
+    return String(val);
+}
+
 function generateNombreCompleto(p: any) {
     const n = (p.name || '').trim();
     const ap = (p.paternalLastName || '').trim();
@@ -179,7 +190,7 @@ export async function verifyModulePassword(module: string, password: string) {
 export async function verifyClinicPassword(clinicId: string, password: string) {
     const s = await getDoc(doc(adminDb, 'clinics', clinicId));
     if (!s.exists()) return { success: false, message: 'Consultorio no encontrado.' };
-    return { success: s.data().password === password };
+    return { success: s.data()?.password === password };
 }
 
 // --- PACIENTES ---
@@ -421,8 +432,8 @@ export async function getAvailableSlotsForDate(clinicId: string, dateIso: string
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId)));
     
     const booked = snap.docs.filter(d => {
-        const data = serializeData(d.data());
-        return data.date && String(data.date).startsWith(dateStr);
+        const dDate = safeGetDateString(d.data()?.date);
+        return dDate.startsWith(dateStr);
     }).map(d => d.data().time);
 
     const clinicSnap = await getDoc(doc(adminDb, 'clinics', clinicId));
@@ -478,10 +489,11 @@ export async function cloneAppointment(id: string, date: string, type: string, t
 }
 
 export async function getAppointmentCountOnDate(clinicId: string, dateStr: string) {
-    const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId)));
-    return snap.docs.filter(d => {
-        const data = serializeData(d.data());
-        return data.date && String(data.date).startsWith(dateStr);
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId));
+    const s = await getDocs(q);
+    return s.docs.filter(d => {
+        const dDate = safeGetDateString(d.data()?.date);
+        return dDate.startsWith(dateStr);
     }).length;
 }
 
