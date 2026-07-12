@@ -457,26 +457,35 @@ export async function updateUltrasoundStudies(s: any[]) { const b = writeBatch(a
 export async function getVaccines() { return (await getDocs(collection(adminDb, 'vaccines'))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function updateVaccines(s: any[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'vaccines', x.id), x)); await b.commit(); return { success: true }; }
 
-// --- INVENTARIOS CON MAPEADOR INTELIGENTE ---
+// --- INVENTARIOS CON MAPEADOR INTELIGENTE REFORZADO ---
 export async function getMedications() { return (await getDocs(query(collection(adminDb, 'medications'), limit(5000)))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 
 export async function bulkInsertMedications(items: any[], source: 'IMSS-BIENESTAR' | 'EXTERNO') { 
-    const b = writeBatch(adminDb);
-    let proc = 0;
-    
-    const findFld = (row: any, names: string[]) => {
+    const findFld = (row: any, searchNames: string[]) => {
         const keys = Object.keys(row);
-        for (const n of names) {
-            const normalizedN = n.toUpperCase().replace(/\s/g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            const found = keys.find(k => k.toUpperCase().replace(/\s/g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, "") === normalizedN);
-            if (found) return row[found];
-        }
-        return undefined;
+        const normalize = (s: string) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const searchNormalized = searchNames.map(normalize);
+        const foundKey = keys.find(k => searchNormalized.includes(normalize(k)));
+        return foundKey ? row[foundKey] : undefined;
     };
 
     for (let i = 0; i < items.length; i += 400) {
         const batch = writeBatch(adminDb);
         items.slice(i, i + 400).forEach(raw => {
+            // Mapeo dinámico de fecha caducidad
+            const rawFecha = findFld(raw, ['FECHA CADUCIDAD', 'CADUCIDAD', 'VENCIMIENTO', 'FECHA VENCIMIENTO', 'VENCE']);
+            let fechaCaducidad = 'SIN FECHA';
+            if (rawFecha) {
+                if (typeof rawFecha === 'number' && rawFecha > 40000) {
+                    const date = new Date((rawFecha - 25569) * 86400 * 1000);
+                    fechaCaducidad = date.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                } else if (rawFecha instanceof Date) {
+                    fechaCaducidad = rawFecha.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                } else {
+                    fechaCaducidad = String(rawFecha).trim();
+                }
+            }
+
             const mapped: any = {
                 claveCuadroBasico: String(findFld(raw, ['CLAVE', 'CLAVEDECUADROBASICO', 'CODIGO']) || '').trim(),
                 descripcion: String(findFld(raw, ['DENOMINACION', 'DESCRIPCION', 'NOMBRE', 'PRODUCTO']) || '').toUpperCase().trim(),
@@ -489,7 +498,7 @@ export async function bulkInsertMedications(items: any[], source: 'IMSS-BIENESTA
                 rfcProveedor: String(findFld(raw, ['RFCPROVEEDOR', 'RFC']) || '').trim(),
                 almacen: String(findFld(raw, ['ALMACEN']) || '').trim(),
                 fuenteFinanciamiento: String(findFld(raw, ['FUENTEDEFINANCIAMIENTO', 'FUENTE']) || source).toUpperCase().trim(),
-                fechaCaducidad: String(findFld(raw, ['FECHA CADUCIDAD', 'FECHACADUCIDAD', 'FECHADECADUCIDAD', 'CADUCIDAD', 'VENCIMIENTO', 'VENCE', 'FECHA VENCIMIENTO']) || 'SIN FECHA').trim(),
+                fechaCaducidad: fechaCaducidad,
                 ordenSuministro: String(findFld(raw, ['ORDENDESUMINISTRO', 'ORDEN']) || '').trim(),
                 tipoInsumo: String(findFld(raw, ['TIPODEINSUMO', 'TIPO']) || '').trim(),
                 numeroContrato: String(findFld(raw, ['NUMERODECONTRATO', 'CONTRATO']) || '').trim(),
@@ -502,18 +511,18 @@ export async function bulkInsertMedications(items: any[], source: 'IMSS-BIENESTA
             const id = `${mapped.claveCuadroBasico.replace(/\//g, '-')}_${source}_${mapped.lote.replace(/\//g, '-')}`;
             batch.set(doc(adminDb, 'medications', id), { ...mapped, id }, { merge: true }); 
         });
-        await batch.commit(); proc += 400;
+        await batch.commit();
     }
-    return { success: true, processedCount: Math.min(proc, items.length) }; 
+    return { success: true, processedCount: items.length }; 
 }
 export async function deleteAllMedications() { const s = await getDocs(collection(adminDb, 'medications')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 export async function deleteMedicationsBySource(source: 'IMSS-BIENESTAR' | 'EXTERNO') {
     const snap = await getDocs(collection(adminDb, 'medications'));
     const toDel = snap.docs.filter(d => {
         const da = d.data();
-        const identAsImss = da.fuenteEtiqueta === 'IMSS-BIENESTAR' || !da.fuenteEtiqueta;
-        if (source === 'IMSS-BIENESTAR') return identAsImss;
-        return da.fuenteEtiqueta === 'EXTERNO' && Number(da.existencia || 0) <= 0;
+        const isImssMatch = (source === 'IMSS-BIENESTAR' && (da.fuenteEtiqueta === 'IMSS-BIENESTAR' || !da.fuenteEtiqueta));
+        const isExtMatch = (source === 'EXTERNO' && da.fuenteEtiqueta === 'EXTERNO' && Number(da.existencia || 0) <= 0);
+        return isImssMatch || isExtMatch;
     });
     for (let i = 0; i < toDel.length; i += 450) { const b = writeBatch(adminDb); toDel.slice(i, i + 450).forEach(d => b.delete(d.ref)); await b.commit(); }
     return { success: true, deletedCount: toDel.length };
@@ -529,34 +538,36 @@ export async function getPharmacyVouchers() { return (await getDocs(query(collec
 // --- ALMACÉN ---
 export async function getSupplies() { return (await getDocs(query(collection(adminDb, 'supplies'), limit(5000)))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function bulkInsertSupplies(items: any[]) { 
-    let proc = 0;
-    const findFld = (row: any, names: string[]) => {
+    const findFld = (row: any, searchNames: string[]) => {
         const keys = Object.keys(row);
-        for (const n of names) {
-            const normalizedN = n.toUpperCase().replace(/\s/g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            const found = keys.find(k => k.toUpperCase().replace(/\s/g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, "") === normalizedN);
-            if (found) return row[found];
-        }
-        return undefined;
+        const normalize = (s: string) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const searchNormalized = searchNames.map(normalize);
+        const foundKey = keys.find(k => searchNormalized.includes(normalize(k)));
+        return foundKey ? row[foundKey] : undefined;
     };
 
     for (let i = 0; i < items.length; i += 400) {
         const b = writeBatch(adminDb);
         items.slice(i, i + 400).forEach(raw => {
+            const rawFecha = findFld(raw, ['FECHA CADUCIDAD', 'CADUCIDAD', 'VENCIMIENTO', 'VENCE']);
+            let fCad = 'SIN FECHA';
+            if (rawFecha instanceof Date) fCad = rawFecha.toLocaleDateString('es-MX');
+            else fCad = String(rawFecha || 'SIN FECHA').trim();
+
             const mapped: any = {
                 claveCuadroBasico: String(findFld(raw, ['CLAVE', 'CODIGO']) || '').trim(),
                 descripcion: String(findFld(raw, ['DENOMINACION', 'DESCRIPCION']) || '').toUpperCase().trim(),
-                existencia: Number(findFld(raw, ['EXISTENCIA', 'CANTIDAD']) || 0),
+                existencia: Number(findFld(raw, ['EXISTENCIA', 'CANTIDAD', 'STOCK']) || 0),
                 lote: String(findFld(raw, ['LOTE']) || 'S/L').toUpperCase().trim(),
-                fechaCaducidad: String(findFld(raw, ['FECHA CADUCIDAD', 'CADUCIDAD', 'VENCIMIENTO']) || 'SIN FECHA').trim(),
+                fechaCaducidad: fCad,
                 updatedAt: new Date().toISOString()
             };
             const id = String(mapped.claveCuadroBasico || uuidv4()).replace(/\//g, '-');
             b.set(doc(adminDb, 'supplies', id), { ...mapped, id }, { merge: true });
         });
-        await b.commit(); proc += 400;
+        await b.commit();
     }
-    return { success: true, processedCount: Math.min(proc, items.length) }; 
+    return { success: true, processedCount: items.length }; 
 }
 export async function deleteAllSupplies() { const s = await getDocs(collection(adminDb, 'supplies')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 
@@ -619,6 +630,8 @@ export async function bulkInsertCie10Catalog(it: any[]) { const b = writeBatch(a
 export async function deleteAllCie10Glossary() { const s = await getDocs(collection(adminDb, 'cie10Glossary')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 export async function deleteAllCie10Catalog() { const s = await getDocs(collection(adminDb, 'cie10Catalog')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 export async function searchCie10(t: string) { const q = query(collection(adminDb, 'cie10Catalog'), where('nombre', '>=', t.toUpperCase()), limit(50)); const s = await getDocs(q); return s.docs.map(d => ({ ...serializeData(d.data()), id: d.id })); }
+
+// --- BI ---
 export async function getBIData() { const [apps, lab, xr, us, vac, clinics, colonias] = await Promise.all([getDocs(query(collection(adminDb, 'appointments'), limit(5000))), getDocs(query(collection(adminDb, 'labAppointments'), limit(2000))), getDocs(query(collection(adminDb, 'xrayAppointments'), limit(2000))), getDocs(query(collection(adminDb, 'ultrasoundAppointments'), limit(2000))), getDocs(query(collection(adminDb, 'vaccineAppointments'), limit(2000))), getClinicsData(), getColoniasData()]); return { appointments: apps.docs.map(d => serializeData(d.data())), labAppointments: lab.docs.map(d => serializeData(d.data())), xRayAppointments: xr.docs.map(d => serializeData(d.data())), ultrasoundAppointments: us.docs.map(d => serializeData(d.data())), vaccineAppointments: vac.docs.map(d => serializeData(d.data())), clinics, colonias }; }
 export async function getAttendedPatientsForClinic(cid: string) {
     const clinicDoc = await getDoc(doc(adminDb, 'clinics', cid)); const cName = clinicDoc.exists() ? (clinicDoc.data() as Clinic).name.toUpperCase().trim() : '';
