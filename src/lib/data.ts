@@ -464,11 +464,11 @@ export async function bulkInsertMedications(items: any[], source: 'IMSS-BIENESTA
     const b = writeBatch(adminDb);
     let proc = 0;
     
-    // Función auxiliar para buscar campos independientemente del nombre exacto
     const findFld = (row: any, names: string[]) => {
         const keys = Object.keys(row);
         for (const n of names) {
-            const found = keys.find(k => k.toUpperCase().replace(/\s/g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, "") === n.toUpperCase().replace(/\s/g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+            const normalizedN = n.toUpperCase().replace(/\s/g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const found = keys.find(k => k.toUpperCase().replace(/\s/g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, "") === normalizedN);
             if (found) return row[found];
         }
         return undefined;
@@ -489,7 +489,7 @@ export async function bulkInsertMedications(items: any[], source: 'IMSS-BIENESTA
                 rfcProveedor: String(findFld(raw, ['RFCPROVEEDOR', 'RFC']) || '').trim(),
                 almacen: String(findFld(raw, ['ALMACEN']) || '').trim(),
                 fuenteFinanciamiento: String(findFld(raw, ['FUENTEDEFINANCIAMIENTO', 'FUENTE']) || source).toUpperCase().trim(),
-                fechaCaducidad: String(findFld(raw, ['FECHADECADUCIDAD', 'CADUCIDAD', 'VENCIMIENTO']) || 'SIN FECHA').trim(),
+                fechaCaducidad: String(findFld(raw, ['FECHA CADUCIDAD', 'FECHACADUCIDAD', 'FECHADECADUCIDAD', 'CADUCIDAD', 'VENCIMIENTO', 'VENCE', 'FECHA VENCIMIENTO']) || 'SIN FECHA').trim(),
                 ordenSuministro: String(findFld(raw, ['ORDENDESUMINISTRO', 'ORDEN']) || '').trim(),
                 tipoInsumo: String(findFld(raw, ['TIPODEINSUMO', 'TIPO']) || '').trim(),
                 numeroContrato: String(findFld(raw, ['NUMERODECONTRATO', 'CONTRATO']) || '').trim(),
@@ -497,7 +497,7 @@ export async function bulkInsertMedications(items: any[], source: 'IMSS-BIENESTA
                 updatedAt: new Date().toISOString()
             };
             
-            if (!mapped.claveCuadroBasico || !mapped.descripcion) return; // Saltar filas vacías
+            if (!mapped.claveCuadroBasico || !mapped.descripcion) return; 
 
             const id = `${mapped.claveCuadroBasico.replace(/\//g, '-')}_${source}_${mapped.lote.replace(/\//g, '-')}`;
             batch.set(doc(adminDb, 'medications', id), { ...mapped, id }, { merge: true }); 
@@ -530,15 +530,25 @@ export async function getPharmacyVouchers() { return (await getDocs(query(collec
 export async function getSupplies() { return (await getDocs(query(collection(adminDb, 'supplies'), limit(5000)))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function bulkInsertSupplies(items: any[]) { 
     let proc = 0;
+    const findFld = (row: any, names: string[]) => {
+        const keys = Object.keys(row);
+        for (const n of names) {
+            const normalizedN = n.toUpperCase().replace(/\s/g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const found = keys.find(k => k.toUpperCase().replace(/\s/g, '').normalize("NFD").replace(/[\u0300-\u036f]/g, "") === normalizedN);
+            if (found) return row[found];
+        }
+        return undefined;
+    };
+
     for (let i = 0; i < items.length; i += 400) {
         const b = writeBatch(adminDb);
         items.slice(i, i + 400).forEach(raw => {
             const mapped: any = {
-                claveCuadroBasico: String(raw.CLAVE || raw.clave || '').trim(),
-                descripcion: String(raw.DENOMINACION || raw.DESCRIPCION || raw.descripcion || '').toUpperCase().trim(),
-                existencia: Number(raw.EXISTENCIA || raw.existencia || 0),
-                lote: String(raw.LOTE || raw.lote || 'S/L').toUpperCase().trim(),
-                fechaCaducidad: String(raw['FECHA DE CADUCIDAD'] || 'SIN FECHA').trim(),
+                claveCuadroBasico: String(findFld(raw, ['CLAVE', 'CODIGO']) || '').trim(),
+                descripcion: String(findFld(raw, ['DENOMINACION', 'DESCRIPCION']) || '').toUpperCase().trim(),
+                existencia: Number(findFld(raw, ['EXISTENCIA', 'CANTIDAD']) || 0),
+                lote: String(findFld(raw, ['LOTE']) || 'S/L').toUpperCase().trim(),
+                fechaCaducidad: String(findFld(raw, ['FECHA CADUCIDAD', 'CADUCIDAD', 'VENCIMIENTO']) || 'SIN FECHA').trim(),
                 updatedAt: new Date().toISOString()
             };
             const id = String(mapped.claveCuadroBasico || uuidv4()).replace(/\//g, '-');
