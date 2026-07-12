@@ -35,7 +35,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   CalendarClock,
-  X
+  X,
+  Filter
 } from 'lucide-react';
 import { getMedications, bulkInsertMedications, deleteMedicationsBySource } from '@/lib/actions';
 import type { Medication } from '@/lib/definitions';
@@ -57,6 +58,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PrescriptionDispenser } from './prescription-dispenser';
 import { VoucherForm } from './voucher-form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ScrollArea } from '../ui/scroll-area';
 
 type ExpirationStatus = 'red' | 'yellow' | 'green' | 'unknown';
 
@@ -159,10 +161,8 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
       startDeleteTransition(async () => {
           const res = await deleteMedicationsBySource(source);
           if (res.success) {
-              toast({ title: `Proceso completado`, description: `Se eliminaron ${res.deletedCount} registros de la base de datos.` });
+              toast({ title: `Proceso completado`, description: `Se eliminaron ${res.deletedCount} registros.` });
               await loadMedications();
-          } else {
-              toast({ title: 'Error al eliminar', variant: 'destructive' });
           }
       });
   };
@@ -222,7 +222,7 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
             <h1 className="text-3xl font-bold font-headline flex items-center gap-2 text-primary">
                 <Pill className="h-8 w-8" /> Gestión de Farmacia
             </h1>
-            <p className="text-muted-foreground font-medium">Control unificado de fuentes: IMSS-BIENESTAR y EXTERNO.</p>
+            <p className="text-muted-foreground font-medium">Control unificado del inventario hospitalario.</p>
         </div>
         <div className="flex items-center gap-2">
             <Button variant="outline" onClick={loadMedications} disabled={isLoading}>
@@ -244,78 +244,48 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
         <TabsContent value="inventario" className="space-y-6 mt-6 animate-in fade-in duration-300">
             <div className="grid md:grid-cols-12 gap-6">
                 <Card className="md:col-span-4 shadow-md border-primary/10">
-                    <CardHeader className="pb-3"><CardTitle className="text-lg">Entrada de Medicamentos</CardTitle></CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="p-4 border rounded-xl bg-green-50/50 space-y-3">
+                    <CardHeader className="pb-3"><CardTitle className="text-lg">Carga Masiva</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="p-3 border rounded-lg bg-green-50/30">
                             <Label className="text-[10px] font-black uppercase text-green-700">Fuente: IMSS-BIENESTAR</Label>
-                            <Input type="file" accept=".xlsx" onChange={(e) => handleFileUpload(e, 'IMSS-BIENESTAR')} disabled={isUploading} className="h-10 bg-white" />
+                            <Input type="file" accept=".xlsx" onChange={(e) => handleFileUpload(e, 'IMSS-BIENESTAR')} disabled={isUploading} className="h-9 mt-1" />
                         </div>
-                        <div className="p-4 border rounded-xl bg-blue-50/50 space-y-3">
+                        <div className="p-3 border rounded-lg bg-blue-50/30">
                             <Label className="text-[10px] font-black uppercase text-blue-700">Fuente: EXTERNA</Label>
-                            <Input type="file" accept=".xlsx" onChange={(e) => handleFileUpload(e, 'EXTERNO')} disabled={isUploading} className="h-10 bg-white" />
+                            <Input type="file" accept=".xlsx" onChange={(e) => handleFileUpload(e, 'EXTERNO')} disabled={isUploading} className="h-9 mt-1" />
                         </div>
                         {isUploading && (
-                            <div className="space-y-2 pt-2">
-                                <div className="flex justify-between text-[10px] font-black uppercase text-primary">
-                                    <span>{uploadStatus.message}</span>
-                                    <span>{progress}%</span>
-                                </div>
-                                <Progress value={progress} className="h-2" />
+                            <div className="space-y-1 pt-2">
+                                <Progress value={progress} className="h-1.5" />
+                                <p className="text-[9px] font-bold text-primary uppercase">{uploadStatus.message}</p>
                             </div>
                         )}
-                        <div className="grid grid-cols-2 gap-4">
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="sm" className="w-full text-red-700 hover:bg-red-50 font-black text-[9px] uppercase border" disabled={isDeleting}>
-                                    <Trash2 className="h-3 w-3 mr-1" /> Borrar IMSS
-                                </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>¿Borrar fuente IMSS-BIENESTAR?</AlertDialogTitle>
-                                    <AlertDialogDescription>Esta acción eliminará TODOS los registros marcados como IMSS-BIENESTAR para permitir una carga limpia desde el nuevo archivo.</AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteBySource('IMSS-BIENESTAR')} className="bg-destructive hover:bg-destructive/90">SÍ, BORRAR TODO</AlertDialogAction></AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
-
-                            <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="sm" className="w-full text-red-700 hover:bg-red-50 font-black text-[9px] uppercase border" disabled={isDeleting}>
-                                    <Trash2 className="h-3 w-3 mr-1" /> Borrar Externos (0)
-                                </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>¿Borrar Externos con Existencia 0?</AlertDialogTitle>
-                                    <AlertDialogDescription>Esta acción SOLO eliminará los registros de fuente EXTERNA que tengan existencia en cero. Los que aún tienen stock se mantendrán.</AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteBySource('EXTERNO')} className="bg-destructive hover:bg-destructive/90">SÍ, BORRAR SIN STOCK</AlertDialogAction></AlertDialogFooter>
-                                </AlertDialogContent>
-                            </AlertDialog>
+                        <div className="flex gap-2 pt-2">
+                            <Button variant="outline" size="sm" className="flex-1 text-red-600 font-bold text-[10px] h-8" onClick={() => handleDeleteBySource('IMSS-BIENESTAR')} disabled={isDeleting}>BORRAR IMSS</Button>
+                            <Button variant="outline" size="sm" className="flex-1 text-red-600 font-bold text-[10px] h-8" onClick={() => handleDeleteBySource('EXTERNO')} disabled={isDeleting}>BORRAR EXTERNOS (0)</Button>
                         </div>
                     </CardContent>
                 </Card>
 
                 <Card className="md:col-span-8 shadow-md border-primary/10">
-                    <CardHeader className="pb-3"><CardTitle className="text-lg flex items-center gap-2 uppercase font-black"><CalendarClock className="h-5 w-5 text-primary" /> Semáforo de Almacén</CardTitle></CardHeader>
-                    <CardContent className="space-y-6">
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                            <button onClick={() => setStatusFilter(statusFilter === 'red' ? null : 'red')} className={cn("bg-red-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'red' ? "border-red-500 ring-4 ring-red-200 shadow-md" : "border-red-100 opacity-70")}>
-                                <div className="text-[10px] text-red-600 uppercase font-black mb-1">CRÍTICO (&lt; 6M)</div>
-                                <div className="text-3xl font-black text-red-700">{stats.red}</div>
+                    <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2 uppercase font-black"><CalendarClock className="h-4 w-4 text-primary" /> Alertas de Caducidad</CardTitle></CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            <button onClick={() => setStatusFilter(statusFilter === 'red' ? null : 'red')} className={cn("bg-red-50 border p-3 rounded-xl transition-all", statusFilter === 'red' ? "border-red-500 ring-2 ring-red-200" : "border-red-100 opacity-80")}>
+                                <div className="text-[9px] text-red-600 font-black mb-1 uppercase">Crítico</div>
+                                <div className="text-2xl font-black text-red-700">{stats.red}</div>
                             </button>
-                            <button onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')} className={cn("bg-yellow-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'yellow' ? "border-yellow-500 ring-4 ring-yellow-200 shadow-md" : "border-yellow-100 opacity-70")}>
-                                <div className="text-[10px] text-yellow-600 uppercase font-black mb-1">PRÓXIMO (1 AÑO)</div>
-                                <div className="text-3xl font-black text-yellow-700">{stats.yellow}</div>
+                            <button onClick={() => setStatusFilter(statusFilter === 'yellow' ? null : 'yellow')} className={cn("bg-yellow-50 border p-3 rounded-xl transition-all", statusFilter === 'yellow' ? "border-yellow-500 ring-2 ring-yellow-200" : "border-yellow-100 opacity-80")}>
+                                <div className="text-[9px] text-yellow-600 font-black mb-1 uppercase">Próximo</div>
+                                <div className="text-2xl font-black text-yellow-700">{stats.yellow}</div>
                             </button>
-                            <button onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')} className={cn("bg-green-50 border p-4 rounded-xl text-center transition-all", statusFilter === 'green' ? "border-green-500 ring-4 ring-green-200 shadow-md" : "border-green-100 opacity-70")}>
-                                <div className="text-[10px] text-green-600 uppercase font-black mb-1">ÓPTIMO (&gt; 1 AÑO)</div>
-                                <div className="text-3xl font-black text-green-700">{stats.green}</div>
+                            <button onClick={() => setStatusFilter(statusFilter === 'green' ? null : 'green')} className={cn("bg-green-50 border p-3 rounded-xl transition-all", statusFilter === 'green' ? "border-green-500 ring-2 ring-green-200" : "border-green-100 opacity-80")}>
+                                <div className="text-[9px] text-green-600 font-black mb-1 uppercase">Óptimo</div>
+                                <div className="text-2xl font-black text-green-700">{stats.green}</div>
                             </button>
-                            <button onClick={() => setStatusFilter(null)} className={cn("bg-muted/30 border p-4 rounded-xl text-center transition-all", !statusFilter ? "border-primary ring-4 ring-primary/10 shadow-md" : "border-transparent opacity-70")}>
-                                <div className="text-[10px] text-muted-foreground uppercase font-black mb-1">TOTAL REGISTROS</div>
-                                <div className="text-3xl font-black">{stats.total}</div>
+                            <button onClick={() => setStatusFilter(null)} className={cn("bg-muted/30 border p-3 rounded-xl transition-all", !statusFilter ? "border-primary ring-2 ring-primary/10" : "border-transparent opacity-80")}>
+                                <div className="text-[9px] text-muted-foreground font-black mb-1 uppercase">Total</div>
+                                <div className="text-2xl font-black">{stats.total}</div>
                             </button>
                         </div>
                     </CardContent>
@@ -324,94 +294,60 @@ export function PharmacyDashboard({ onLogout }: { onLogout?: () => void }) {
 
             <Card className="shadow-lg border-primary/10">
                 <CardHeader className="pb-3 border-b bg-muted/10">
-                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                    <CardTitle className="uppercase font-black text-sm">Inventario de Medicamentos</CardTitle>
-                    <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
-                        <div className="space-y-1.5 min-w-[180px]">
-                            <Label className="text-[9px] font-black uppercase opacity-60">Filtrar por Fuente</Label>
+                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                        <CardTitle className="uppercase font-black text-sm">Inventario de Medicamentos</CardTitle>
+                        <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
                             <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                                <SelectTrigger className="h-10 bg-background border-primary/20">
-                                    <SelectValue placeholder="Todas las fuentes" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">TODAS LAS FUENTES</SelectItem>
-                                    <SelectItem value="IMSS-BIENESTAR">IMSS-BIENESTAR</SelectItem>
-                                    <SelectItem value="EXTERNO">EXTERNO</SelectItem>
-                                </SelectContent>
+                                <SelectTrigger className="h-10 w-44 bg-background"><SelectValue placeholder="Fuente" /></SelectTrigger>
+                                <SelectContent><SelectItem value="all">TODAS LAS FUENTES</SelectItem><SelectItem value="IMSS-BIENESTAR">IMSS-BIENESTAR</SelectItem><SelectItem value="EXTERNO">EXTERNO</SelectItem></SelectContent>
                             </Select>
-                        </div>
-                        <div className="space-y-1.5 flex-1 min-w-[250px]">
-                            <Label className="text-[9px] font-black uppercase opacity-60">Búsqueda Rápida</Label>
-                            <div className="relative">
+                            <div className="relative flex-1 min-w-[250px]">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <Input placeholder="Clave, Descripción o Lote..." className="pl-9 h-10 border-primary/20 bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                                {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>}
+                                <Input placeholder="Buscar por Clave, Denominación o Lote..." className="pl-9 h-10 border-primary/20 bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                                {searchTerm && <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="h-4 w-4" /></button>}
                             </div>
                         </div>
                     </div>
-                </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                {isLoading ? (
-                    <div className="flex justify-center py-40"><Loader2 className="animate-spin h-10 w-10 text-primary" /></div>
-                ) : (
-                    <div className="overflow-x-auto">
+                    <ScrollArea className="h-[550px]">
                     <Table>
-                        <TableHeader className="bg-muted/50">
-                        <TableRow>
-                            <TableHead className="font-black text-[10px] uppercase cursor-pointer hover:bg-muted" onClick={() => handleSort('claveCuadroBasico')}>
-                                Clave {sortConfig?.key === 'claveCuadroBasico' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
-                            </TableHead>
-                            <TableHead className="font-black text-[10px] uppercase cursor-pointer hover:bg-muted" onClick={() => handleSort('descripcion')}>
-                                Descripción {sortConfig?.key === 'descripcion' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
-                            </TableHead>
-                            <TableHead className="font-black text-[10px] uppercase">Fuente (Excel)</TableHead>
-                            <TableHead className="text-right font-black text-[10px] uppercase cursor-pointer hover:bg-muted" onClick={() => handleSort('existencia')}>
-                                Existencia {sortConfig?.key === 'existencia' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
-                            </TableHead>
-                            <TableHead className="font-black text-[10px] uppercase cursor-pointer hover:bg-muted" onClick={() => handleSort('fechaCaducidad')}>
-                                Caducidad {sortConfig?.key === 'fechaCaducidad' && (sortConfig.direction === 'asc' ? <ArrowUp className="inline h-3 w-3" /> : <ArrowDown className="inline h-3 w-3" />)}
-                            </TableHead>
-                            <TableHead className="font-black text-[10px] uppercase">Lote</TableHead>
-                        </TableRow>
+                        <TableHeader className="bg-muted/50 sticky top-0 z-20">
+                            <TableRow>
+                                <TableHead className="font-black text-[10px] uppercase cursor-pointer" onClick={() => handleSort('claveCuadroBasico')}>Clave</TableHead>
+                                <TableHead className="font-black text-[10px] uppercase cursor-pointer" onClick={() => handleSort('descripcion')}>Denominación / Descripción</TableHead>
+                                <TableHead className="text-right font-black text-[10px] uppercase cursor-pointer" onClick={() => handleSort('existencia')}>Stock</TableHead>
+                                <TableHead className="font-black text-[10px] uppercase cursor-pointer" onClick={() => handleSort('fechaCaducidad')}>Caducidad</TableHead>
+                                <TableHead className="font-black text-[10px] uppercase">Lote</TableHead>
+                                <TableHead className="font-black text-[10px] uppercase">Fuente</TableHead>
+                            </TableRow>
                         </TableHeader>
                         <TableBody>
-                        {filtered.length > 0 ? (
-                            filtered.slice(0, 500).map((item) => {
-                            const status = getExpirationStatus(item.fechaCaducidad);
-                            return (
-                                <TableRow key={item.id} className="hover:bg-muted/50 transition-colors">
-                                <TableCell className="font-mono text-[11px] font-bold text-primary">{item.claveCuadroBasico}</TableCell>
-                                <TableCell className="text-[11px] font-black uppercase leading-tight">{item.descripcion}</TableCell>
-                                <TableCell>
-                                    <Badge variant="outline" className={cn("text-[9px] font-black uppercase", (item as any).fuenteEtiqueta === 'EXTERNO' ? "border-blue-200 text-blue-700 bg-blue-50" : "border-green-200 text-green-700 bg-green-50")}>
-                                        {item.fuenteFinanciamiento || (item as any).fuenteEtiqueta}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <Badge variant={item.existencia > 0 ? 'secondary' : 'destructive'} className="font-black text-sm">{item.existencia}</Badge>
-                                </TableCell>
-                                <TableCell>
-                                    <Badge variant="outline" className={cn(
-                                        "font-black text-[10px] px-3 uppercase border-2",
-                                        status === 'red' && "bg-red-50 text-red-700 border-red-200",
-                                        status === 'yellow' && "bg-yellow-50 text-yellow-700 border-yellow-200",
-                                        status === 'green' && "bg-green-50 text-green-700 border-green-200"
-                                    )}>
-                                    {item.fechaCaducidad || 'SIN FECHA'}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell className="text-[10px] font-mono font-bold text-muted-foreground">{item.lote}</TableCell>
-                                </TableRow>
-                            );
-                            })
-                        ) : (
-                            <TableRow><TableCell colSpan={6} className="text-center py-20 italic font-bold text-muted-foreground uppercase">Sin registros coincidentes.</TableCell></TableRow>
-                        )}
+                            {filtered.length > 0 ? filtered.map((item) => {
+                                const status = getExpirationStatus(item.fechaCaducidad);
+                                return (
+                                    <TableRow key={item.id} className="hover:bg-muted/50">
+                                        <TableCell className="font-mono text-[10px] font-bold text-primary">{item.claveCuadroBasico}</TableCell>
+                                        <TableCell className="text-[11px] font-black uppercase leading-tight max-w-md">{item.descripcion}</TableCell>
+                                        <TableCell className="text-right"><Badge variant={item.existencia > 0 ? 'secondary' : 'destructive'} className="font-black text-sm">{item.existencia}</Badge></TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className={cn(
+                                                "font-black text-[9px] px-2 border-2",
+                                                status === 'red' && "bg-red-50 text-red-700 border-red-200",
+                                                status === 'yellow' && "bg-yellow-50 text-yellow-700 border-yellow-200",
+                                                status === 'green' && "bg-green-50 text-green-700 border-green-200"
+                                            )}>{item.fechaCaducidad}</Badge>
+                                        </TableCell>
+                                        <TableCell className="text-[10px] font-mono font-bold text-muted-foreground">{item.lote}</TableCell>
+                                        <TableCell><Badge variant="outline" className="text-[9px] font-bold bg-background">{item.fuenteFinanciamiento || (item as any).fuenteEtiqueta}</Badge></TableCell>
+                                    </TableRow>
+                                );
+                            }) : (
+                                <TableRow><TableCell colSpan={6} className="text-center py-40 font-bold text-muted-foreground uppercase opacity-40">Sin registros para mostrar.</TableCell></TableRow>
+                            )}
                         </TableBody>
                     </Table>
-                    </div>
-                )}
+                    </ScrollArea>
                 </CardContent>
             </Card>
         </TabsContent>
