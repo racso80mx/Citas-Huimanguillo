@@ -95,7 +95,6 @@ export default function PageContent({
       const startDate = startOfToday();
       const endDate = addDays(startDate, 180); 
       
-      // Robustez en el filtrado: Citas deben coincidir por ID o por nombre (insensible a mayúsculas)
       const clinicAppointments = allAppointments.filter(app => 
           app.clinicId === clinic.id || 
           (app.clinicName && app.clinicName.toUpperCase().trim() === clinic.name.toUpperCase().trim())
@@ -143,7 +142,8 @@ export default function PageContent({
             if (clinic.bookingMode === BookingMode.Time && clinic.consultationDuration) {
                 const allSlots = generateDynamicTimeSlots(clinic.startTime, currentEndTime, clinic.consultationDuration);
                 const filteredSlots = allSlots.filter(s => s !== clinic.breakTime);
-                availableSlotsForClinic = filteredSlots.filter(s => !dayBooked.some(a => a.time === s)).length;
+                // CORRECCIÓN: Restamos por capacidad real, no por horarios únicos para evitar sobrecupo con duplicados
+                availableSlotsForClinic = Math.max(0, filteredSlots.length - dayBooked.length);
             } else {
                 const totalSlots = (clinic.dailySlots || 15) + (clinic.waitlistSlots || 0);
                 availableSlotsForClinic = Math.max(0, totalSlots - dayBooked.length);
@@ -163,7 +163,6 @@ export default function PageContent({
   const fetchAllAvailability = React.useCallback(async (targetClinicId: string) => {
       setIsLoadingAvailability(true);
       
-      // Consultamos al servidor un set masivo de datos para no tener puntos ciegos
       const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
         getAppointments(), getHolidays(), getSpecialActionDays()
       ]);
@@ -177,7 +176,6 @@ export default function PageContent({
           setAvailabilityCache(prev => ({ ...prev, [targetClinicId]: targetAvail }));
           setIsLoadingAvailability(false); 
           
-          // Calcular el resto en background
           setTimeout(() => {
               const otherClinics = clinics.filter(c => c.id !== targetClinicId);
               const newCache: Record<string, DailyAvailability[]> = { [targetClinicId]: targetAvail };

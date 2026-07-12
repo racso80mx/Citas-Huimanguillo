@@ -217,7 +217,13 @@ function AppointmentsViewer() {
                 results = results.filter(a => a.clinicId && data.clinics.find((c: any) => c.id === a.clinicId)?.serviceTypeId === selectedServiceType);
             }
             if (selectedClinics.length > 0) {
-                results = results.filter(a => a.clinicId && selectedClinics.includes(a.clinicId));
+                // CORRECCIÓN: Filtramos por ID o por Nombre de consultorio para unificar con el módulo de reportes
+                results = results.filter(a => {
+                    const matchById = a.clinicId && selectedClinics.includes(a.clinicId);
+                    const clinicNames = selectedClinics.map(id => data.clinics.find((c:any) => c.id === id)?.name?.toUpperCase().trim()).filter(Boolean);
+                    const matchByName = a.clinicName && clinicNames.includes(a.clinicName.toUpperCase().trim());
+                    return matchById || matchByName;
+                });
             }
         }
 
@@ -295,7 +301,7 @@ function AppointmentsViewer() {
                             <Popover>
                                 <PopoverTrigger asChild>
                                     <Button variant="outline" className="h-9 border-dashed bg-background">
-                                        <Plus className="mr-2 h-4 w-4" />
+                                        <Plus className="mr-2 h-4 w-4 text-primary" />
                                         Filtrar Consultorio
                                         {selectedClinics.length > 0 && <Badge className="ml-2 px-1">{selectedClinics.length}</Badge>}
                                     </Button>
