@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -183,7 +182,6 @@ export async function getPatientByCURP(curp: string) {
     return s.empty ? { success: false } : { success: true, data: serializeData({ ...s.docs[0].data(), id: s.docs[0].id }) };
 }
 export async function savePatient(p: Omit<Patient, 'id'>, id: string) {
-    // CRÍTICO: Forzamos el ID a ser el CURP para evitar duplicados entre Archivo y Citas
     const finalId = p.curp.toUpperCase().trim();
     const nc = generateNombreCompleto(p);
     await setDoc(doc(adminDb, 'patients', finalId), { ...p, id: finalId, nombreCompleto: nc }, { merge: true });
@@ -260,7 +258,6 @@ export async function getAppointmentsForClinic(cid: string) {
 export async function saveNewAppointment(appointment: any, patient: any, isDoubleSlot: boolean, coloniaName?: string) {
     const batch = writeBatch(adminDb);
     const pid = patient.curp.toUpperCase().trim();
-    // Siempre usar el CURP como ID para evitar duplicados
     batch.set(doc(adminDb, 'patients', pid), { ...patient, id: pid, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
     const clinicSnap = await getDoc(doc(adminDb, 'clinics', appointment.clinicId));
     const cName = clinicSnap.exists() ? (clinicSnap.data() as Clinic).name : '';

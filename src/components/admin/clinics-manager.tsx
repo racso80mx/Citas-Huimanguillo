@@ -36,7 +36,10 @@ import {
     Trash2,
     AlertTriangle,
     Settings2,
-    RefreshCw
+    RefreshCw,
+    Lock,
+    Eye,
+    EyeOff
 } from 'lucide-react';
 import type { Clinic, Specialty, ServiceType } from '@/lib/definitions';
 import { BookingMode } from '@/lib/definitions';
@@ -94,6 +97,7 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
     const [editedClinic, setEditedClinic] = useState<Clinic>(clinic);
     const [newScheduleDate, setNewScheduleDate] = useState<Date | undefined>();
     const [newScheduleEndTime, setNewScheduleEndTime] = useState<string>("13:00");
+    const [showPassword, setShowPassword] = useState(false);
     const { toast } = useToast();
 
     const [isConfirmingBlock, setIsConfirmingBlock] = useState(false);
@@ -106,7 +110,8 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
             unavailableDates: clinic.unavailableDates || [], 
             daysOfAction: clinic.daysOfAction || [],
             customSchedules: clinic.customSchedules || [],
-            waitlistSlots: clinic.waitlistSlots || 0
+            waitlistSlots: clinic.waitlistSlots || 0,
+            password: clinic.password || '123'
         });
     }, [clinic]);
 
@@ -129,7 +134,6 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
 
         const newDateStrings = Array.from(new Set(dates.map(d => format(d, 'yyyy-MM-dd'))));
 
-        // Si se agregó una fecha nueva, validar conflictos de citas
         if (newDateStrings.length > prevDates.length) {
             const addedDateStr = newDateStrings.find(d => !prevDates.includes(d));
             if (addedDateStr) {
@@ -224,13 +228,34 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
             <ScrollArea className="flex-1">
                  <div className="p-8 space-y-12">
                     <div className="space-y-6">
-                        <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2"><Fingerprint className="h-5 w-5" /> 1. Datos Generales</h4>
+                        <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2"><Fingerprint className="h-5 w-5" /> 1. Datos Generales y Seguridad</h4>
                         <div className='grid sm:grid-cols-3 gap-8'>
                             <div className='space-y-2'><Label className="font-black text-[10px] uppercase opacity-60 tracking-tighter">Nombre de la Unidad</Label><Input value={editedClinic.name} onChange={(e) => handleFieldChange('name', e.target.value.toUpperCase())} className="h-12 font-bold" /></div>
                             <div className='space-y-2'><Label className="font-black text-[10px] uppercase opacity-60 tracking-tighter">Médico Responsable</Label><Input value={editedClinic.doctorName} onChange={(e) => handleFieldChange('doctorName', e.target.value.toUpperCase())} className="h-12 font-bold" /></div>
-                            <div className='space-y-2'><Label className="font-black text-[10px] uppercase opacity-60 tracking-tighter">Cédula Profesional</Label><Input value={editedClinic.professionalLicense || ''} onChange={(e) => handleFieldChange('professionalLicense', e.target.value.toUpperCase())} className="h-12 font-mono" /></div>
+                            <div className='space-y-2'>
+                                <Label className="font-black text-[10px] uppercase text-primary flex items-center gap-1"><Lock className="h-3 w-3" /> Contraseña de Reportes</Label>
+                                <div className="relative">
+                                    <Input 
+                                        type={showPassword ? 'text' : 'password'}
+                                        value={editedClinic.password || ''} 
+                                        onChange={(e) => handleFieldChange('password', e.target.value)} 
+                                        className="h-12 font-bold bg-primary/5 border-primary/20 pr-10" 
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="absolute right-0 top-0 h-full px-3"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                    >
+                                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                    </Button>
+                                </div>
+                                <p className="text-[9px] text-muted-foreground italic">Esta clave permite al médico entrar a su panel de reportes.</p>
+                            </div>
                         </div>
-                        <div className='grid sm:grid-cols-2 gap-8'>
+                        <div className='grid sm:grid-cols-3 gap-8'>
+                            <div className='space-y-2'><Label className="font-black text-[10px] uppercase opacity-60 tracking-tighter">Cédula Profesional</Label><Input value={editedClinic.professionalLicense || ''} onChange={(e) => handleFieldChange('professionalLicense', e.target.value.toUpperCase())} className="h-12 font-mono" /></div>
                             <div className='space-y-2'><Label className="font-black text-[10px] uppercase opacity-60 tracking-tighter">Categoría de Atención</Label><Select value={editedClinic.serviceTypeId} onValueChange={(v) => handleFieldChange('serviceTypeId', v)}><SelectTrigger className="h-12 font-bold"><SelectValue /></SelectTrigger><SelectContent>{serviceTypes.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select></div>
                             <div className='space-y-2'><Label className="font-black text-[10px] uppercase opacity-60 tracking-tighter">Especialidad</Label><Select value={editedClinic.specialtyId || 'none'} onValueChange={(v) => handleFieldChange('specialtyId', v === 'none' ? undefined : v)}><SelectTrigger className="h-12 font-bold"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">General / No Especializado</SelectItem>{specialties.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
                         </div>
