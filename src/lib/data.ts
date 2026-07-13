@@ -72,18 +72,6 @@ export function serializeData(data: any): any {
   return data;
 }
 
-export function safeGetDateString(val: any): string {
-    if (val === null || val === undefined) return '';
-    if (typeof val === 'string') return val;
-    if (val && typeof val.toDate === 'function') {
-        try { return val.toDate().toISOString(); } catch (e) { return ''; }
-    }
-    if (val && typeof val === 'object' && val.seconds !== undefined) {
-        try { return new Date(val.seconds * 1000).toISOString(); } catch (e) { return ''; }
-    }
-    return String(val);
-}
-
 function generateNombreCompleto(p: any) {
     const n = (p.name || '').trim();
     const ap = (p.paternalLastName || '').trim();
@@ -164,7 +152,7 @@ export async function verifyClinicPassword(clinicId: string, password: string) {
     return { success: s.exists() && (s.data()?.password === password || password === 'citas2026') };
 }
 
-// --- PACIENTES ---
+// --- PACIENTES (CENTRALIZADO EN ID = CURP PARA EVITAR DUPLICADOS) ---
 export async function getPatientCounts(): Promise<ArchiveCounts> {
     const coll = collection(adminDb, 'patients');
     const totalSnap = await getCountFromServer(coll);
@@ -195,7 +183,8 @@ export async function getPatientByCURP(curp: string) {
     return s.empty ? { success: false } : { success: true, data: serializeData({ ...s.docs[0].data(), id: s.docs[0].id }) };
 }
 export async function savePatient(p: Omit<Patient, 'id'>, id: string) {
-    const finalId = id || p.curp.toUpperCase().trim();
+    // CRÍTICO: Forzamos el ID a ser el CURP para evitar duplicados entre Archivo y Citas
+    const finalId = p.curp.toUpperCase().trim();
     const nc = generateNombreCompleto(p);
     await setDoc(doc(adminDb, 'patients', finalId), { ...p, id: finalId, nombreCompleto: nc }, { merge: true });
     return { success: true };
@@ -203,6 +192,7 @@ export async function savePatient(p: Omit<Patient, 'id'>, id: string) {
 export async function updatePatient(id: string, p: Partial<Patient>) {
     const docRef = doc(adminDb, 'patients', id);
     const current = await getDoc(docRef);
+    if (!current.exists()) return { success: false, message: 'Paciente no encontrado.' };
     const data = { ...current.data(), ...p };
     await updateDoc(docRef, { ...p, nombreCompleto: generateNombreCompleto(data) });
     return { success: true };
@@ -270,6 +260,7 @@ export async function getAppointmentsForClinic(cid: string) {
 export async function saveNewAppointment(appointment: any, patient: any, isDoubleSlot: boolean, coloniaName?: string) {
     const batch = writeBatch(adminDb);
     const pid = patient.curp.toUpperCase().trim();
+    // Siempre usar el CURP como ID para evitar duplicados
     batch.set(doc(adminDb, 'patients', pid), { ...patient, id: pid, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
     const clinicSnap = await getDoc(doc(adminDb, 'clinics', appointment.clinicId));
     const cName = clinicSnap.exists() ? (clinicSnap.data() as Clinic).name : '';
@@ -472,8 +463,7 @@ export async function bulkInsertMedications(items: any[], source: 'IMSS-BIENESTA
     for (let i = 0; i < items.length; i += 400) {
         const batch = writeBatch(adminDb);
         items.slice(i, i + 400).forEach(raw => {
-            // Mapeo dinámico de fecha caducidad
-            const rawFecha = findFld(raw, ['FECHA CADUCIDAD', 'CADUCIDAD', 'VENCIMIENTO', 'FECHA VENCIMIENTO', 'VENCE']);
+            const rawFecha = findFld(raw, ['FECHA CADUCIDAD', 'CADUCIDAD', 'VENCIMIENTO', 'FECHA VENCIMIENTO', 'VENCE', 'FECHA_CADUCIDAD']);
             let fechaCaducidad = 'SIN FECHA';
             if (rawFecha) {
                 if (typeof rawFecha === 'number' && rawFecha > 40000) {

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -223,12 +224,16 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const handleSavePatient = (patientData: Omit<Patient, 'id'>, id?: string) => {
     if (isReadOnly) return;
     startSubmitTransition(async () => {
-      const result = id ? await updatePatient(id, patientData) : await savePatient(patientData, uuidv4());
+      // CRÍTICO: Usar siempre CURP como ID para evitar duplicidad
+      const finalId = patientData.curp.toUpperCase().trim();
+      const result = id ? await updatePatient(id, patientData) : await savePatient(patientData, finalId);
        if(result.success) {
         toast({ title: "Paciente Guardado" });
         setIsEditOpen(false);
         setEditingPatient(null);
         loadData(true);
+      } else {
+          toast({ title: 'Error al guardar', description: result.message, variant: 'destructive' });
       }
     });
   }
