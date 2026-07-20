@@ -151,7 +151,7 @@ export async function verifyClinicPassword(clinicId: string, password: string) {
     return { success: s.exists() && (s.data()?.password === password || password === 'citas2026') };
 }
 
-// --- PACIENTES (CENTRALIZADO EN ID = CURP PARA EVITAR DUPLICADOS) ---
+// --- PACIENTES ---
 export async function getPatientCounts(): Promise<ArchiveCounts> {
     const coll = collection(adminDb, 'patients');
     const totalSnap = await getCountFromServer(coll);
@@ -177,9 +177,9 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     return serializeData(res);
 }
 export async function getPatientByCURP(curp: string) {
-    const q = query(collection(adminDb, 'patients'), where('curp', '==', curp.toUpperCase().trim()), limit(1));
-    const s = await getDocs(q);
-    return s.empty ? { success: false } : { success: true, data: serializeData({ ...s.docs[0].data(), id: s.docs[0].id }) };
+    const docRef = doc(adminDb, 'patients', curp.toUpperCase().trim());
+    const s = await getDoc(docRef);
+    return s.exists() ? { success: true, data: serializeData({ ...s.data(), id: s.id }) } : { success: false };
 }
 export async function savePatient(p: Omit<Patient, 'id'>, id: string) {
     const finalId = p.curp.toUpperCase().trim();
@@ -244,7 +244,7 @@ export async function rebuildNombreCompletoAction() {
 
 // --- CITAS ---
 export async function getAppointmentsData() {
-    const snap = await getDocs(query(collection(adminDb, 'appointments'), orderBy('date', 'desc'), limit(5000)));
+    const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(5000)));
     return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
 }
 export async function getAppointmentsForClinic(cid: string) {
@@ -290,10 +290,10 @@ export async function saveNewVaccineAppointment(a: any, p: any) {
     const id = uuidv4(); b.set(doc(adminDb, 'vaccineAppointments', id), { ...a, patientId: pid, createdAt: new Date().toISOString() });
     await b.commit(); return { success: true, data: { appointment: { ...a, id, patient: p } } };
 }
-export async function getLabAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'labAppointments'), orderBy('date', 'desc'), limit(1500))); return hydrateAppointments(s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }))); }
-export async function getXRayAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'xrayAppointments'), orderBy('date', 'desc'), limit(1500))); return hydrateAppointments(s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }))); }
-export async function getUltrasoundAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), orderBy('date', 'desc'), limit(1500))); return hydrateAppointments(s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }))); }
-export async function getVaccineAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'vaccineAppointments'), orderBy('date', 'desc'), limit(1500))); return hydrateAppointments(s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }))); }
+export async function getLabAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'labAppointments'), limit(2000))); return hydrateAppointments(s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }))); }
+export async function getXRayAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'xrayAppointments'), limit(2000))); return hydrateAppointments(s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }))); }
+export async function getUltrasoundAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), limit(2000))); return hydrateAppointments(s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }))); }
+export async function getVaccineAppointmentsData() { const s = await getDocs(query(collection(adminDb, 'vaccineAppointments'), limit(2000))); return hydrateAppointments(s.docs.map(d => ({ ...serializeData(d.data()), id: d.id }))); }
 export async function updateAppointmentStatus(id: string, status: string, t: string) { const c = { medical: 'appointments', lab: 'labAppointments', xray: 'xrayAppointments', ultrasound: 'ultrasoundAppointments', vaccine: 'vaccineAppointments' }[t] || 'appointments'; await updateDoc(doc(adminDb, c, id), { status }); return { success: true }; }
 export async function deleteAppointment(id: string) { await deleteDoc(doc(adminDb, 'appointments', id)); return { success: true }; }
 export async function deleteLabAppointment(id: string) { await deleteDoc(doc(adminDb, 'labAppointments', id)); return { success: true }; }
@@ -308,24 +308,47 @@ export async function cloneAppointment(id: string, date: string, t: string, time
     await setDoc(doc(adminDb, c, newId), { ...data, id: newId, date, time: time || data?.time, appointmentNumber: folio, status: 'Agendada', createdAt: new Date().toISOString() });
     return { success: true, message: `Clonada folio ${folio}` };
 }
+
+/**
+ * FIX: Se ha modificado para filtrar en memoria y evitar el error de índices compuestos en Firestore.
+ */
 export async function getAvailableSlotsForDate(clinicId: string, dateIso: string) {
     const clinicDoc = await getDoc(doc(adminDb, 'clinics', clinicId));
     if (!clinicDoc.exists()) return {};
     const clinic = clinicDoc.data() as Clinic;
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId), where('date', '>=', startOfDay(parseISO(dateIso)).toISOString()), where('date', '<=', endOfDay(parseISO(dateIso)).toISOString()));
-    const snap = await getDocs(q); const takenTimes = snap.docs.map(d => d.data().time);
+    const start = startOfDay(parseISO(dateIso)).toISOString();
+    const end = endOfDay(parseISO(dateIso)).toISOString();
+    
+    // Consulta simplificada para evitar error de índice compuesto
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId));
+    const snap = await getDocs(q);
+    const takenTimes = snap.docs
+        .map(d => d.data())
+        .filter(a => a.date >= start && a.date <= end)
+        .map(a => a.time);
+
     if (clinic.bookingMode === BookingMode.Token) {
         const total = (clinic.dailySlots || 15) + (clinic.waitlistSlots || 0);
         return { tokens: Array.from({ length: total }, (_, i) => i + 1).filter(t => !takenTimes.includes(`Ficha ${t}`)) };
     } else {
-        const slots: string[] = []; const start = clinic.startTime || '08:00'; const end = clinic.endTime || '13:00'; const dur = clinic.consultationDuration || 30;
-        try { let curr = new Date(`1970-01-01T${start}:00`); const stop = new Date(`1970-01-01T${end}:00`); while (curr < stop) { const t = curr.toTimeString().substring(0, 5); if (t !== clinic.breakTime) slots.push(t); curr = new Date(curr.getTime() + dur * 60000); } } catch (e) {}
+        const slots: string[] = []; const startH = clinic.startTime || '08:00'; const endH = clinic.endTime || '13:00'; const dur = clinic.consultationDuration || 30;
+        try { let curr = new Date(`1970-01-01T${startH}:00`); const stop = new Date(`1970-01-01T${endH}:00`); while (curr < stop) { const t = curr.toTimeString().substring(0, 5); if (t !== clinic.breakTime) slots.push(t); curr = new Date(curr.getTime() + dur * 60000); } } catch (e) {}
         return { timeSlots: slots.filter(s => !takenTimes.includes(s)) };
     }
 }
+
+/**
+ * FIX: Filtrado en memoria para evitar error de índice compuesto.
+ */
 export async function getAppointmentCountOnDate(cid: string, d: string) {
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), where('date', '>=', startOfDay(parseISO(d)).toISOString()), where('date', '<=', endOfDay(parseISO(d)).toISOString()));
-    return (await getCountFromServer(q)).data().count;
+    const start = startOfDay(parseISO(d)).toISOString();
+    const end = endOfDay(parseISO(d)).toISOString();
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid));
+    const snap = await getDocs(q);
+    return snap.docs.filter(doc => {
+        const data = doc.data();
+        return data.date >= start && data.date <= end;
+    }).length;
 }
 
 // --- CLÍNICAS Y MÉDICOS ---
