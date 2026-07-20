@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -53,7 +54,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { startOfDay, endOfDay, parseISO } from 'date-fns';
 
 /**
- * MOTOR DE SERIALIZACIÓN Y NORMALIZACIÓN
+ * MOTOR DE SERIALIZACIÓN Y NORMALIZACIÓN PROFESIONAL
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return '';
@@ -79,7 +80,7 @@ function generateNombreCompleto(p: any) {
 }
 
 /**
- * HIDRATACIÓN DE CITAS
+ * HIDRATACIÓN DE CITAS CON JOIN DE PACIENTES
  */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
@@ -242,7 +243,7 @@ export async function rebuildNombreCompletoAction() {
     return { success: true, count };
 }
 
-// --- CITAS ---
+// --- CITAS (SOLUCIÓN DE ÍNDICES COMPUESTOS) ---
 export async function getAppointmentsData() {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(5000)));
     return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
@@ -310,7 +311,7 @@ export async function cloneAppointment(id: string, date: string, t: string, time
 }
 
 /**
- * FIX: Se ha modificado para filtrar en memoria y evitar el error de índices compuestos en Firestore.
+ * FIX CRÍTICO: SE REALIZA EL FILTRADO DE FECHAS EN MEMORIA PARA EVITAR EL ERROR DE FAILED_PRECONDITION (ÍNDICES COMPUESTOS).
  */
 export async function getAvailableSlotsForDate(clinicId: string, dateIso: string) {
     const clinicDoc = await getDoc(doc(adminDb, 'clinics', clinicId));
@@ -319,7 +320,7 @@ export async function getAvailableSlotsForDate(clinicId: string, dateIso: string
     const start = startOfDay(parseISO(dateIso)).toISOString();
     const end = endOfDay(parseISO(dateIso)).toISOString();
     
-    // Consulta simplificada para evitar error de índice compuesto
+    // Consulta simple (clinicId únicamente) - Evita error 9 de Firebase
     const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId));
     const snap = await getDocs(q);
     const takenTimes = snap.docs
@@ -338,13 +339,15 @@ export async function getAvailableSlotsForDate(clinicId: string, dateIso: string
 }
 
 /**
- * FIX: Filtrado en memoria para evitar error de índice compuesto.
+ * FIX CRÍTICO: FILTRADO EN MEMORIA PARA EVITAR ERROR DE ÍNDICE COMPUESTO.
  */
 export async function getAppointmentCountOnDate(cid: string, d: string) {
     const start = startOfDay(parseISO(d)).toISOString();
     const end = endOfDay(parseISO(d)).toISOString();
+    // Consulta simple a Firestore para no requerir índice compuesto en clinicId + date
     const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid));
     const snap = await getDocs(q);
+    // El filtrado de rango se hace aquí en el servidor para asegurar estabilidad absoluta
     return snap.docs.filter(doc => {
         const data = doc.data();
         return data.date >= start && data.date <= end;
@@ -468,7 +471,7 @@ export async function updateUltrasoundStudies(s: any[]) { const b = writeBatch(a
 export async function getVaccines() { return (await getDocs(collection(adminDb, 'vaccines'))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function updateVaccines(s: any[]) { const b = writeBatch(adminDb); s.forEach(x => b.set(doc(adminDb, 'vaccines', x.id), x)); await b.commit(); return { success: true }; }
 
-// --- INVENTARIOS CON MAPEADOR INTELIGENTE REFORZADO ---
+// --- FARMACIA CON MAPEADOR INTELIGENTE REFORZADO ---
 export async function getMedications() { return (await getDocs(query(collection(adminDb, 'medications'), limit(5000)))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 
 export async function bulkInsertMedications(items: any[], source: 'IMSS-BIENESTAR' | 'EXTERNO') { 
