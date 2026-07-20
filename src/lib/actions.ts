@@ -60,7 +60,7 @@ export async function verifyClinicPassword(id: string, p: string) { return data.
 export async function getPatients(o?: any) { return data.getPatientsData(o); }
 export async function getPatientCounts() { return data.getPatientCounts(); }
 export async function savePatient(p: Omit<Patient, 'id'>, id?: string) { 
-    const res = await data.savePatient(p, id || '');
+    const res = await data.savePatient(p, id);
     revalidatePath('/', 'layout');
     return res;
 }
