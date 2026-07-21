@@ -88,10 +88,6 @@ import { MedicationInventoryDialog } from './medication-inventory-dialog';
 import { AvailabilityViewerDialog } from './availability-viewer-dialog';
 import { ScheduleAppointmentDialog } from '../archivo/schedule-appointment-dialog';
 import { CreatePrescriptionDialog } from './create-prescription-dialog';
-import { LabSettingsManager } from '../admin/lab-settings-manager';
-import { XRaySettingsManager } from '../admin/x-ray-settings-manager';
-import { UltrasoundSettingsManager } from '../admin/ultrasound-settings-manager';
-import { VaccineSettingsManager } from '../admin/vaccine-settings-manager';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -157,7 +153,6 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
         setColonias(coloniasData);
 
         if (reportType === 'clinic') {
-            // Saneamiento senior: Llamamos a las funciones sin filtros compuestos de Firestore
             appointmentsData = await getAppointmentsForClinic(entity.id);
             const attendedData = await getAttendedPatientsForClinic(entity.id);
             setAttendedPatients(attendedData);
@@ -216,10 +211,13 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
 
   const appointmentsToDisplay = useMemo(() => {
     if (!isClient || !appointments || appointments.length === 0) return [];
+    
+    // CORRECCIÓN SENIOR: Normalizamos la fecha de hoy a local para comparar
     const nowStr = format(new Date(), 'yyyy-MM-dd');
     
     let filtered = appointments.filter(app => {
-        const appDateStr = app.date.split('T')[0];
+        // CORRECCIÓN SENIOR: Parseamos la fecha ISO del registro a la zona horaria local antes de comparar
+        const appLocalDateStr = format(parseISO(app.date), 'yyyy-MM-dd');
         
         switch (activeFilter) {
             case 'week':
@@ -243,7 +241,7 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
                 return true;
             case 'today':
             default:
-                return appDateStr === nowStr;
+                return appLocalDateStr === nowStr;
         }
     });
 
@@ -261,7 +259,7 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
   const summaryCounts = useMemo(() => {
     if (!isClient) return { total: 0, attended: 0, pending: 0, notAttended: 0 };
     const nowStr = format(new Date(), 'yyyy-MM-dd');
-    const todayApps = appointments.filter(a => a.date.split('T')[0] === nowStr);
+    const todayApps = appointments.filter(a => format(parseISO(a.date), 'yyyy-MM-dd') === nowStr);
     return {
       total: todayApps.length,
       attended: todayApps.filter(a => a.status === 'Atendido').length,
