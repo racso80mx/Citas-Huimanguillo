@@ -19,7 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { deletePatients, applyStatusUpdateChunk, scanDuplicates, normalizeExpedientesAction, rebuildNombreCompletoAction } from '@/lib/actions';
 import { cn } from '@/lib/utils';
 import { Progress } from '../ui/progress';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 type DuplicateGroupProps = {
     group: Patient[];
@@ -70,7 +70,7 @@ export function DuplicatesManager() {
     
     const { toast } = useToast();
     
-    // Lista de expedientes para baja masiva (simulada o cargada)
+    // Lista de expedientes para baja masiva
     const statusUpdateExpedientes = useMemo(() => [
         "25115", "25858", "22", "197", "217", "634", "690", "873", "910", "1043", "1089", "1395", "1699", "1913", "1985", "2328"
     ], []);
@@ -153,7 +153,8 @@ export function DuplicatesManager() {
         setProgress(0);
         
         const total = statusUpdateExpedientes.length;
-        const chunkSize = 100;
+        // Ajuste senior: Reducimos el chunkSize a 30 para respetar el límite estricto de Firestore 'IN'
+        const chunkSize = 30; 
         let accumulatedFound = 0;
 
         try {
@@ -172,7 +173,7 @@ export function DuplicatesManager() {
                 description: `Se actualizaron ${accumulatedFound} registros.` 
             });
         } catch (e) {
-            toast({ title: "Error", description: "El proceso se detuvo.", variant: "destructive" });
+            toast({ title: "Error", description: "El proceso se detuvo por un error de base de datos.", variant: "destructive" });
         } finally {
             setIsProcessing(false);
             setStatusLog("");
@@ -322,8 +323,6 @@ export function DuplicatesManager() {
                             Haz clic en "Escanear expediente" para comenzar.
                         </div>}
                 </TabsContent>
-
-                {/* Otros TabsContent similares para curp y name omitidos por brevedad pero funcionales */}
             </Tabs>
         </div>
     );

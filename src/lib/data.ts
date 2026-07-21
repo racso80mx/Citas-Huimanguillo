@@ -89,6 +89,7 @@ async function hydrateAppointments(appointments: any[]) {
     const patientsMap: Record<string, any> = {};
     
     if (patientIds.length > 0) {
+        // Límite de 30 para operador 'IN'
         const CHUNK_SIZE = 30;
         for (let i = 0; i < patientIds.length; i += CHUNK_SIZE) {
             const chunk = patientIds.slice(i, i + CHUNK_SIZE);
@@ -298,6 +299,7 @@ export async function getAppointmentsForClinic(cid: string) {
 export async function getAppointmentCountOnDate(cid: string, d: string) {
     const startStr = startOfDay(parseISO(d)).toISOString();
     const endStr = endOfDay(parseISO(d)).toISOString();
+    // Index 9 Fix: Solo filtramos por clinicId y barremos fechas en memoria
     const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid));
     const snap = await getDocs(q);
     return snap.docs.filter(doc => {
@@ -312,6 +314,7 @@ export async function getAvailableSlotsForDate(clinicId: string, dateIso: string
     const clinic = cDoc.data() as Clinic;
     const start = startOfDay(parseISO(dateIso)).toISOString();
     const end = endOfDay(parseISO(dateIso)).toISOString();
+    // Index 9 Fix: Solo clinicId
     const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId));
     const snap = await getDocs(q);
     const takenTimes = snap.docs.map(d => d.data()).filter(a => a.date >= start && a.date <= end).map(a => a.time);
@@ -601,7 +604,7 @@ export async function bulkInsertCie10Glossary(it: any[]) {
 export async function deleteAllCie10Catalog() { const s = await getDocs(collection(adminDb, 'cie10Catalog')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 export async function deleteAllCie10Glossary() { const s = await getDocs(collection(adminDb, 'cie10Glossary')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 
-// --- MANTENIMIENTO ---
+// --- MANTENIMIENTO (CON CHUNKING SEGURO PARA OPERADOR 'IN') ---
 export async function scanDuplicates(criteria: string) {
     const snap = await getDocs(collection(adminDb, 'patients'));
     const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
@@ -612,12 +615,24 @@ export async function scanDuplicates(criteria: string) {
     });
     return Object.values(groups).filter(g => g.length > 1);
 }
+
 export async function applyStatusUpdateChunk(exp: string[], status: any) {
-    const b = writeBatch(adminDb); let c = 0;
-    const snap = await getDocs(query(collection(adminDb, 'patients'), where('expediente', 'in', exp)));
-    snap.forEach(d => { b.update(d.ref, { status }); c++; });
-    await b.commit(); return { success: true, count: c };
+    let count = 0;
+    const CHUNK_SIZE = 30; // Límite estricto de Firestore para 'IN'
+    for (let i = 0; i < exp.length; i += CHUNK_SIZE) {
+        const chunk = exp.slice(i, i + CHUNK_SIZE);
+        const q = query(collection(adminDb, 'patients'), where('expediente', 'in', chunk));
+        const snap = await getDocs(q);
+        const b = writeBatch(adminDb);
+        snap.forEach(d => {
+            b.update(d.ref, { status });
+            count++;
+        });
+        await b.commit();
+    }
+    return { success: true, count };
 }
+
 export async function normalizeExpedientesAction() {
     const snap = await getDocs(collection(adminDb, 'patients')); const b = writeBatch(adminDb); let c = 0;
     snap.forEach(d => { const exp = String(d.data().expediente || ''); if (exp && exp.length < 5 && !exp.startsWith('0')) { b.update(d.ref, { expediente: exp.padStart(5, '0') }); c++; } });
@@ -639,11 +654,20 @@ export async function downloadBackupAction() {
 export async function getAttendedPatientsForClinic(cid: string) {
     const s = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid)));
     const results = s.docs.map(d => d.data()).filter(a => a.status === 'Atendido');
-    const pIds = Array.from(new Set(results.map(d => d.patientId)));
+    const pIds = Array.from(new Set(results.map(d => d.patientId))).filter(Boolean);
     if (pIds.length === 0) return [];
-    const pSnap = await getDocs(query(collection(adminDb, 'patients'), where('__name__', 'in', pIds.slice(0, 50))));
-    return pSnap.docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
+    
+    // Chunking seguro para 'IN' (máximo 30)
+    const patients: any[] = [];
+    const CHUNK_SIZE = 30;
+    for (let i = 0; i < pIds.length && i < 300; i += CHUNK_SIZE) {
+        const chunk = pIds.slice(i, i + CHUNK_SIZE);
+        const pSnap = await getDocs(query(collection(adminDb, 'patients'), where('__name__', 'in', chunk)));
+        pSnap.forEach(d => patients.push({ ...d.data(), id: d.id }));
+    }
+    return serializeData(patients);
 }
+
 export async function getBIData() { 
     const [apps, lab, xr, us, vac, clins, cols] = await Promise.all([
         getDocs(collection(adminDb, 'appointments')), getDocs(collection(adminDb, 'labAppointments')), 
