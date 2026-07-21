@@ -157,6 +157,7 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
         setColonias(coloniasData);
 
         if (reportType === 'clinic') {
+            // Saneamiento senior: Llamamos a las funciones sin filtros compuestos de Firestore
             appointmentsData = await getAppointmentsForClinic(entity.id);
             const attendedData = await getAttendedPatientsForClinic(entity.id);
             setAttendedPatients(attendedData);
@@ -523,7 +524,7 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
                                                                 ) : (
                                                                     <div className="py-20 text-center border-2 border-dashed rounded-2xl opacity-40">Sin notas registradas.</div>
                                                                 )}
-                              </TabsContent>
+                                                            </TabsContent>
 
                                                             <TabsContent value="recetas" className="mt-0">
                                                                 {isLoadingHistory ? (
