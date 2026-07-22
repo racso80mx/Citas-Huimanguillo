@@ -492,7 +492,10 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                     </div>
                 </CardHeader>
                 <CardContent className="pt-6">
-                    <AppointmentList appointments={appointmentsToDisplay} clinics={clinics} isAdmin={!isReadOnly} onDelete={handleDeleteLogical} onEditSuccess={() => loadData(true)} />
+                    <AppointmentList appointments={appointmentsToDisplay} clinics={clinics} isAdmin={!isReadOnly} onDelete={(appId) => {
+                        const app = allAppointments.find(a => a.id === appId);
+                        if (app) handleDeleteLogical(app.patientId);
+                    }} onEditSuccess={() => loadData(true)} />
                 </CardContent>
            </Card>
         </TabsContent>

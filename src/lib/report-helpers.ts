@@ -57,8 +57,17 @@ function addDateTimeHighlight(doc: any, date: string, time: string, currentY: nu
 
     doc.setTextColor(PRIMARY_COLOR[0], PRIMARY_COLOR[1], PRIMARY_COLOR[2]);
     doc.setFontSize(17);
-    const dateObj = date ? (typeof date === 'string' ? parseISO(date) : new Date(date)) : null;
-    const formattedDate = dateObj && isValid(dateObj) ? format(dateObj, "eeee, dd 'de' MMMM 'de' yyyy", { locale: es }).toUpperCase() : 'FECHA NO DISPONIBLE';
+    
+    let formattedDate = 'FECHA NO DISPONIBLE';
+    if (date) {
+        try {
+            const dateObj = typeof date === 'string' ? parseISO(date) : new Date(date);
+            if (isValid(dateObj)) {
+                formattedDate = format(dateObj, "eeee, dd 'de' MMMM 'de' yyyy", { locale: es }).toUpperCase();
+            }
+        } catch (e) {}
+    }
+    
     doc.text(formattedDate, 105, currentY + 10, { align: 'center' });
     
     doc.setFontSize(22);
@@ -87,7 +96,6 @@ export async function downloadExcel(data: any[], filename: string) {
     
     const worksheetData = data.map(
         (item) => {
-            // SAFELY PARSE DATES (Senior implementation)
             let fechaCita = 'N/A';
             if (item.date) {
                 try {
@@ -230,7 +238,6 @@ export async function generateAppointmentPDF(appointmentData: Appointment, clini
     addPDFHeader(doc, 'Confirmación de Cita Médica');
     let currentY = addDateTimeHighlight(doc, date, time, 65);
 
-    // Columnas
     doc.setTextColor(0);
     doc.setFontSize(12);
     doc.setFont('Helvetica', 'bold');
@@ -249,7 +256,6 @@ export async function generateAppointmentPDF(appointmentData: Appointment, clini
     let leftY = currentY;
     let rightY = currentY;
     
-    // Info Paciente
     const pName = patient ? `${patient.name} ${patient.paternalLastName} ${patient.maternalLastName}` : 'N/A';
     doc.setTextColor(100); doc.text('Nombre:', 20, leftY);
     doc.setTextColor(0); 
@@ -265,7 +271,6 @@ export async function generateAppointmentPDF(appointmentData: Appointment, clini
     doc.setTextColor(0); doc.text(patientType.toUpperCase(), 45, leftY);
     leftY += 6;
     
-    // Info Clínica
     doc.setTextColor(100); doc.text('Unidad:', 110, rightY);
     doc.setTextColor(0); 
     const unitLines = doc.splitTextToSize(clinicData.name.toUpperCase(), 55);
@@ -286,7 +291,6 @@ export async function generateAppointmentPDF(appointmentData: Appointment, clini
 
     currentY = Math.max(leftY, rightY) + 12;
 
-    // Avisos
     if (announcements && announcements.length > 0) {
         doc.setFont('Helvetica', 'bold');
         doc.setTextColor(PRIMARY_COLOR[0], PRIMARY_COLOR[1], PRIMARY_COLOR[2]);
