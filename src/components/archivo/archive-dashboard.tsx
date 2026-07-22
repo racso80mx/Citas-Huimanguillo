@@ -160,12 +160,17 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       const searchOptions: any = { 
           status: statusFilter === 'Total' ? undefined : statusFilter,
-          limitNum: 10000 // Load full set for local filtering
+          limitNum: 10000 // Load large set for local filtering/marking
       };
       const patientsData = await getPatients(searchOptions);
       setPatients(patientsData);
       setCurrentPage(1);
-      setSelectedPatientIds([]);
+      
+      // SENIOR FIX: Only clear selection if we are changing the main status filter or the tab
+      // This prevents clearing the list while searching in the same view.
+      if (manualSearch === false) {
+          // setSelectedPatientIds([]); // Disabled globally to allow persistent marking during "scan" sessions
+      }
     } catch (e) {
       toast({ title: 'Error de Red', variant: 'destructive' });
     } finally {
@@ -175,9 +180,9 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   
   useEffect(() => {
     loadData(false);
-  }, [statusFilter, activeTab]);
+  }, [statusFilter, activeTab, loadData]);
 
-  // AUTO-MARK LOGIC: Cuando buscamos por expediente en "Baja Temporal", marcamos el registro en lugar de filtrar
+  // AUTO-MARK LOGIC: En "Baja Temporal", buscar un expediente lo selecciona automáticamente en lugar de ocultar a los demás.
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = searchExpediente.trim();
@@ -199,7 +204,8 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
         
-        // Si estamos en Baja Temporal, no filtramos por expediente (porque lo marcamos arriba)
+        // SENIOR REQ: En Baja Temporal, el buscador de expediente NO filtra (para no borrar lo ya seleccionado),
+        // solo marca automáticamente mediante el useEffect superior.
         if (statusFilter === PatientStatusEnum.Baja) {
             return nameMatch && curpMatch;
         }
@@ -215,6 +221,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   };
 
   const handleStatusCardClick = (status: 'Total' | PatientStatusEnum) => {
+      setSelectedPatientIds([]); // Reset selection when switching main views
       setStatusFilter(status);
   };
 
@@ -231,7 +238,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   
   const handleDeleteLogical = (patientId: string) => {
     if (isReadOnly) return;
-    // Optimistic UI: move to definitive view immediately
+    // Mover a Baja Definitiva inmediatamente en la UI (Optimista)
     setPatients(prev => prev.filter(p => p.id !== patientId));
     setSelectedPatientIds(prev => prev.filter(id => id !== patientId));
     
@@ -246,7 +253,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const handleBulkToDefinitive = () => {
       if (selectedPatientIds.length === 0 || isReadOnly) return;
       const idsToChange = [...selectedPatientIds];
-      // Optimistic
+      
       setPatients(prev => prev.filter(p => !idsToChange.includes(p.id)));
       setSelectedPatientIds([]);
       
@@ -254,7 +261,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
           for (const id of idsToChange) { 
               await updatePatientStatus(id, PatientStatusEnum.BajaDefinitiva); 
           }
-          toast({ title: "Baja Definitiva Masiva", description: `${idsToChange.length} registros actualizados.` });
+          toast({ title: "Baja Definitiva Masiva", description: `${idsToChange.length} registros movidos.` });
           const newCounts = await getPatientCounts();
           setCounts(newCounts);
       });
@@ -379,7 +386,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">Nombre o Apellidos</Label><Input placeholder="Buscar por nombre..." value={searchName} onChange={e => setSearchName(e.target.value.toUpperCase())} className="h-11 border-primary/20" /></div>
                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">CURP</Label><Input placeholder="CURP (18 carac)..." value={searchCurp} onChange={e => setSearchCurp(e.target.value.toUpperCase())} className="h-11 border-primary/20" maxLength={18} /></div>
                     <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">No. Expediente {statusFilter === PatientStatusEnum.Baja && "(Marca auto)"}</Label>
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">No. Expediente {statusFilter === PatientStatusEnum.Baja && "(Auto-Marcar)"}</Label>
                         <Input placeholder="Expediente..." value={searchExpediente} onChange={e => setSearchExpediente(e.target.value)} className="h-11 border-primary/20" />
                     </div>
                     <div className="flex gap-2 items-end">
