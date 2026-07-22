@@ -31,8 +31,8 @@ import {
   Stethoscope,
   Activity,
   UserRound,
-  MoreVertical,
-  Settings2
+  CalendarDays,
+  RefreshCw
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -326,6 +326,17 @@ export function AppointmentList({ appointments, isAdmin = false, onDelete, clini
                 title: 'Fecha Actualizada',
                 description: result.message,
             });
+
+            const whatsappEnabled = isAdmin ? settings?.archivoWhatsAppEnabled : settings?.citasMedicasWhatsAppEnabled;
+            if (whatsappEnabled && reschedulingAppointment.patient?.phoneNumber) {
+                const phone = reschedulingAppointment.patient.phoneNumber.replace(/\D/g, '');
+                const oldDateFormatted = format(parseISO(reschedulingAppointment.date), "eeee dd 'de' MMMM", { locale: es });
+                const newDateFormatted = format(newDate, "eeee dd 'de' MMMM", { locale: es });
+                
+                const message = encodeURIComponent(`Hola ${reschedulingAppointment.patient.name}, Su cita del dia ${oldDateFormatted} a las ${reschedulingAppointment.time} a sido reagendada, para el día ${newDateFormatted} a la misma hora.`);
+                window.open(`https://wa.me/52${phone}?text=${message}`, '_blank');
+            }
+
             setReschedulingAppointment(null);
             setNewDate(undefined);
             onEditSuccess?.();
@@ -639,6 +650,13 @@ export function AppointmentList({ appointments, isAdmin = false, onDelete, clini
                             WhatsApp Recordatorio
                           </DropdownMenuItem>
                         )}
+                        <DropdownMenuItem onClick={() => {
+                            setNewDate(new Date(app.date));
+                            setReschedulingAppointment(app);
+                        }}>
+                          <RefreshCw className="mr-2 h-4 w-4 text-blue-600" />
+                          Cambiar Cita
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleDownloadPDF(app)}>
                           <FileDown className="mr-2 h-4 w-4 text-gray-500" />
                           Descargar Comprobante

@@ -13,7 +13,7 @@ import type { LabAppointment, Patient, AppointmentStatus, ModuleSettings } from 
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Button } from '../ui/button';
-import { Trash2, FlaskConical, Pencil, Loader2, ArrowUpDown, ArrowUp, ArrowDown, FileDown, ClipboardCopy, MessageCircle, ChevronDown } from 'lucide-react';
+import { Trash2, FlaskConical, Pencil, Loader2, ArrowUpDown, ArrowUp, ArrowDown, FileDown, ClipboardCopy, MessageCircle, ChevronDown, RefreshCw } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -211,6 +211,17 @@ export function LabAppointmentList({ appointments, isAdmin = false, onDelete, on
                 title: 'Fecha Actualizada',
                 description: result.message,
             });
+
+            const whatsappEnabled = isAdmin ? settings?.archivoWhatsAppEnabled : settings?.laboratorioWhatsAppEnabled;
+            if (whatsappEnabled && reschedulingAppointment.patient?.phoneNumber) {
+                const phone = reschedulingAppointment.patient.phoneNumber.replace(/\D/g, '');
+                const oldDateFormatted = format(parseISO(reschedulingAppointment.date), "eeee dd 'de' MMMM", { locale: es });
+                const newDateFormatted = format(newDate, "eeee dd 'de' MMMM", { locale: es });
+                
+                const message = encodeURIComponent(`Hola ${reschedulingAppointment.patient.name}, Su cita del dia ${oldDateFormatted} a las ${reschedulingAppointment.time} a sido reagendada, para el día ${newDateFormatted} a la misma hora.`);
+                window.open(`https://wa.me/52${phone}?text=${message}`, '_blank');
+            }
+
             setReschedulingAppointment(null);
             setNewDate(undefined);
             onEditSuccess?.();
@@ -365,6 +376,13 @@ export function LabAppointmentList({ appointments, isAdmin = false, onDelete, on
                           WhatsApp Recordatorio
                         </DropdownMenuItem>
                       )}
+                      <DropdownMenuItem onClick={() => {
+                          setNewDate(new Date(app.date));
+                          setReschedulingAppointment(app);
+                      }}>
+                        <RefreshCw className="mr-2 h-4 w-4 text-blue-600" />
+                        Cambiar Cita
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleDownloadPDF(app)}>
                         <FileDown className="mr-2 h-4 w-4 text-gray-500" />
                         Descargar Comprobante

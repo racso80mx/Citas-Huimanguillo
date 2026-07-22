@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -155,12 +154,12 @@ export async function verifyModulePassword(module: string, password: string) {
     return { success: dbPass === password || password === 'citas2026' };
 }
 
-export async function verifyClinicPassword(clinicId: string, password: string) {
-    const s = await getDoc(doc(adminDb, 'clinics', clinicId));
+export async function verifyClinicPassword(id: string, password: string) {
+    const s = await getDoc(doc(adminDb, 'clinics', id));
     return { success: s.exists() && (s.data()?.password === password || password === 'citas2026') };
 }
 
-// --- PACIENTES (GESTIÓN DE DUPLICADOS MEDIANTE ID ÚNICO) ---
+// --- PACIENTES ---
 export async function getPatientCounts(): Promise<ArchiveCounts> {
     const coll = collection(adminDb, 'patients');
     const totalSnap = await getCountFromServer(coll);
@@ -196,33 +195,19 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
 
 export async function getPatientByCURP(curp: string) {
     const c = curp.toUpperCase().trim();
-    // Prioridad 1: Buscar por el ID oficial (CURP)
     let s = await getDoc(doc(adminDb, 'patients', c));
     if (s.exists()) return { success: true, data: serializeData({ ...s.data(), id: s.id }) };
-    
-    // Prioridad 2: Buscar por campo CURP (para detectar registros antiguos con UUID)
     const snap = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', c), limit(1)));
     if (!snap.empty) return { success: true, data: serializeData({ ...snap.docs[0].data(), id: snap.docs[0].id }) };
-    
     return { success: false };
 }
 
 export async function savePatient(p: Omit<Patient, 'id'>, id?: string) {
     const finalId = p.curp.toUpperCase().trim();
     const batch = writeBatch(adminDb);
-    
-    // Si el ID proporcionado es distinto al CURP (es un UUID antiguo), lo borramos para migrarlo
-    if (id && id !== finalId) {
-        batch.delete(doc(adminDb, 'patients', id));
-    }
-    
-    // Saneamiento de duplicados por CURP
-    const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', finalId)));
-    snapCheck.forEach(d => { if (d.id !== finalId) batch.delete(d.ref); });
-
+    if (id && id !== finalId) batch.delete(doc(adminDb, 'patients', id));
     const mapped = { ...p, id: finalId, curp: finalId, nombreCompleto: generateNombreCompleto(p) };
     batch.set(doc(adminDb, 'patients', finalId), mapped, { merge: true });
-    
     await batch.commit();
     return { success: true };
 }
@@ -231,24 +216,13 @@ export async function updatePatient(id: string, p: Partial<Patient>) {
     const finalId = (p.curp || id).toUpperCase().trim();
     const docRefOld = doc(adminDb, 'patients', id);
     const current = await getDoc(docRefOld);
-    
     if (!current.exists()) return { success: false };
-    
     const combinedData = { ...current.data(), ...p };
     const mapped = { ...combinedData, id: finalId, nombreCompleto: generateNombreCompleto(combinedData) };
-
     const batch = writeBatch(adminDb);
-    if (id !== finalId) {
-        batch.delete(docRefOld);
-    }
-    
-    // Saneamiento proactivo de otros registros con mismo CURP pero distinto ID
-    const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', finalId)));
-    snapCheck.forEach(d => { if (d.id !== finalId && d.id !== id) batch.delete(d.ref); });
-
+    if (id !== finalId) batch.delete(docRefOld);
     batch.set(doc(adminDb, 'patients', finalId), mapped, { merge: true });
     await batch.commit();
-    
     return { success: true };
 }
 
@@ -259,12 +233,10 @@ export async function updatePatientStatus(id: string, status: string) {
 
 export async function deletePatient(id: string) { await deleteDoc(doc(adminDb, 'patients', id)); return { success: true }; }
 export async function deletePatients(ids: string[]) {
-    const b = writeBatch(adminDb); 
-    const CHUNK_SIZE = 450;
-    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
-        const batch = writeBatch(adminDb);
-        ids.slice(i, i + CHUNK_SIZE).forEach(id => batch.delete(doc(adminDb, 'patients', id)));
-        await batch.commit();
+    for (let i = 0; i < ids.length; i += 450) {
+        const b = writeBatch(adminDb);
+        ids.slice(i, i + 450).forEach(id => b.delete(doc(adminDb, 'patients', id)));
+        await b.commit();
     }
     return { success: true };
 }
@@ -311,7 +283,7 @@ export async function rebuildNombreCompletoAction() {
     return { success: true, count: docs.length };
 }
 
-// --- CITAS (OPTIMIZADAS CONTRA ERROR 9 Y LÍMITES DE 30) ---
+// --- CITAS (OPTIMIZADAS SIN ERROR 9) ---
 export async function getAppointmentsData() {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(5000)));
     return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
@@ -404,19 +376,12 @@ export async function cloneAppointment(appointmentId: string, newDateIso: string
 }
 
 export async function saveNewAppointment(appointment: any, patient: any, isDoubleSlot: boolean, coloniaName?: string) {
-    const b = writeBatch(adminDb); 
     const pid = patient.curp.toUpperCase().trim();
-    
-    const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', pid)));
-    snapCheck.forEach(d => { if (d.id !== pid) b.delete(d.ref); });
-
-    b.set(doc(adminDb, 'patients', pid), { ...patient, id: pid, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
-    
+    await savePatient(patient, pid);
     const cSnap = await getDoc(doc(adminDb, 'clinics', appointment.clinicId));
     const folio = `APP-${uuidv4().split('-')[0].toUpperCase()}`;
     const newId = uuidv4();
-    b.set(doc(adminDb, 'appointments', newId), { ...appointment, id: newId, patientId: pid, appointmentNumber: folio, coloniaName, clinicName: cSnap.exists() ? cSnap.data()?.name : '', createdAt: new Date().toISOString() });
-    await b.commit();
+    await setDoc(doc(adminDb, 'appointments', newId), { ...appointment, id: newId, patientId: pid, appointmentNumber: folio, coloniaName, clinicName: cSnap.exists() ? cSnap.data()?.name : '', createdAt: new Date().toISOString() });
     return { success: true, data: { appointment: { ...appointment, id: newId, patient, appointmentNumber: folio, coloniaName }, clinic: { ...cSnap.data(), id: cSnap.id } } };
 }
 
@@ -472,7 +437,7 @@ export async function getPatientPrescriptionsCountTodayAction(pid: string) {
     const s = await getDocs(q); return s.docs.filter(d => (d.data().date || d.data().createdAt) >= start).length;
 }
 
-// --- FARMACIA / ALMACÉN (MAPEO INTELIGENTE DE EXCEL) ---
+// --- FARMACIA ---
 export async function getMedications() { const s = await getDocs(query(collection(adminDb, 'medications'), limit(5000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function getSupplies() { const s = await getDocs(query(collection(adminDb, 'supplies'), limit(5000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 
