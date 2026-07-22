@@ -1,4 +1,3 @@
-
 'use client';
 import React, { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
 import type { Appointment, Clinic, LabAppointment, XRayAppointment, UltrasoundAppointment, VaccineAppointment, Patient, MedicalConsultation, Prescription, Colonia } from '@/lib/definitions';
@@ -88,6 +87,10 @@ import { MedicationInventoryDialog } from './medication-inventory-dialog';
 import { AvailabilityViewerDialog } from './availability-viewer-dialog';
 import { ScheduleAppointmentDialog } from '../archivo/schedule-appointment-dialog';
 import { CreatePrescriptionDialog } from './create-prescription-dialog';
+import { LabSettingsManager } from '../admin/lab-settings-manager';
+import { XRaySettingsManager } from '../admin/x-ray-settings-manager';
+import { UltrasoundSettingsManager } from '../admin/ultrasound-settings-manager';
+import { VaccineSettingsManager } from '../admin/vaccine-settings-manager';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -212,11 +215,9 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
   const appointmentsToDisplay = useMemo(() => {
     if (!isClient || !appointments || appointments.length === 0) return [];
     
-    // CORRECCIÓN SENIOR: Normalizamos la fecha de hoy a local para comparar
     const nowStr = format(new Date(), 'yyyy-MM-dd');
     
     let filtered = appointments.filter(app => {
-        // CORRECCIÓN SENIOR: Parseamos la fecha ISO del registro a la zona horaria local antes de comparar
         const appLocalDateStr = format(parseISO(app.date), 'yyyy-MM-dd');
         
         switch (activeFilter) {

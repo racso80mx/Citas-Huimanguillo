@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -81,7 +80,7 @@ function normalizeString(s: string): string {
         .replace(/[\u0300-\u036f]/g, "") // Quitar acentos
         .toUpperCase()
         .trim()
-        .replace(/[^A-Z0-9]/g, ''); // Solo alfanumérico
+        .replace(/\s+/g, ''); // Quitar todos los espacios
 }
 
 /** Genera nombre completo normalizado para búsquedas optimizadas */
@@ -498,7 +497,6 @@ export async function bulkInsertMedications(items: any[], source: string) {
             };
 
             if (!mapped.descripcion) return;
-            // Sanitizar lote para evitar diagonales en el ID de Firestore
             const sanitizedLote = rawLote.replace(/\//g, '-');
             const id = `${mapped.claveCuadroBasico || uuidv4().split('-')[0]}_${source}_${sanitizedLote}`;
             batch.set(doc(adminDb, colName, id), { ...mapped, id }, { merge: true });
