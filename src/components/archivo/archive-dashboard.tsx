@@ -181,7 +181,8 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
               status: statusFilter,
               searchCurp: searchCurp.toUpperCase().trim() || undefined,
               searchExpediente: searchExpediente.trim() || undefined,
-              searchName: searchName.toUpperCase().trim() || undefined
+              searchName: searchName.toUpperCase().trim() || undefined,
+              limitNum: 10000
           };
           const patientsData = await getPatients(searchOptions);
           setPatients(patientsData);
@@ -245,7 +246,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
       setHasSearched(true);
       startSubmitTransition(async () => {
           setIsDataLoading(true);
-          const patientsData = await getPatients({ status: status });
+          const patientsData = await getPatients({ status: status, limitNum: 10000 });
           setPatients(patientsData);
           setCounts(await getPatientCounts());
           setIsDataLoading(false);
@@ -330,9 +331,8 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   
   const handleSavePatient = (patientData: Omit<Patient, 'id'>, id?: string) => {
     if (isReadOnly) return;
-    startSubmitTransition(async () => {
-      const finalId = patientData.curp.toUpperCase().trim();
-      const result = id ? await updatePatient(id, patientData) : await savePatient(patientData, finalId);
+    startTransition(async () => {
+      const result = id ? await updatePatient(id, patientData) : await savePatient(patientData);
        if(result.success) {
         toast({ title: "Paciente Guardado" });
         setIsEditOpen(false);

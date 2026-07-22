@@ -218,54 +218,58 @@ export async function getPatientByCURP(curp: string) {
 }
 
 export async function savePatient(p: Omit<Patient, 'id'>, id?: string) {
-    const finalId = p.curp.toUpperCase().trim();
-    const batch = writeBatch(adminDb);
-    
-    // Saneamiento de duplicados huerfanos por ID aleatorio
-    const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', finalId)));
-    snapCheck.forEach(d => { if (d.id !== finalId) batch.delete(d.ref); });
+  const finalId = p.curp.toUpperCase().trim();
+  const batch = writeBatch(adminDb);
+  
+  const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', finalId)));
+  snapCheck.forEach(d => { if (d.id !== finalId) batch.delete(d.ref); });
 
-    if (id && id !== finalId) batch.delete(doc(adminDb, 'patients', id));
-    
-    const mapped = { ...p, id: finalId, curp: finalId, nombreCompleto: generateNombreCompleto(p) };
-    batch.set(doc(adminDb, 'patients', finalId), mapped, { merge: true });
-    await batch.commit();
-    return { success: true };
+  if (id && id !== finalId) batch.delete(doc(adminDb, 'patients', id));
+  
+  const mapped = { ...p, id: finalId, curp: finalId, nombreCompleto: generateNombreCompleto(p) };
+  batch.set(doc(adminDb, 'patients', finalId), mapped, { merge: true });
+  await batch.commit();
+  return { success: true };
 }
 
 export async function updatePatient(id: string, p: Partial<Patient>) {
-    const finalId = (p.curp || id).toUpperCase().trim();
-    const batch = writeBatch(adminDb);
-    
-    const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', finalId)));
-    snapCheck.forEach(d => { if (d.id !== finalId) batch.delete(d.ref); });
+  const finalId = (p.curp || id).toUpperCase().trim();
+  const batch = writeBatch(adminDb);
+  
+  const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', finalId)));
+  snapCheck.forEach(d => { if (d.id !== finalId) batch.delete(d.ref); });
 
-    const docRefOld = doc(adminDb, 'patients', id);
-    const current = await getDoc(docRefOld);
-    if (!current.exists()) return { success: false };
-    
-    const combinedData = { ...current.data(), ...p };
-    const mapped = { ...combinedData, id: finalId, curp: finalId, nombreCompleto: generateNombreCompleto(combinedData) };
-    
-    if (id !== finalId) batch.delete(docRefOld);
-    batch.set(doc(adminDb, 'patients', finalId), mapped, { merge: true });
-    await batch.commit();
-    return { success: true };
+  const docRefOld = doc(adminDb, 'patients', id);
+  const current = await getDoc(docRefOld);
+  if (!current.exists()) return { success: false };
+  
+  const combinedData = { ...current.data(), ...p };
+  const mapped = { ...combinedData, id: finalId, curp: finalId, nombreCompleto: generateNombreCompleto(combinedData) };
+  
+  if (id !== finalId) batch.delete(docRefOld);
+  batch.set(doc(adminDb, 'patients', finalId), mapped, { merge: true });
+  await batch.commit();
+  return { success: true };
 }
 
 export async function updatePatientStatus(id: string, status: string) { 
-    await updateDoc(doc(adminDb, 'patients', id), { status }); 
-    return { success: true }; 
+  await updateDoc(doc(adminDb, 'patients', id), { status }); 
+  return { success: true }; 
+}
+
+export async function deletePatient(id: string) {
+  await deleteDoc(doc(adminDb, 'patients', id));
+  return { success: true };
 }
 
 export async function deletePatients(ids: string[]) {
-    const CHUNK_SIZE = 450;
-    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
-        const batch = writeBatch(adminDb);
-        ids.slice(i, i + CHUNK_SIZE).forEach(id => batch.delete(doc(adminDb, 'patients', id)));
-        await batch.commit();
-    }
-    return { success: true };
+  const CHUNK_SIZE = 450;
+  for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+    const batch = writeBatch(adminDb);
+    ids.slice(i, i + CHUNK_SIZE).forEach(id => batch.delete(doc(adminDb, 'patients', id)));
+    await batch.commit();
+  }
+  return { success: true };
 }
 
 export async function bulkInsertPatients(patients: any[]) {
