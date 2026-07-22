@@ -216,6 +216,10 @@ export async function savePatient(p: Omit<Patient, 'id'>, id?: string) {
         batch.delete(doc(adminDb, 'patients', id));
     }
     
+    // Saneamiento de duplicados por CURP
+    const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', finalId)));
+    snapCheck.forEach(d => { if (d.id !== finalId) batch.delete(d.ref); });
+
     const mapped = { ...p, id: finalId, curp: finalId, nombreCompleto: generateNombreCompleto(p) };
     batch.set(doc(adminDb, 'patients', finalId), mapped, { merge: true });
     
@@ -233,15 +237,18 @@ export async function updatePatient(id: string, p: Partial<Patient>) {
     const combinedData = { ...current.data(), ...p };
     const mapped = { ...combinedData, id: finalId, nombreCompleto: generateNombreCompleto(combinedData) };
 
+    const batch = writeBatch(adminDb);
     if (id !== finalId) {
-        // Migración forzada: borrar antiguo y crear nuevo con CURP como ID
-        const batch = writeBatch(adminDb);
         batch.delete(docRefOld);
-        batch.set(doc(adminDb, 'patients', finalId), mapped, { merge: true });
-        await batch.commit();
-    } else {
-        await updateDoc(docRefOld, { ...p, nombreCompleto: generateNombreCompleto(combinedData) });
     }
+    
+    // Saneamiento proactivo de otros registros con mismo CURP pero distinto ID
+    const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', finalId)));
+    snapCheck.forEach(d => { if (d.id !== finalId && d.id !== id) batch.delete(d.ref); });
+
+    batch.set(doc(adminDb, 'patients', finalId), mapped, { merge: true });
+    await batch.commit();
+    
     return { success: true };
 }
 
@@ -252,8 +259,14 @@ export async function updatePatientStatus(id: string, status: string) {
 
 export async function deletePatient(id: string) { await deleteDoc(doc(adminDb, 'patients', id)); return { success: true }; }
 export async function deletePatients(ids: string[]) {
-    const b = writeBatch(adminDb); ids.forEach(id => b.delete(doc(adminDb, 'patients', id)));
-    await b.commit(); return { success: true };
+    const b = writeBatch(adminDb); 
+    const CHUNK_SIZE = 450;
+    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+        const batch = writeBatch(adminDb);
+        ids.slice(i, i + CHUNK_SIZE).forEach(id => batch.delete(doc(adminDb, 'patients', id)));
+        await batch.commit();
+    }
+    return { success: true };
 }
 
 export async function bulkInsertPatients(patients: any[]) {
@@ -277,7 +290,6 @@ export async function bulkInsertPatients(patients: any[]) {
                 derechoAbiencia: String(p.DerechoAbiencia || p.derechoAbiencia || '').toUpperCase().trim(),
             };
             mapped.nombreCompleto = generateNombreCompleto(mapped);
-            // Asegurar que el ID sea siempre el CURP para evitar duplicados en carga masiva
             b.set(doc(adminDb, 'patients', curp), mapped, { merge: true });
         });
         await b.commit();
@@ -287,12 +299,19 @@ export async function bulkInsertPatients(patients: any[]) {
 
 export async function rebuildNombreCompletoAction() {
     const snap = await getDocs(collection(adminDb, 'patients'));
-    const b = writeBatch(adminDb); let count = 0;
-    snap.forEach(d => { b.update(d.ref, { nombreCompleto: generateNombreCompleto(d.data()) }); count++; });
-    await b.commit(); return { success: true, count };
+    const CHUNK_SIZE = 450;
+    const docs = snap.docs;
+    for (let i = 0; i < docs.length; i += CHUNK_SIZE) {
+        const b = writeBatch(adminDb);
+        docs.slice(i, i + CHUNK_SIZE).forEach(d => {
+            b.update(d.ref, { nombreCompleto: generateNombreCompleto(d.data()) });
+        });
+        await b.commit();
+    }
+    return { success: true, count: docs.length };
 }
 
-// --- CITAS (OPTIMIZADAS: FILTRADO EN MEMORIA PARA EVITAR ERROR 9) ---
+// --- CITAS (OPTIMIZADAS CONTRA ERROR 9 Y LÍMITES DE 30) ---
 export async function getAppointmentsData() {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(5000)));
     return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
@@ -322,7 +341,6 @@ export async function getAppointmentsForClinic(cid: string) {
 export async function getAppointmentCountOnDate(cid: string, d: string) {
     const startStr = startOfDay(parseISO(d)).toISOString();
     const endStr = endOfDay(parseISO(d)).toISOString();
-    // Consulta simple por clínica para evitar necesidad de índice compuesto (Error 9)
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid)));
     return snap.docs.filter(doc => {
         const data = doc.data();
@@ -336,7 +354,6 @@ export async function getAvailableSlotsForDate(clinicId: string, dateIso: string
     const clinic = cDoc.data() as Clinic;
     const start = startOfDay(parseISO(dateIso)).toISOString();
     const end = endOfDay(parseISO(dateIso)).toISOString();
-    // Filtrado en memoria
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId)));
     const takenTimes = snap.docs.map(d => d.data()).filter(a => a.date >= start && a.date <= end).map(a => a.time);
 
@@ -390,13 +407,9 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
     const b = writeBatch(adminDb); 
     const pid = patient.curp.toUpperCase().trim();
     
-    // Saneamiento de duplicados: Buscar si ya existe un registro con ese CURP pero con ID aleatorio
     const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', pid)));
-    snapCheck.forEach(d => {
-        if (d.id !== pid) b.delete(d.ref); // Borrar el registro con ID incorrecto
-    });
+    snapCheck.forEach(d => { if (d.id !== pid) b.delete(d.ref); });
 
-    // Guardar siempre con el CURP como ID
     b.set(doc(adminDb, 'patients', pid), { ...patient, id: pid, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
     
     const cSnap = await getDoc(doc(adminDb, 'clinics', appointment.clinicId));
@@ -459,28 +472,33 @@ export async function getPatientPrescriptionsCountTodayAction(pid: string) {
     const s = await getDocs(q); return s.docs.filter(d => (d.data().date || d.data().createdAt) >= start).length;
 }
 
-// --- FARMACIA / ALMACÉN ---
+// --- FARMACIA / ALMACÉN (MAPEO INTELIGENTE DE EXCEL) ---
 export async function getMedications() { const s = await getDocs(query(collection(adminDb, 'medications'), limit(5000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function getSupplies() { const s = await getDocs(query(collection(adminDb, 'supplies'), limit(5000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
+
 export async function bulkInsertMedications(items: any[], source: string) { 
     const findFld = (row: any, searchNames: string[]) => {
-        const keys = Object.keys(row); const normalize = (s: string) => String(s || '').toUpperCase().replace(/\s+/g, '').replace(/[^A-Z0-9]/g, '');
-        const searchNormalized = searchNames.map(normalize); const foundKey = keys.find(k => searchNormalized.includes(normalize(k))); return foundKey ? row[foundKey] : undefined;
+        const keys = Object.keys(row); 
+        const normalize = (s: string) => String(s || '').toUpperCase().trim().replace(/[^A-Z0-9]/g, '');
+        const searchNormalized = searchNames.map(normalize); 
+        const foundKey = keys.find(k => searchNormalized.includes(normalize(k))); 
+        return foundKey ? row[foundKey] : undefined;
     };
     const colName = source === 'EXTERNO' ? 'supplies' : 'medications';
     for (let i = 0; i < items.length; i += 400) {
         const batch = writeBatch(adminDb);
         items.slice(i, i + 400).forEach(raw => {
-            const rawFecha = findFld(raw, ['FECHA CADUCIDAD', 'FECHA DE CADUCIDAD', 'CADUCIDAD', 'VENCIMIENTO', 'VENCE']);
+            const rawFecha = findFld(raw, ['FECHA CADUCIDAD', 'CADUCIDAD', 'VENCIMIENTO', 'VENCE', 'FECHA VENCIMIENTO']);
             let fCad = 'SIN FECHA';
             if (rawFecha instanceof Date) fCad = rawFecha.toLocaleDateString('es-MX');
             else if (typeof rawFecha === 'number' && rawFecha > 40000) fCad = new Date((rawFecha - 25569) * 86400 * 1000).toLocaleDateString('es-MX');
             else fCad = String(rawFecha || 'SIN FECHA').trim();
+            
             const mapped: any = {
-                claveCuadroBasico: String(findFld(raw, ['CLAVE', 'CODIGO']) || '').trim(),
-                descripcion: String(findFld(raw, ['DENOMINACION', 'DESCRIPCION', 'NOMBRE']) || '').toUpperCase().trim(),
-                existencia: Number(findFld(raw, ['EXISTENCIA', 'CANTIDAD', 'STOCK']) || 0),
-                lote: String(findFld(raw, ['LOTE']) || 'S/L').toUpperCase().trim(),
+                claveCuadroBasico: String(findFld(raw, ['CLAVE', 'CODIGO', 'CLAVE DE CUADRO BASICO', 'CUI']) || '').trim(),
+                descripcion: String(findFld(raw, ['DENOMINACION GENERICA', 'NOMBRE DEL MEDICAMENTO', 'CONCEPTO', 'DENOMINACION', 'DESCRIPCION', 'NOMBRE', 'ARTICULO']) || '').toUpperCase().trim(),
+                existencia: Number(findFld(raw, ['EXISTENCIA', 'CANTIDAD', 'STOCK', 'SALDO', 'DISPONIBLE']) || 0),
+                lote: String(findFld(raw, ['NUMERO DE LOTE', 'LOTE', 'NUMEROLOTE', 'LOTES']) || 'S/L').toUpperCase().trim(),
                 fechaCaducidad: fCad, fuenteEtiqueta: source, updatedAt: new Date().toISOString()
             };
             if (!mapped.descripcion) return;
@@ -667,7 +685,6 @@ export async function deleteAllCie10Glossary() { const s = await getDocs(collect
 // --- GUARDADO ESPECIALIZADO DE CITAS (PARA EVITAR DUPLICADOS) ---
 export async function saveNewLabAppointment(a: any, p: any) {
     const b = writeBatch(adminDb); const pid = p.curp.toUpperCase().trim();
-    // Limpieza de duplicados antigua
     const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', pid)));
     snapCheck.forEach(d => { if (d.id !== pid) b.delete(d.ref); });
 
