@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -28,13 +29,14 @@ import {
   Calendar as CalendarIcon,
   FileText,
   Filter,
-  Trash2
+  Trash2,
+  AlertTriangle,
+  DatabaseZap
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { 
   getPatients, 
   getPatientCounts, 
-  deletePatient, 
   deletePatients,
   updatePatientStatus, 
   savePatient, 
@@ -94,6 +96,17 @@ import { DateRange } from 'react-day-picker';
 import { Calendar } from '../ui/calendar';
 import { generateArchiveListPDF, downloadExcel } from '@/lib/report-helpers';
 import { Label } from '../ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 type DateFilterType = 'today' | 'tomorrow' | 'week' | 'month' | 'range';
 
@@ -138,10 +151,11 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const { toast } = useToast();
 
   const loadData = useCallback(async (manualSearch = false) => {
-    // Requerimiento Senior: Si hay un estatus seleccionado (no Total), el botón de búsqueda no va a la BD.
-    // El filtrado local lo maneja el useMemo 'visiblePatients'.
+    // Si hay un estatus seleccionado (no Total), el botón de búsqueda solo refresca conteos
     if (manualSearch && activeTab === 'patients' && statusFilter !== 'Total') {
         setHasSearched(true);
+        const countsData = await getPatientCounts();
+        setCounts(countsData);
         return;
     }
 
@@ -186,9 +200,19 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   }, []);
 
   /**
-   * REQUERIMIENTO SENIOR: Filtrado local para estatus específicos.
-   * Esto permite buscar entre miles de registros cargados instantáneamente.
+   * REQUERIMIENTO SENIOR: Búsqueda por marcado automático
+   * Si estamos en "Baja Temporal" y buscamos un expediente exacto, lo marcamos automáticamente.
    */
+  useEffect(() => {
+    if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 3) {
+        const exactMatch = patients.find(p => p.expediente === searchExpediente.trim());
+        if (exactMatch && !selectedPatientIds.includes(exactMatch.id)) {
+            setSelectedPatientIds(prev => [...prev, exactMatch.id]);
+            toast({ title: "Expediente Marcado", description: `${exactMatch.name} añadido a la selección.` });
+        }
+    }
+  }, [searchExpediente, patients, statusFilter, selectedPatientIds, toast]);
+
   const visiblePatients = useMemo(() => {
     if (statusFilter === 'Total') return patients;
     
@@ -221,7 +245,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
       setHasSearched(true);
       startSubmitTransition(async () => {
           setIsDataLoading(true);
-          // Al hacer clic, cargamos TODOS los registros de ese estatus para filtrado local posterior
           const patientsData = await getPatients({ status: status });
           setPatients(patientsData);
           setCounts(await getPatientCounts());
@@ -242,43 +265,57 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const handleEdit = (patient: Patient) => { setEditingPatient(patient); setIsEditOpen(true); };
   const handleSchedule = (patient: Patient) => { setSchedulingPatient(patient); };
   
-  const handleDelete = (patientId: string) => {
+  /** REQUERIMIENTO SENIOR: La "eliminación" inicial es mover a Baja Definitiva */
+  const handleDeleteLogical = (patientId: string) => {
     if (isReadOnly) return;
-    // Eliminación Optimista: Quitar de la lista inmediatamente sin esperar a la BD
     setPatients(prev => prev.filter(p => p.id !== patientId));
     setSelectedPatientIds(prev => prev.filter(id => id !== patientId));
     
     startSubmitTransition(async () => {
-      const result = await deletePatient(patientId);
+      const result = await updatePatientStatus(patientId, PatientStatusEnum.BajaDefinitiva);
       if(!result.success) {
-        toast({ title: "Error al eliminar", variant: 'destructive'});
-        loadData(true); // Revertir si falló
+        toast({ title: "Error al procesar baja", variant: 'destructive'});
+        loadData(true);
       } else {
-        toast({ title: "Registro eliminado de forma eficiente" });
+        toast({ title: "Paciente movido a Baja Definitiva" });
       }
     });
   }
 
-  const handleBulkDelete = () => {
+  const handleBulkToDefinitive = () => {
       if (selectedPatientIds.length === 0 || isReadOnly) return;
       const count = selectedPatientIds.length;
       
-      // Optimismo masivo
       setPatients(prev => prev.filter(p => !selectedPatientIds.includes(p.id)));
-      const idsToDelete = [...selectedPatientIds];
+      const idsToChange = [...selectedPatientIds];
       setSelectedPatientIds([]);
 
       startSubmitTransition(async () => {
-          const result = await deletePatients(idsToDelete);
-          if (result.success) {
-              toast({ title: "Eliminación Masiva", description: `Se eliminaron ${count} registros correctamente.` });
-              setCounts(await getPatientCounts());
-          } else {
-              toast({ title: "Error en proceso masivo", variant: 'destructive' });
-              loadData(true);
+          for (const id of idsToChange) {
+              await updatePatientStatus(id, PatientStatusEnum.BajaDefinitiva);
           }
+          toast({ title: "Baja Definitiva Masiva", description: `${count} pacientes marcados como Baja Definitiva.` });
+          setCounts(await getPatientCounts());
       });
   };
+
+  /** REQUERIMIENTO SENIOR: Borrado físico total de la BD solo para Baja Definitiva */
+  const handlePhysicalDeleteAll = () => {
+    if (isReadOnly || statusFilter !== PatientStatusEnum.BajaDefinitiva) return;
+    const ids = patients.map(p => p.id);
+    if (ids.length === 0) return;
+
+    startSubmitTransition(async () => {
+        setIsDataLoading(true);
+        const result = await deletePatients(ids);
+        if (result.success) {
+            toast({ title: "Padrón Depurado", description: `Se han eliminado físicamente ${ids.length} registros.` });
+            setPatients([]);
+            setCounts(await getPatientCounts());
+        }
+        setIsDataLoading(false);
+    });
+  }
 
   const handleStatusChange = (patientId: string, newStatus: PatientStatusEnum) => {
     if (isReadOnly) return;
@@ -396,7 +433,10 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">Nombre o Apellidos</Label><Input placeholder="Buscar por nombre..." value={searchName} onChange={e => setSearchName(e.target.value.toUpperCase())} className="h-11 border-primary/20" /></div>
                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">CURP</Label><Input placeholder="CURP (18 carac)..." value={searchCurp} onChange={e => setSearchCurp(e.target.value.toUpperCase())} className="h-11 border-primary/20" maxLength={18} /></div>
-                    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">No. Expediente</Label><Input placeholder="Expediente..." value={searchExpediente} onChange={e => setSearchExpediente(e.target.value)} className="h-11 border-primary/20" /></div>
+                    <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">No. Expediente {statusFilter === PatientStatusEnum.Baja && "(Marca auto)"}</Label>
+                        <Input placeholder="Expediente..." value={searchExpediente} onChange={e => setSearchExpediente(e.target.value)} className="h-11 border-primary/20" />
+                    </div>
                     <div className="flex gap-2 items-end">
                         <Button onClick={() => loadData(true)} className="h-11 flex-1 font-black bg-primary hover:bg-primary/90" disabled={isDataLoading}>{isDataLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />} INICIAR BÚSQUEDA</Button>
                         <Button variant="outline" onClick={handleClearSearch} className="h-11"><X className="h-4 w-4" /></Button>
@@ -407,11 +447,35 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                         {!isReadOnly && <><Button onClick={handleAddNew} size="sm" className="font-bold"><PlusCircle className="mr-2 h-4 w-4" /> Nuevo Paciente</Button><Button onClick={() => setIsUploadOpen(true)} variant="secondary" size="sm" className="font-bold"><Upload className="mr-2 h-4 w-4" /> Cargar Excel</Button></>}
                         <Button onClick={handleExportExcel} variant="outline" size="sm" className="font-bold"><Download className="mr-2 h-4 w-4" /> Exportar ({visiblePatients.length})</Button>
                     </div>
-                    {selectedPatientIds.length > 0 && !isReadOnly && (
-                        <Button variant="destructive" size="sm" className="font-black animate-in fade-in zoom-in" onClick={handleBulkDelete}>
-                            <Trash2 className="mr-2 h-4 w-4" /> ELIMINAR SELECCIONADOS ({selectedPatientIds.length})
-                        </Button>
-                    )}
+                    <div className="flex items-center gap-2">
+                        {statusFilter === PatientStatusEnum.BajaDefinitiva && !isReadOnly && patients.length > 0 && (
+                             <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="destructive" size="sm" className="font-black bg-red-700">
+                                        <DatabaseZap className="mr-2 h-4 w-4" /> VACIAR BASE DE DATOS (FÍSICO)
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle className="text-red-700 flex items-center gap-2"><AlertTriangle /> ACCIÓN IRREVERSIBLE</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Estás a punto de eliminar físicamente a <span className="font-bold">{patients.length}</span> pacientes de la base de datos de Baja Definitiva. 
+                                            Esta información no podrá ser recuperada. ¿Deseas continuar?
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction onClick={handlePhysicalDeleteAll} className="bg-red-700 hover:bg-red-800 font-bold">SÍ, BORRAR DE LA BD</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                             </AlertDialog>
+                        )}
+                        {selectedPatientIds.length > 0 && !isReadOnly && (
+                            <Button variant="destructive" size="sm" className="font-black animate-in fade-in zoom-in" onClick={handleBulkToDefinitive}>
+                                <UserX className="mr-2 h-4 w-4" /> MOVER A BAJA DEFINITIVA ({selectedPatientIds.length})
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </CardHeader>
             <CardContent className="relative min-h-[400px] pt-4">
@@ -425,7 +489,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                   <PatientList 
                     patients={paginatedPatients} 
                     onEdit={handleEdit} 
-                    onDelete={handleDelete} 
+                    onDelete={handleDeleteLogical} 
                     onStatusChange={handleStatusChange} 
                     onSchedule={handleSchedule} 
                     isSubmitting={isSubmitting} 

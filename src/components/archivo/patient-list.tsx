@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -225,29 +226,26 @@ export function PatientList({
                             <DropdownMenuItem onClick={() => onStatusChange(patient.id, PatientStatusEnum.Baja)} disabled={isSubmitting || patient.status === PatientStatusEnum.Baja}>
                                 <Clock className="mr-2 h-4 w-4 text-yellow-500" /> Baja Temporal
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onStatusChange(patient.id, PatientStatusEnum.BajaDefinitiva)} disabled={isSubmitting || patient.status === PatientStatusEnum.BajaDefinitiva}>
-                                <UserX className="mr-2 h-4 w-4 text-red-500" /> Baja Definitiva
-                            </DropdownMenuItem>
                             
                             <DropdownMenuSeparator />
                             <AlertDialog>
                             <AlertDialogTrigger asChild>
                                 <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive focus:text-destructive" disabled={isSubmitting}>
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Eliminar Paciente
+                                    <UserX className="mr-2 h-4 w-4" />
+                                    Mover a Baja Definitiva
                                 </DropdownMenuItem>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                                 <AlertDialogHeader>
-                                    <AlertDialogTitle>¿Eliminar este registro?</AlertDialogTitle>
+                                    <AlertDialogTitle>¿Confirmar Baja Definitiva?</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                        Esta acción quitará a <span className="font-bold">{patient.name}</span> del padrón permanentemente.
+                                        El paciente <span className="font-bold">{patient.name}</span> será movido al listado de depuración definitiva.
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                     <AlertDialogAction onClick={() => onDelete(patient.id)} className="bg-destructive hover:bg-destructive/90 font-bold">
-                                        Confirmar Eliminación
+                                        Confirmar Baja
                                     </AlertDialogAction>
                                 </AlertDialogFooter>
                             </AlertDialogContent>
