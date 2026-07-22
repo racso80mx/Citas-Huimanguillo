@@ -110,7 +110,6 @@ type DateFilterType = 'today' | 'tomorrow' | 'week' | 'month' | 'range';
 export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: () => void, isReadOnly?: boolean }) {
   const [activeTab, setActiveTab] = useState('patients');
 
-  // Filtros de búsqueda (Manuales)
   const [searchName, setSearchName] = useState('');
   const [searchCurp, setSearchCurp] = useState('');
   const [searchExpediente, setSearchExpediente] = useState('');
@@ -145,15 +144,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const { toast } = useToast();
 
   const loadData = useCallback(async (manualSearch = false) => {
-    // REQUERIMIENTO SENIOR: Búsqueda local si hay estatus seleccionado
-    if (manualSearch && activeTab === 'patients' && statusFilter !== 'Total') {
-        setHasSearched(true);
-        // Actualizamos conteos pero no volvemos a bajar la lista completa
-        const countsData = await getPatientCounts();
-        setCounts(countsData);
-        return;
-    }
-
     setIsDataLoading(true);
     if (manualSearch) setHasSearched(true);
     
@@ -166,12 +156,17 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
       setServiceTypes(serviceTypesData);
       setColonias(coloniasData);
 
-      if (activeTab === 'appointments' || manualSearch) {
+      if (activeTab === 'appointments') {
           const apps = await getAppointments();
           setAllAppointments(apps);
       }
 
-      if (manualSearch && activeTab === 'patients') {
+      // Si no es búsqueda manual y es la primera carga, traemos vigentes
+      if (!hasSearched && !manualSearch && activeTab === 'patients') {
+          const patientsData = await getPatients({ status: statusFilter, limitNum: 10000 });
+          setPatients(patientsData);
+          setHasSearched(true);
+      } else if (manualSearch && activeTab === 'patients') {
           const searchOptions: any = { 
               status: statusFilter === 'Total' ? undefined : statusFilter,
               searchCurp: searchCurp.toUpperCase().trim() || undefined,
@@ -189,7 +184,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     } finally {
       setIsDataLoading(false);
     }
-  }, [statusFilter, searchName, searchCurp, searchExpediente, activeTab, toast]);
+  }, [statusFilter, searchName, searchCurp, searchExpediente, activeTab, toast, hasSearched]);
   
   useEffect(() => {
     loadData(false);
@@ -197,20 +192,22 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
   /**
    * REQUERIMIENTO SENIOR: Búsqueda por marcado automático
-   * Si estamos en "Baja Temporal" y buscamos un expediente, lo marcamos automáticamente.
+   * En Baja Temporal, al buscar expediente se marca automáticamente en lugar de filtrar.
    */
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 3) {
-        const exactMatch = patients.find(p => String(p.expediente || '').trim() === searchExpediente.trim());
+        const term = searchExpediente.trim();
+        const exactMatch = patients.find(p => String(p.expediente || '').trim() === term);
         if (exactMatch && !selectedPatientIds.includes(exactMatch.id)) {
             setSelectedPatientIds(prev => [...prev, exactMatch.id]);
-            toast({ title: "Expediente Marcado", description: `${exactMatch.name} añadido a la selección.` });
+            toast({ title: "Marcado automático", description: `${exactMatch.name} seleccionado.` });
         }
     }
   }, [searchExpediente, patients, statusFilter, selectedPatientIds, toast]);
 
   const visiblePatients = useMemo(() => {
-    // Si es Total traemos lo que hay en BD. Si hay filtro de estatus, aplicamos filtrado local inteligente.
+    // Si estamos en Baja Temporal, no filtramos la lista para permitir el marcado fluido
+    if (statusFilter === PatientStatusEnum.Baja) return patients;
     if (statusFilter === 'Total') return patients;
     
     const sName = searchName.toUpperCase().trim();
@@ -223,7 +220,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
-        // FIX: String cast to avoid .includes error on numeric values
         const expMatch = !sExp || String(p.expediente || '').includes(sExp);
         return nameMatch && curpMatch && expMatch;
     });
@@ -231,7 +227,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
   const handleClearSearch = () => {
       setSearchName(''); setSearchCurp(''); setSearchExpediente('');
-      setPatients([]); setHasSearched(false); setSelectedPatientIds([]);
+      setSelectedPatientIds([]);
   };
 
   const handleStatusCardClick = (status: 'Total' | PatientStatusEnum) => {
@@ -259,48 +255,50 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const handleEdit = (patient: Patient) => { setEditingPatient(patient); setIsEditOpen(true); };
   const handleSchedule = (patient: Patient) => { setSchedulingPatient(patient); };
   
-  /** REQUERIMIENTO SENIOR: Eliminación Lógica (Paso 1) */
+  /** REQUERIMIENTO SENIOR: Eliminación Lógica a Baja Definitiva con Optimismo */
   const handleDeleteLogical = (patientId: string) => {
     if (isReadOnly) return;
+    // Eliminación optimista de la lista actual
     setPatients(prev => prev.filter(p => p.id !== patientId));
     setSelectedPatientIds(prev => prev.filter(id => id !== patientId));
     
     startSubmitTransition(async () => {
-      const result = await updatePatientStatus(patientId, PatientStatusEnum.BajaDefinitiva);
-      if(!result.success) {
-        toast({ title: "Error al procesar baja", variant: 'destructive'});
-        loadData(true);
-      } else {
-        toast({ title: "Paciente movido a Baja Definitiva" });
-      }
+      await updatePatientStatus(patientId, PatientStatusEnum.BajaDefinitiva);
+      toast({ title: "Movido a Baja Definitiva" });
+      const newCounts = await getPatientCounts();
+      setCounts(newCounts);
     });
   }
 
   const handleBulkToDefinitive = () => {
       if (selectedPatientIds.length === 0 || isReadOnly) return;
-      const count = selectedPatientIds.length;
-      setPatients(prev => prev.filter(p => !selectedPatientIds.includes(p.id)));
       const idsToChange = [...selectedPatientIds];
+      setPatients(prev => prev.filter(p => !idsToChange.includes(p.id)));
       setSelectedPatientIds([]);
+      
       startSubmitTransition(async () => {
-          for (const id of idsToChange) { await updatePatientStatus(id, PatientStatusEnum.BajaDefinitiva); }
-          toast({ title: "Baja Definitiva Masiva", description: `${count} pacientes marcados.` });
-          setCounts(await getPatientCounts());
+          for (const id of idsToChange) { 
+              await updatePatientStatus(id, PatientStatusEnum.BajaDefinitiva); 
+          }
+          toast({ title: "Baja Definitiva Masiva", description: `${idsToChange.length} registros actualizados.` });
+          const newCounts = await getPatientCounts();
+          setCounts(newCounts);
       });
   };
 
-  /** REQUERIMIENTO SENIOR: Borrado físico total (Paso 2) */
   const handlePhysicalDeleteAll = () => {
     if (isReadOnly || statusFilter !== PatientStatusEnum.BajaDefinitiva) return;
     const ids = patients.map(p => p.id);
     if (ids.length === 0) return;
+    
     startSubmitTransition(async () => {
         setIsDataLoading(true);
         const result = await deletePatients(ids);
         if (result.success) {
-            toast({ title: "Padrón Depurado", description: `Se han eliminado físicamente ${ids.length} registros.` });
+            toast({ title: "Padrón Depurado", description: `Eliminados físicamente ${ids.length} registros.` });
             setPatients([]);
-            setCounts(await getPatientCounts());
+            const newCounts = await getPatientCounts();
+            setCounts(newCounts);
         }
         setIsDataLoading(false);
     });
@@ -309,8 +307,10 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const handleStatusChange = (patientId: string, newStatus: PatientStatusEnum) => {
     if (isReadOnly) return;
     startSubmitTransition(async () => {
-      const result = await updatePatientStatus(patientId, newStatus);
-       if(result.success) { toast({ title: "Estado Actualizado" }); loadData(true); }
+      await updatePatientStatus(patientId, newStatus);
+      toast({ title: "Estado Actualizado" });
+      // Recarga optimista
+      setPatients(prev => prev.filter(p => p.id !== patientId));
     });
   }
   
@@ -328,30 +328,37 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   }
 
   const appointmentsToDisplay = useMemo(() => {
-    let filtered = allAppointments.filter(app => {
-        if (selectedClinicType !== 'all') {
-            const sType = serviceTypes.find(st => st.id === app.clinicId || clinics.find(c => c.id === app.clinicId)?.serviceTypeId === selectedClinicType);
-            if (!sType) return false;
-        }
-        if (selectedClinics.length > 0 && !selectedClinics.includes(app.clinicId)) return false;
-        const now = new Date(); const appDate = parseISO(app.date);
+    if (allAppointments.length === 0) return [];
+    const now = new Date();
+    let result = allAppointments.filter(app => {
+        const appDate = parseISO(app.date);
         switch (dateFilter) {
             case 'tomorrow': return isWithinInterval(appDate, { start: startOfDay(addDays(now, 1)), end: endOfDay(addDays(now, 1)) });
             case 'week': return isWithinInterval(appDate, { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) });
             case 'month': return isWithinInterval(appDate, { start: startOfMonth(now), end: endOfMonth(now) });
-            case 'range': return dateRange?.from ? (appDate >= startOfDay(dateRange.from) && appDate <= endOfDay(dateRange.to || dateRange.from)) : true;
-            case 'today': default: return isWithinInterval(appDate, { start: startOfDay(now), end: endOfDay(now) });
+            case 'range':
+                if (dateRange?.from) return appDate >= startOfDay(dateRange.from) && appDate <= endOfDay(dateRange.to || dateRange.from);
+                return true;
+            case 'today':
+            default: return isWithinInterval(appDate, { start: startOfDay(now), end: endOfDay(now) });
         }
     });
+
+    if (selectedClinicType !== 'all') {
+        result = result.filter(a => clinics.find(c => c.id === a.clinicId)?.serviceTypeId === selectedClinicType);
+    }
+    if (selectedClinics.length > 0) {
+        result = result.filter(a => selectedClinics.includes(a.clinicId));
+    }
     if (searchTerm) {
         const t = searchTerm.toUpperCase();
-        filtered = filtered.filter(a => {
+        result = result.filter(a => {
             const n = `${a.patient?.name || ''} ${a.patient?.paternalLastName || ''} ${a.patient?.maternalLastName || ''}`.toUpperCase();
             return n.includes(t) || (a.patient?.curp || '').toUpperCase().includes(t) || (a.appointmentNumber || '').toUpperCase().includes(t);
         });
     }
-    return filtered.sort((a, b) => a.time.localeCompare(b.time));
-  }, [allAppointments, selectedClinics, selectedClinicType, dateFilter, dateRange, serviceTypes, clinics, searchTerm]);
+    return result.sort((a,b) => a.time.localeCompare(b.time));
+  }, [allAppointments, dateFilter, dateRange, selectedClinicType, selectedClinics, searchTerm, clinics]);
 
   return (
     <div className="container mx-auto px-4 py-6">
@@ -403,7 +410,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                         <Input placeholder="Expediente..." value={searchExpediente} onChange={e => setSearchExpediente(e.target.value)} className="h-11 border-primary/20" />
                     </div>
                     <div className="flex gap-2 items-end">
-                        <Button onClick={() => loadData(true)} className="h-11 flex-1 font-black bg-primary hover:bg-primary/90" disabled={isDataLoading}>{isDataLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />} INICIAR BÚSQUEDA</Button>
+                        <Button onClick={() => loadData(true)} className="h-11 flex-1 font-black bg-primary hover:bg-primary/90" disabled={isDataLoading}>{isDataLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />} FILTRAR LISTA</Button>
                         <Button variant="outline" onClick={handleClearSearch} className="h-11"><X className="h-4 w-4" /></Button>
                     </div>
                 </div>
@@ -419,7 +426,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                                     <Button variant="destructive" size="sm" className="font-black bg-red-700"><DatabaseZap className="mr-2 h-4 w-4" /> VACIAR BASE DE DATOS (FÍSICO)</Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
-                                    <AlertDialogHeader><AlertDialogTitle className="text-red-700 flex items-center gap-2"><AlertTriangle /> ACCIÓN IRREVERSIBLE</AlertDialogTitle><AlertDialogDescription>Estás a punto de eliminar físicamente a <span className="font-bold">{patients.length}</span> registros de Baja Definitiva. Esta información no podrá ser recuperada. ¿Continuar?</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogHeader><AlertDialogTitle className="text-red-700 flex items-center gap-2"><AlertTriangle /> ACCIÓN IRREVERSIBLE</AlertDialogTitle><AlertDialogDescription>Estás a punto de eliminar físicamente a <span className="font-bold">{patients.length}</span> registros de Baja Definitiva. Esta acción no se puede deshacer. ¿Continuar?</AlertDialogDescription></AlertDialogHeader>
                                     <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handlePhysicalDeleteAll} className="bg-red-700 hover:bg-red-800 font-bold">SÍ, BORRAR DE LA BD</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                              </AlertDialog>
@@ -434,10 +441,8 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
             </CardHeader>
             <CardContent className="relative min-h-[400px] pt-4">
               {isDataLoading && <div className="absolute inset-0 z-50 bg-background/70 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-lg"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="text-xs font-black uppercase tracking-widest mt-4 animate-pulse">Consultando Padrón...</p></div>}
-              {!hasSearched ? (
-                  <div className="flex flex-col items-center justify-center py-32 opacity-40 gap-4"><Users className="h-16 w-16" /><p className="text-lg font-black uppercase tracking-widest">Esperando Búsqueda</p></div>
-              ) : visiblePatients.length === 0 && !isDataLoading ? (
-                  <div className="text-center py-32 opacity-60"><UserX className="h-20 w-20 mx-auto mb-4" /><p className="text-xl font-bold uppercase">Sin coincidencias</p></div>
+              {visiblePatients.length === 0 && !isDataLoading ? (
+                  <div className="text-center py-32 opacity-60"><UserX className="h-20 w-20 mx-auto mb-4" /><p className="text-xl font-bold uppercase">Sin registros en este estatus</p></div>
               ) : (
                 <div className={cn(isDataLoading && "opacity-40 blur-[1px]")}>
                   <PatientList patients={paginatedPatients} onEdit={handleEdit} onDelete={handleDeleteLogical} onStatusChange={handleStatusChange} onSchedule={handleSchedule} isSubmitting={isSubmitting} isReadOnly={isReadOnly} selectedIds={selectedPatientIds} onSelectionChange={setSelectedPatientIds} />
@@ -454,7 +459,69 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
             </CardContent>
           </Card>
         </TabsContent>
-        {/* Agenda Tab content omitted as it remains the same as previous version but withhydrate fix */}
+
+        <TabsContent value="appointments" className="space-y-4 pt-4">
+           <Card>
+                <CardHeader className="pb-4 bg-muted/5">
+                    <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+                        <CardTitle className="flex items-center gap-2 font-bold"><CalendarIcon className="h-5 w-5 text-primary" /> Filtros de Agenda</CardTitle>
+                        <div className="flex flex-wrap items-center gap-4">
+                            <div className="flex items-center gap-1 bg-background p-1 border rounded-lg shadow-sm">
+                                {['today', 'tomorrow', 'week', 'month'].map((f) => (
+                                    <Button key={f} variant={dateFilter === f ? 'default' : 'ghost'} onClick={() => setDateFilter(f as any)} size="sm" className="capitalize">{f === 'today' ? 'Hoy' : f === 'tomorrow' ? 'Mañana' : f === 'week' ? 'Semana' : 'Mes'}</Button>
+                                ))}
+                            </div>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" size="sm" className="h-9 min-w-[160px]"><CalendarIcon className="mr-2 h-4 w-4" /> {dateRange?.from ? (dateRange.to ? `${format(dateRange.from, 'dd/MM')} - ${format(dateRange.to, 'dd/MM')}` : format(dateRange.from, 'dd/MM')) : "Rango"}</Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="end"><Calendar mode="range" selected={dateRange} onSelect={r => { setDateRange(r); setDateFilter('range'); }} numberOfMonths={2} locale={es} /></PopoverContent>
+                            </Popover>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4 mt-6">
+                        <Select value={selectedClinicType} onValueChange={v => { setSelectedClinicType(v); setSelectedClinics([]); }}>
+                            <SelectTrigger className="h-10 w-[200px] bg-background"><SelectValue placeholder="Todas las categorías" /></SelectTrigger>
+                            <SelectContent><SelectItem value="all">Todas las Categorías</SelectItem>{serviceTypes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" className="h-10 border-dashed bg-background">
+                                    <PlusCircle className="mr-2 h-4 w-4 text-primary" /> Filtrar Consultorio {selectedClinics.length > 0 && <Badge className="ml-2 px-1">{selectedClinics.length}</Badge>}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[250px] p-0" align="start">
+                                <Command>
+                                    <CommandInput placeholder="Buscar consultorio..." />
+                                    <CommandList>
+                                        <CommandEmpty>No hay resultados.</CommandEmpty>
+                                        <CommandGroup>
+                                            {clinics.filter(c => selectedClinicType === 'all' || c.serviceTypeId === selectedClinicType).map(c => (
+                                                <CommandItem key={c.id} onSelect={() => setSelectedClinics(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])}>
+                                                    <div className={cn("mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary", selectedClinics.includes(c.id) ? "bg-primary text-white" : "opacity-50 [&_svg]:invisible")}><Users className="h-4 w-4" /></div>
+                                                    <span className="text-xs font-bold uppercase">{c.name}</span>
+                                                </CommandItem>
+                                            ))}
+                                        </CommandGroup>
+                                    </CommandList>
+                                </Command>
+                            </PopoverContent>
+                        </Popover>
+                        <div className="relative flex-1 min-w-[250px]">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input placeholder="Buscar por Nombre, CURP o Folio..." className="pl-9 h-10 border-primary/20 bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                        </div>
+                        <div className="flex gap-2">
+                             <Button variant="outline" size="icon" onClick={() => loadData(true)} className="h-10 w-10"><RefreshCw className={cn("h-4 w-4", isDataLoading && "animate-spin")} /></Button>
+                             <Button variant="outline" size="sm" onClick={() => generateArchiveListPDF(appointmentsToDisplay, 'Agenda del Hospital', `Filtro: ${dateFilter} - ${appointmentsToDisplay.length} pacientes`)} className="font-bold h-10 px-4 text-red-700 border-red-200"><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent className="pt-6">
+                    <AppointmentList appointments={appointmentsToDisplay} clinics={clinics} isAdmin={!isReadOnly} onDelete={async (id) => { await deleteAppointment(id); loadData(true); }} onEditSuccess={() => loadData(true)} />
+                </CardContent>
+           </Card>
+        </TabsContent>
       </Tabs>
 
       {isEditOpen && <EditPatientDialog isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} patient={editingPatient} onSave={handleSavePatient} isSaving={isSubmitting} />}

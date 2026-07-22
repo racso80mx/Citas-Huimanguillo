@@ -1,3 +1,4 @@
+
 'use client';
 import type { Appointment, Clinic, LabAppointment, XRayAppointment, XRayStudy, UltrasoundAppointment, UltrasoundStudy, VaccineAppointment, Vaccine, Prescription, Patient } from "./definitions";
 import { format, parseISO, isValid } from 'date-fns';
@@ -56,11 +57,12 @@ function addDateTimeHighlight(doc: any, date: string, time: string, currentY: nu
 
     doc.setTextColor(PRIMARY_COLOR[0], PRIMARY_COLOR[1], PRIMARY_COLOR[2]);
     doc.setFontSize(17);
-    const formattedDate = format(new Date(date), "eeee, dd 'de' MMMM 'de' yyyy", { locale: es }).toUpperCase();
+    const dateObj = typeof date === 'string' ? parseISO(date) : new Date(date);
+    const formattedDate = isValid(dateObj) ? format(dateObj, "eeee, dd 'de' MMMM 'de' yyyy", { locale: es }).toUpperCase() : 'FECHA NO VÁLIDA';
     doc.text(formattedDate, 105, currentY + 10, { align: 'center' });
     
     doc.setFontSize(22);
-    doc.text(time.includes('Ficha') ? time.toUpperCase() : `HORA: ${time} HRS`, 105, currentY + 20, { align: 'center' });
+    doc.text(String(time || 'S/H').includes('Ficha') ? String(time).toUpperCase() : `HORA: ${time} HRS`, 105, currentY + 20, { align: 'center' });
     return currentY + 35;
 }
 
@@ -89,7 +91,7 @@ export async function downloadExcel(data: any[], filename: string) {
             let fechaCita = 'N/A';
             if (item.date) {
                 try {
-                    const parsed = typeof item.date === 'string' ? parseISO(item.date) : item.date;
+                    const parsed = typeof item.date === 'string' ? parseISO(item.date) : new Date(item.date);
                     if (isValid(parsed)) {
                         fechaCita = format(parsed, 'dd/MM/yyyy');
                     }
@@ -99,7 +101,7 @@ export async function downloadExcel(data: any[], filename: string) {
             let fechaRegistro = 'N/A';
             if (item.createdAt) {
                 try {
-                    const parsedReg = typeof item.createdAt === 'string' ? parseISO(item.createdAt) : item.createdAt;
+                    const parsedReg = typeof item.createdAt === 'string' ? parseISO(item.createdAt) : new Date(item.createdAt);
                     if (isValid(parsedReg)) {
                         fechaRegistro = format(parsedReg, 'dd/MM/yyyy HH:mm', { locale: es });
                     }
@@ -107,14 +109,17 @@ export async function downloadExcel(data: any[], filename: string) {
             }
 
             const baseData: any = {
-                'Folio': item.appointmentNumber,
+                'Folio': item.appointmentNumber || 'N/A',
+                'Expediente': item.expediente || item.patient?.expediente || 'N/A',
                 'Fecha Cita': fechaCita,
-                'Hora': item.time,
+                'Hora': item.time || 'N/A',
                 'Fecha Registro': fechaRegistro,
-                'Estado': item.status,
-                'Paciente': item.patient ? `${item.patient.name} ${item.patient.paternalLastName} ${item.patient.maternalLastName}`: 'N/A',
-                'CURP': item.patient?.curp || 'N/A',
-                'Teléfono': item.patient?.phoneNumber || 'N/A',
+                'Estado': item.status || 'N/A',
+                'Paciente': item.patient ? `${item.patient.name} ${item.patient.paternalLastName} ${item.patient.maternalLastName}`: (item.name ? `${item.name} ${item.paternalLastName} ${item.maternalLastName}` : 'N/A'),
+                'CURP': item.patient?.curp || item.curp || 'N/A',
+                'Teléfono': item.patient?.phoneNumber || item.phoneNumber || 'N/A',
+                'Municipio': item.coloniaName || item.patient?.coloniaName || 'N/A',
+                'Estatus Padrón': item.status || 'N/A'
             };
 
             if (isLab) {
@@ -122,15 +127,13 @@ export async function downloadExcel(data: any[], filename: string) {
             } else if (isXRay || isUltrasound) {
                  baseData['Estudio'] = item.studyName;
             } else if (isVaccine) {
-                baseData['Municipio'] = item.coloniaName || 'N/A';
                 baseData['Vacunas'] = (item.vaccines || []).map((v: any) => v.name).join(', ');
                 baseData['Recién Nacido'] = item.patientType === 'Recién Nacido' ? 'Sí' : 'No';
             } else {
-                if (item.time && item.time.includes('Ficha')) {
+                if (item.time && String(item.time).includes('Ficha')) {
                     baseData['Ficha'] = item.time.split(' ')[1];
                 }
                 baseData['Núcleo'] = item.clinicName;
-                baseData['Municipio'] = item.coloniaName || 'N/A';
                 baseData['Tipo Paciente'] = item.patientType;
             }
             return baseData;
@@ -139,7 +142,7 @@ export async function downloadExcel(data: any[], filename: string) {
 
   const worksheet = xlsx.utils.json_to_sheet(worksheetData);
   const workbook = xlsx.utils.book_new();
-  xlsx.utils.book_append_sheet(workbook, worksheet, 'Citas');
+  xlsx.utils.book_append_sheet(workbook, worksheet, 'Registros');
 
   if (worksheetData.length > 0) {
     const cols = Object.keys(worksheetData[0]);
