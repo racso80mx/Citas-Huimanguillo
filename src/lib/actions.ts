@@ -1,4 +1,3 @@
-
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -30,9 +29,6 @@ import type {
     PharmacyVoucher,
     Department
 } from './definitions';
-
-// Re-export variables críticas
-export const adminDb = data.adminDb;
 
 // --- LOGS ---
 export async function logActivity(a: string, d: string) { return data.logActivity(a, d); }
@@ -155,7 +151,7 @@ export async function updateAppointmentStatus(id: string, status: string, type: 
 export async function deleteAppointment(id: string) { await data.deleteAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
 export async function deleteLabAppointment(id: string) { await data.deleteLabAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
 export async function deleteXRayAppointment(id: string) { await data.deleteXRayAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
-export async function deleteUltrasoundAppointment(id: string) { await data.deleteUltrasoundAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
+export async function deleteUltrasoundAppointment(id: string) { await deleteUltrasoundAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
 export async function deleteVaccineAppointment(id: string) { await data.deleteVaccineAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
 
 export async function rescheduleAppointment(id: string, date: string, type: string, time: string) {

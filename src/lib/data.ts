@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -570,7 +569,7 @@ export async function createPharmacyVoucher(v: any) {
     const batch = writeBatch(adminDb);
     for (const item of v.items) batch.update(doc(adminDb, 'medications', item.medicationId), { existencia: increment(-item.quantity) });
     batch.set(doc(adminDb, 'pharmacyVouchers', id), { ...v, id, folio, createdAt: new Date().toISOString() });
-    await b.commit(); return { success: true, folio };
+    await batch.commit(); return { success: true, folio };
 }
 export async function getPharmacyVouchers() { const snap = await getDocs(query(collection(adminDb, 'pharmacyVouchers'), orderBy('createdAt', 'desc'), limit(100))); return serializeData(snap.docs.map(d => ({ ...d.data(), id: d.id }))); }
 
@@ -716,7 +715,7 @@ export async function scanDuplicates(criteria: 'expediente' | 'curp' | 'name') {
     const map = new Map<string, Patient[]>();
     patients.forEach(p => {
         let key = '';
-        if (criteria === 'expediente') key = p.expediente || '';
+        if (criteria === 'expediente') key = String(p.expediente || '');
         else if (criteria === 'curp') key = p.curp;
         else key = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase().trim();
         if (key && key !== 'N/A' && key !== 'S/E') {
@@ -733,8 +732,8 @@ export async function normalizeExpedientesAction() {
     let count = 0;
     snap.forEach(d => {
         const data = d.data();
-        if (data.expediente && !data.expediente.startsWith('0') && data.expediente.length < 5) {
-            batch.update(d.ref, { expediente: data.expediente.padStart(5, '0') });
+        if (data.expediente && !String(data.expediente).startsWith('0') && String(data.expediente).length < 5) {
+            batch.update(d.ref, { expediente: String(data.expediente).padStart(5, '0') });
             count++;
         }
     });
