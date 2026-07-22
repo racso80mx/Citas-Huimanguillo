@@ -41,9 +41,11 @@ import {
   getClinics, 
   updatePatient, 
   getServiceTypes,
-  getColonias
+  getColonias,
+  getAnnouncements,
+  getModuleSettings
 } from '@/lib/actions';
-import type { Patient, Appointment, Clinic, ArchiveCounts, ServiceType, Colonia } from '@/lib/definitions';
+import type { Patient, Appointment, Clinic, ArchiveCounts, ServiceType, Colonia, ModuleSettings } from '@/lib/definitions';
 import { PatientStatus as PatientStatusEnum } from '@/lib/definitions';
 import { PatientList } from './patient-list';
 import { MassUploadDialog } from './mass-upload-dialog';
@@ -183,10 +185,11 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, []);
 
-  // AUTO-MARK LOGIC: When searching by expediente in "Baja Temporal", mark it instead of filtering
+  // AUTO-MARK LOGIC: Cuando buscamos por expediente en "Baja Temporal", marcamos el registro en lugar de filtrar
   useEffect(() => {
-    if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 2) {
+    if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = searchExpediente.trim();
+        // Buscamos coincidencia exacta de expediente en la lista local cargada
         const exactMatch = patients.find(p => String(p.expediente || '').trim() === term);
         if (exactMatch && !selectedPatientIds.includes(exactMatch.id)) {
             setSelectedPatientIds(prev => [...prev, exactMatch.id]);
@@ -205,7 +208,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
         
-        // If status is Baja Temporal, we don't filter by expediente, we mark it (handled in useEffect)
+        // Si estamos en Baja Temporal, no filtramos por expediente (porque lo marcamos arriba)
         if (statusFilter === PatientStatusEnum.Baja) {
             return nameMatch && curpMatch;
         }
