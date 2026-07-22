@@ -1,4 +1,3 @@
-
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -124,12 +123,8 @@ export async function deleteVaccineAppointment(id: string) {
 }
 
 export async function rescheduleAppointment(id: string, d: string, t: any, ti?: string) { return data.rescheduleAppointment(id, d, t, ti); }
-export async function cloneAppointment(id: string, d: string, t: any, ti?: string) { return data.cloneAppointment(id, d, t, ti); }
+export async function cloneAppointment(appointmentId: string, newDateIso: string, type: string, newTime?: string) { return data.cloneAppointment(appointmentId, newDateIso, type, newTime); }
 export async function saveNewAppointment(a: any, p: any, isD: boolean, c?: string) { return data.saveNewAppointment(a, p, isD, c); }
-export async function saveNewLabAppointment(a: any, p: any) { return data.saveNewLabAppointment(a, p); }
-export async function saveNewXRayAppointment(a: any, p: any) { return data.saveNewXRayAppointment(a, p); }
-export async function saveNewUltrasoundAppointment(a: any, p: any) { return data.saveNewUltrasoundAppointment(a, p); }
-export async function saveNewVaccineAppointment(a: any, p: any) { return data.saveNewVaccineAppointment(a, p); }
 export async function getAppointmentsForClinic(cid: string) { return data.getAppointmentsForClinic(cid); }
 export async function getAppointmentCountOnDate(cid: string, d: string) { return data.getAppointmentCountOnDate(cid, d); }
 
@@ -236,6 +231,7 @@ export async function deleteAllCie10Catalog() { return data.deleteAllCie10Catalo
 export async function cleanupOldRecords() { return data.cleanupOldRecords(); }
 export async function downloadBackupAction() { return data.downloadBackupAction(); }
 
+// --- GUARDADO ESPECIALIZADO ---
 export async function saveNewLabAppointment(a: any, p: any) { return data.saveNewLabAppointment(a, p); }
 export async function saveNewXRayAppointment(a: any, p: any) { return data.saveNewXRayAppointment(a, p); }
 export async function saveNewUltrasoundAppointment(a: any, p: any) { return data.saveNewUltrasoundAppointment(a, p); }

@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -73,6 +72,16 @@ export function serializeData(data: any): any {
   return data;
 }
 
+/** Normalización de nombres de columnas para mapeo de Excel */
+function normalizeString(s: string): string {
+    return String(s || '')
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "") // Quitar acentos
+        .toUpperCase()
+        .trim()
+        .replace(/[^A-Z0-9]/g, ''); // Solo alfanumérico
+}
+
 /** Genera nombre completo normalizado para búsquedas optimizadas */
 function generateNombreCompleto(p: any) {
     const n = (p.name || '').trim();
@@ -81,7 +90,7 @@ function generateNombreCompleto(p: any) {
     return `${n} ${ap} ${am}`.replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
-/** Hidrata citas con datos del paciente de forma eficiente cumpliendo límites de Firestore */
+/** Hidrata citas con datos del paciente de forma eficiente cumpliendo límites de Firestore (lote 30) */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     
@@ -89,7 +98,7 @@ async function hydrateAppointments(appointments: any[]) {
     const patientsMap: Record<string, any> = {};
     
     if (patientIds.length > 0) {
-        const CHUNK_SIZE = 30; // Límite estricto de Firestore para 'in'
+        const CHUNK_SIZE = 30; 
         for (let i = 0; i < patientIds.length; i += CHUNK_SIZE) {
             const chunk = patientIds.slice(i, i + CHUNK_SIZE);
             const snap = await getDocs(query(collection(adminDb, 'patients'), where(documentId(), 'in', chunk)));
@@ -160,7 +169,7 @@ export async function verifyClinicPassword(id: string, password: string) {
     return { success: s.exists() && (s.data()?.password === password || password === 'citas2026') };
 }
 
-// --- PACIENTES (BLINDADOS CONTRA DUPLICADOS) ---
+// --- PACIENTES ---
 export async function getPatientCounts(): Promise<ArchiveCounts> {
     const coll = collection(adminDb, 'patients');
     const totalSnap = await getCountFromServer(coll);
@@ -225,7 +234,6 @@ export async function updatePatient(id: string, p: Partial<Patient>) {
     const finalId = (p.curp || id).toUpperCase().trim();
     const batch = writeBatch(adminDb);
     
-    // Buscar y borrar duplicados UUID antes de actualizar
     const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', finalId)));
     snapCheck.forEach(d => { if (d.id !== finalId) batch.delete(d.ref); });
 
@@ -249,9 +257,9 @@ export async function updatePatientStatus(id: string, status: string) {
 
 export async function deletePatient(id: string) { await deleteDoc(doc(adminDb, 'patients', id)); return { success: true }; }
 export async function deletePatients(ids: string[]) {
-    for (let i = 0; i < ids.length; i += 450) {
+    for (let i = 0; i < ids.length; i += 30) {
         const b = writeBatch(adminDb);
-        ids.slice(i, i + 450).forEach(id => b.delete(doc(adminDb, 'patients', id)));
+        ids.slice(i, i + 30).forEach(id => b.delete(doc(adminDb, 'patients', id)));
         await b.commit();
     }
     return { success: true };
@@ -299,7 +307,7 @@ export async function rebuildNombreCompletoAction() {
     return { success: true, count: docs.length };
 }
 
-// --- CITAS (PROTEGIDAS CONTRA ERROR 9) ---
+// --- CITAS (BLINDAJE ERROR 9 - FILTRADO EN MEMORIA) ---
 export async function getAppointmentsData() {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(5000)));
     return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
@@ -461,18 +469,10 @@ export async function getMedications() { const s = await getDocs(query(collectio
 export async function getSupplies() { const s = await getDocs(query(collection(adminDb, 'supplies'), limit(5000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 
 export async function bulkInsertMedications(items: any[], source: string) { 
-    const normalize = (s: string) => 
-        String(s || '')
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "") // Quitar acentos
-            .toUpperCase()
-            .trim()
-            .replace(/[^A-Z0-9]/g, ''); // Solo alfanumérico
-
     const findFld = (row: any, searchNames: string[]) => {
         const keys = Object.keys(row); 
-        const searchNormalized = searchNames.map(normalize); 
-        const foundKey = keys.find(k => searchNormalized.includes(normalize(k))); 
+        const searchNormalized = searchNames.map(normalizeString); 
+        const foundKey = keys.find(k => searchNormalized.includes(normalizeString(k))); 
         return foundKey ? row[foundKey] : undefined;
     };
 
@@ -675,7 +675,7 @@ export async function bulkInsertCie10Glossary(it: any[]) {
 export async function deleteAllCie10Catalog() { const s = await getDocs(collection(adminDb, 'cie10Catalog')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 export async function deleteAllCie10Glossary() { const s = await getDocs(collection(adminDb, 'cie10Glossary')); const b = writeBatch(adminDb); s.docs.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 
-// --- GUARDADO ESPECIALIZADO DE CITAS (PARA EVITAR DUPLICADOS) ---
+// --- GUARDADO ESPECIALIZADO DE CITAS (SANEAMIENTO AUTOMÁTICO) ---
 export async function saveNewLabAppointment(a: any, p: any) {
     const b = writeBatch(adminDb); const pid = p.curp.toUpperCase().trim();
     const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', pid)));
