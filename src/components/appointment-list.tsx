@@ -109,6 +109,9 @@ export function AppointmentList({ appointments, isAdmin = false, onDelete, clini
 
   const [reschedulingAppointment, setReschedulingAppointment] = useState<Appointment | null>(null);
   const [newDate, setNewDate] = useState<Date | undefined>();
+  const [newTime, setNewTime] = useState<string | undefined>();
+  const [availableRescheduleSlots, setAvailableRescheduleSlots] = useState<{ timeSlots?: string[], tokens?: number[] }>({});
+  const [isFetchingRescheduleSlots, startFetchingRescheduleSlots] = useTransition();
   const [isRescheduling, startRescheduleTransition] = useTransition();
 
   const [cloningAppointment, setCloningAppointment] = useState<Appointment | null>(null);
@@ -138,6 +141,11 @@ export function AppointmentList({ appointments, isAdmin = false, onDelete, clini
     fetchData();
   }, []);
 
+  const rescheduleClinic = useMemo(() => {
+      if (!reschedulingAppointment) return null;
+      return clinics.find(c => c.id === reschedulingAppointment.clinicId);
+  }, [reschedulingAppointment, clinics]);
+
   const cloningClinic = useMemo(() => {
       if (!cloningAppointment) return null;
       return clinics.find(c => c.id === cloningAppointment.clinicId);
@@ -152,6 +160,16 @@ export function AppointmentList({ appointments, isAdmin = false, onDelete, clini
       });
     }
   }, [cloningAppointment, newCloneDate]);
+
+  useEffect(() => {
+    if (reschedulingAppointment && newDate) {
+      startFetchingRescheduleSlots(async () => {
+        const slots = await getAvailableSlotsForDate(reschedulingAppointment.clinicId, newDate.toISOString());
+        setAvailableRescheduleSlots(slots);
+        setNewTime(undefined); 
+      });
+    }
+  }, [reschedulingAppointment, newDate]);
 
   const toggleHistory = async (app: Appointment) => {
     const patientId = app.patientId;
@@ -318,32 +336,35 @@ export function AppointmentList({ appointments, isAdmin = false, onDelete, clini
   };
 
   const handleRescheduleConfirm = () => {
-    if (!reschedulingAppointment || !newDate) return;
+    if (!reschedulingAppointment || !newDate || !newTime) return;
 
     startRescheduleTransition(async () => {
-        const result = await rescheduleAppointment(reschedulingAppointment.id, newDate.toISOString(), 'medical');
+        const result = await rescheduleAppointment(reschedulingAppointment.id, newDate.toISOString(), 'medical', newTime);
         if (result.success) {
             toast({
-                title: 'Fecha Actualizada',
+                title: 'Cita Reprogramada',
                 description: result.message,
             });
 
             const whatsappEnabled = isAdmin ? settings?.archivoWhatsAppEnabled : settings?.citasMedicasWhatsAppEnabled;
             if (whatsappEnabled && reschedulingAppointment.patient?.phoneNumber) {
                 const phone = reschedulingAppointment.patient.phoneNumber.replace(/\D/g, '');
-                const oldDateFormatted = format(parseISO(reschedulingAppointment.date), "dd/MM/yyyy", { locale: es });
-                const newDateFormatted = format(newDate, "dd/MM/yyyy", { locale: es });
+                const oldDateFormatted = format(parseISO(reschedulingAppointment.date), "eeee dd 'de' MMMM", { locale: es });
+                const newDateFormatted = format(newDate, "eeee dd 'de' MMMM", { locale: es });
+                const clinic = clinics.find(c => c.id === reschedulingAppointment.clinicId);
                 
-                const message = encodeURIComponent(`Su cita del dia ${oldDateFormatted} a las ${reschedulingAppointment.time} a sido reagendada, para el día ${newDateFormatted}.`);
+                const message = encodeURIComponent(`Hola ${reschedulingAppointment.patient.name}, le informamos que su cita del día ${oldDateFormatted} a las ${reschedulingAppointment.time} ha sido reagendada. Su nueva cita es para el día ${newDateFormatted} a las ${newTime} hrs en el consultorio ${clinic?.name || 'N/A'} con el Dr(a). ${clinic?.doctorName || 'N/A'}.`);
                 window.open(`https://wa.me/52${phone}?text=${message}`, '_blank');
             }
 
             setReschedulingAppointment(null);
             setNewDate(undefined);
+            setNewTime(undefined);
+            setAvailableRescheduleSlots({});
             onEditSuccess?.();
         } else {
             toast({
-                title: 'Error al Cambiar Fecha',
+                title: 'Error al Reprogramar',
                 description: result.message,
                 variant: 'destructive',
             });
@@ -743,13 +764,15 @@ export function AppointmentList({ appointments, isAdmin = false, onDelete, clini
             if (!open) {
                 setReschedulingAppointment(null);
                 setNewDate(undefined);
+                setNewTime(undefined);
+                setAvailableRescheduleSlots({});
             }
         }}>
-            <DialogContent>
+            <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Cambiar Fecha de la Cita</DialogTitle>
+                    <DialogTitle>Cambiar Cita Médica</DialogTitle>
                     <DialogDescription>
-                        Selecciona una nueva fecha para la cita de <span className="font-bold">{reschedulingAppointment.patient.name}</span>.
+                        Selecciona la nueva fecha y horario para <span className="font-bold">{reschedulingAppointment.patient.name}</span>.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="flex justify-center py-4">
@@ -759,13 +782,56 @@ export function AppointmentList({ appointments, isAdmin = false, onDelete, clini
                         onSelect={setNewDate}
                         initialFocus
                         disabled={{ before: new Date() }}
+                        locale={es}
                     />
                 </div>
-                <DialogFooter>
+
+                {newDate && rescheduleClinic && (
+                    <div className="space-y-4 px-4 pb-4">
+                        {isFetchingRescheduleSlots ? (
+                            <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Consultando agenda...</div>
+                        ) : (
+                            <>
+                                {rescheduleClinic.bookingMode === 'token' && (
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-black uppercase text-primary">Selecciona Nueva Ficha</Label>
+                                        <Select onValueChange={setNewTime} value={newTime}>
+                                            <SelectTrigger className="h-11 font-bold">
+                                                <SelectValue placeholder="Elegir ficha..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {availableRescheduleSlots.tokens && availableRescheduleSlots.tokens.length > 0 ? (
+                                                    availableRescheduleSlots.tokens.map(t => <SelectItem key={t} value={`Ficha ${t}`}>Ficha {t}</SelectItem>)
+                                                ) : <div className="p-4 text-center text-xs opacity-50">Sin disponibilidad</div>}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                                {rescheduleClinic.bookingMode === 'time' && (
+                                    <div className="space-y-2">
+                                        <Label className="text-xs font-black uppercase text-primary">Selecciona Nuevo Horario</Label>
+                                        <Select onValueChange={setNewTime} value={newTime}>
+                                            <SelectTrigger className="h-11 font-bold">
+                                                <SelectValue placeholder="Elegir horario..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {availableRescheduleSlots.timeSlots && availableRescheduleSlots.timeSlots.length > 0 ? (
+                                                    availableRescheduleSlots.timeSlots.map(t => <SelectItem key={t} value={t}>{t} HRS</SelectItem>)
+                                                ) : <div className="p-4 text-center text-xs opacity-50">Sin disponibilidad</div>}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                )}
+
+                <DialogFooter className="bg-muted/10 p-4 rounded-b-lg">
                     <Button variant="ghost" onClick={() => setReschedulingAppointment(null)}>Cancelar</Button>
-                    <Button onClick={handleRescheduleConfirm} disabled={isRescheduling || !newDate}>
+                    <Button onClick={handleRescheduleConfirm} disabled={isRescheduling || !newDate || !newTime || isFetchingRescheduleSlots}>
                         {isRescheduling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Confirmar Nueva Fecha
+                        Confirmar Cambio
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -795,6 +861,7 @@ export function AppointmentList({ appointments, isAdmin = false, onDelete, clini
                         onSelect={setNewCloneDate}
                         initialFocus
                         disabled={{ before: new Date() }}
+                        locale={es}
                     />
                 </div>
                 

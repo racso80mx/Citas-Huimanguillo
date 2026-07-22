@@ -327,8 +327,6 @@ export async function getAppointmentsForClinic(cid: string) {
 }
 
 export async function getAppointmentCountOnDate(cid: string, d: string) {
-    const startStr = startOfDay(parseISO(d)).toISOString();
-    const endStr = endOfDay(parseISO(d)).toISOString();
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid)));
     return snap.docs.filter(doc => {
         const data = doc.data();
@@ -377,10 +375,12 @@ export async function deleteXRayAppointment(id: string) { await deleteDoc(doc(ad
 export async function deleteUltrasoundAppointment(id: string) { await deleteDoc(doc(adminDb, 'ultrasoundAppointments', id)); return { success: true }; }
 export async function deleteVaccineAppointment(id: string) { await deleteDoc(doc(adminDb, 'vaccineAppointments', id)); return { success: true }; }
 
-export async function rescheduleAppointment(id: string, newDateIso: string, type: string) {
+export async function rescheduleAppointment(id: string, newDateIso: string, type: string, newTime?: string) {
     const coll = { medical: 'appointments', lab: 'labAppointments', xray: 'xrayAppointments', ultrasound: 'ultrasoundAppointments', vaccine: 'vaccineAppointments' }[type as any] || 'appointments';
-    await updateDoc(doc(adminDb, coll, id), { date: newDateIso });
-    return { success: true, message: 'Fecha actualizada' };
+    const updateData: any = { date: newDateIso };
+    if (newTime) updateData.time = newTime;
+    await updateDoc(doc(adminDb, coll, id), updateData);
+    return { success: true, message: 'Cita reprogramada exitosamente' };
 }
 
 export async function cloneAppointment(appointmentId: string, newDateIso: string, type: string, newTime?: string) {
@@ -487,10 +487,10 @@ export async function bulkInsertMedications(items: any[], source: string) {
             else fCad = String(rawFecha || 'SIN FECHA').trim();
             
             const mapped: any = {
-                claveCuadroBasico: String(findFld(raw, ['CLAVE', 'CODIGO', 'CLAVE DE CUADRO BASICO', 'CUI', 'CLAVEDECUADROBASICO']) || '').trim(),
-                descripcion: String(findFld(raw, ['DENOMINACION GENERICA', 'NOMBRE DEL MEDICAMENTO', 'CONCEPTO', 'DENOMINACION', 'DESCRIPCION', 'NOMBRE', 'ARTICULO', 'DESCRIPCION']) || '').toUpperCase().trim(),
+                claveCuadroBasico: String(findFld(raw, ['CLAVE DE CUADRO BASICO', 'CLAVE', 'CODIGO', 'CUI', 'CLAVEDECUADROBASICO']) || '').trim(),
+                descripcion: String(findFld(raw, ['DESCRIPCION', 'DENOMINACION GENERICA', 'NOMBRE DEL MEDICAMENTO', 'CONCEPTO', 'DENOMINACION', 'NOMBRE', 'ARTICULO']) || '').toUpperCase().trim(),
                 existencia: Number(findFld(raw, ['EXISTENCIA', 'CANTIDAD', 'STOCK', 'SALDO', 'DISPONIBLE']) || 0),
-                lote: String(findFld(raw, ['NUMERO DE LOTE', 'LOTE', 'NUMEROLOTE', 'LOTES']) || 'S/L').toUpperCase().trim(),
+                lote: String(findFld(raw, ['LOTE', 'NUMERO DE LOTE', 'NUMEROLOTE', 'LOTES']) || 'S/L').toUpperCase().trim(),
                 fechaCaducidad: fCad, fuenteEtiqueta: source, updatedAt: new Date().toISOString()
             };
 

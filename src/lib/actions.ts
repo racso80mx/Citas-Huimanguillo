@@ -123,7 +123,7 @@ export async function deleteVaccineAppointment(id: string) {
     return res;
 }
 
-export async function rescheduleAppointment(id: string, d: string, t: any) { return data.rescheduleAppointment(id, d, t); }
+export async function rescheduleAppointment(id: string, d: string, t: any, ti?: string) { return data.rescheduleAppointment(id, d, t, ti); }
 export async function cloneAppointment(id: string, d: string, t: any, ti?: string) { return data.cloneAppointment(id, d, t, ti); }
 export async function saveNewAppointment(a: any, p: any, isD: boolean, c?: string) { return data.saveNewAppointment(a, p, isD, c); }
 export async function saveNewLabAppointment(a: any, p: any) { return data.saveNewLabAppointment(a, p); }
@@ -235,3 +235,8 @@ export async function deleteAllCie10Glossary() { return data.deleteAllCie10Gloss
 export async function deleteAllCie10Catalog() { return data.deleteAllCie10Catalog(); }
 export async function cleanupOldRecords() { return data.cleanupOldRecords(); }
 export async function downloadBackupAction() { return data.downloadBackupAction(); }
+
+export async function saveNewLabAppointment(a: any, p: any) { return data.saveNewLabAppointment(a, p); }
+export async function saveNewXRayAppointment(a: any, p: any) { return data.saveNewXRayAppointment(a, p); }
+export async function saveNewUltrasoundAppointment(a: any, p: any) { return data.saveNewUltrasoundAppointment(a, p); }
+export async function saveNewVaccineAppointment(a: any, p: any) { return data.saveNewVaccineAppointment(a, p); }
