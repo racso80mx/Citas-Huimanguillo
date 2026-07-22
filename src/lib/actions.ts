@@ -31,7 +31,7 @@ import type {
     Department
 } from './definitions';
 
-// Re-export constants needed by client components through actions
+// Re-export constants
 export const adminDb = data.adminDb;
 
 // --- LOGS ---
@@ -132,7 +132,6 @@ export async function bulkInsertPatients(p: any[]) {
     return res;
 }
 export async function applyStatusUpdateChunk(e: string[], s: any) { return data.applyStatusUpdateChunk(e, s); }
-export async function scanDuplicates(c: 'expediente' | 'curp' | 'name') { return data.scanDuplicates(c); }
 
 // --- CITAS ---
 export async function getAppointments() { return data.getAppointmentsData(); }
@@ -146,41 +145,19 @@ export async function updateAppointmentStatus(id: string, status: string, type: 
     revalidatePath('/', 'layout');
     return res;
 }
+export async function deleteAppointment(id: string) { await data.deleteAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
+export async function deleteLabAppointment(id: string) { await data.deleteLabAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
+export async function deleteXRayAppointment(id: string) { await data.deleteXRayAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
+export async function deleteUltrasoundAppointment(id: string) { await data.deleteUltrasoundAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
+export async function deleteVaccineAppointment(id: string) { await data.deleteVaccineAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
 
 export async function rescheduleAppointment(id: string, date: string, type: string, time: string) {
     const res = await data.rescheduleAppointment(id, date, type, time);
     revalidatePath('/', 'layout');
     return res;
 }
-
 export async function cloneAppointment(id: string, date: string, type: string, time: string) {
     const res = await data.cloneAppointment(id, date, type, time);
-    revalidatePath('/', 'layout');
-    return res;
-}
-
-export async function deleteAppointment(id: string) { 
-    const res = await data.deleteAppointment(id);
-    revalidatePath('/', 'layout');
-    return res;
-}
-export async function deleteLabAppointment(id: string) { 
-    const res = await data.deleteLabAppointment(id);
-    revalidatePath('/', 'layout');
-    return res;
-}
-export async function deleteXRayAppointment(id: string) { 
-    const res = await data.deleteXRayAppointment(id);
-    revalidatePath('/', 'layout');
-    return res;
-}
-export async function deleteUltrasoundAppointment(id: string) { 
-    const res = await data.deleteUltrasoundAppointment(id);
-    revalidatePath('/', 'layout');
-    return res;
-}
-export async function deleteVaccineAppointment(id: string) { 
-    const res = await data.deleteVaccineAppointment(id);
     revalidatePath('/', 'layout');
     return res;
 }
@@ -191,6 +168,8 @@ export async function getColonias() { return data.getColoniasData(); }
 export async function getServiceTypes() { return data.getServiceTypesData(); }
 export async function getSpecialties() { return data.getSpecialtiesData(); }
 export async function getDepartments() { return data.getDepartmentsData(); }
+export async function getHolidays() { return data.getHolidaysData(); }
+export async function getSpecialActionDays() { return data.getSpecialActionDaysData(); }
 
 // --- CONSULTAS Y RECETAS ---
 export async function getConsultationsByPatientId(pid: string) { return data.getConsultationsByPatientId(pid); }

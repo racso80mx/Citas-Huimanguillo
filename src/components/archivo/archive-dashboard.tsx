@@ -114,7 +114,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const [searchName, setSearchName] = useState('');
   const [searchCurp, setSearchCurp] = useState('');
   const [searchExpediente, setSearchExpediente] = useState('');
-  const [hasSearched, setHasSearched] = useState(false);
   
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatientIds, setSelectedPatientIds] = useState<string[]>([]);
@@ -146,8 +145,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
   const loadData = useCallback(async (manualSearch = false) => {
     setIsDataLoading(true);
-    if (manualSearch) setHasSearched(true);
-    
     try {
       const [countsData, clinicsData, serviceTypesData, coloniasData] = await Promise.all([
         getPatientCounts(), getClinics(), getServiceTypes(), getColonias()
@@ -164,32 +161,27 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       const searchOptions: any = { 
           status: statusFilter === 'Total' ? undefined : statusFilter,
-          searchCurp: searchCurp.toUpperCase().trim() || undefined,
-          searchExpediente: searchExpediente.trim() || undefined,
-          searchName: searchName.toUpperCase().trim() || undefined,
-          limitNum: 10000
+          limitNum: 10000 // Load full set for local filtering
       };
       const patientsData = await getPatients(searchOptions);
       setPatients(patientsData);
       setCurrentPage(1);
       setSelectedPatientIds([]);
-      setHasSearched(true);
     } catch (e) {
       toast({ title: 'Error de Red', variant: 'destructive' });
     } finally {
       setIsDataLoading(false);
     }
-  }, [statusFilter, searchName, searchCurp, searchExpediente, activeTab, toast]);
+  }, [statusFilter, activeTab, toast]);
   
   useEffect(() => {
     loadData(false);
-  }, []);
+  }, [statusFilter, activeTab]);
 
   // AUTO-MARK LOGIC: Cuando buscamos por expediente en "Baja Temporal", marcamos el registro en lugar de filtrar
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = searchExpediente.trim();
-        // Buscamos coincidencia exacta de expediente en la lista local cargada
         const exactMatch = patients.find(p => String(p.expediente || '').trim() === term);
         if (exactMatch && !selectedPatientIds.includes(exactMatch.id)) {
             setSelectedPatientIds(prev => [...prev, exactMatch.id]);
@@ -225,16 +217,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
   const handleStatusCardClick = (status: 'Total' | PatientStatusEnum) => {
       setStatusFilter(status);
-      setHasSearched(true);
-      startSubmitTransition(async () => {
-          setIsDataLoading(true);
-          const patientsData = await getPatients({ status: status === 'Total' ? undefined : status, limitNum: 10000 });
-          setPatients(patientsData);
-          setCounts(await getPatientCounts());
-          setIsDataLoading(false);
-          setCurrentPage(1);
-          setSelectedPatientIds([]);
-      });
   };
 
   const paginatedPatients = useMemo(() => {

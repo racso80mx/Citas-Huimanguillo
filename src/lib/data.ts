@@ -46,11 +46,13 @@ import type {
   ArchiveSettings,
   PharmacySettings,
   WarehouseSettings,
-  BISettings
+  BISettings,
+  Holiday,
+  SpecialActionDay
 } from './definitions';
 import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
-import { startOfDay, endOfDay, parseISO, format, isValid } from 'date-fns';
+import { startOfDay, endOfDay, parseISO, format, isValid, startOfMonth } from 'date-fns';
 
 export { 
     adminDb, collection, doc, getDoc, getDocs, writeBatch, 
@@ -403,6 +405,8 @@ export async function getColoniasData() { return (await getDocs(collection(admin
 export async function getServiceTypesData() { return (await getDocs(collection(adminDb, 'serviceTypes'))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function getSpecialtiesData() { return (await getDocs(collection(adminDb, 'specialties'))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function getDepartmentsData() { return (await getDocs(collection(adminDb, 'departments'))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
+export async function getHolidaysData() { return (await getDocs(collection(adminDb, 'holidays'))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
+export async function getSpecialActionDaysData() { return (await getDocs(collection(adminDb, 'specialActionDays'))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 
 // --- MANTENIMIENTO ---
 export async function cleanupOldRecords() {
