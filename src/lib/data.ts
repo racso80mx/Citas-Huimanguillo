@@ -344,6 +344,7 @@ export async function getAppointmentCountOnDate(cid: string, d: string) {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid)));
     return snap.docs.filter(doc => {
         const data = serializeData(doc.data());
+        if (!data.date) return false;
         const appLocalDate = format(parseISO(data.date), 'yyyy-MM-dd');
         return appLocalDate === d;
     }).length;
@@ -357,7 +358,7 @@ export async function getAvailableSlotsForDate(clinicId: string, dateIso: string
     
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId)));
     const takenTimes = snap.docs.map(d => serializeData(d.data()))
-        .filter(a => format(parseISO(a.date), 'yyyy-MM-dd') === targetDay)
+        .filter(a => a.date && format(parseISO(a.date), 'yyyy-MM-dd') === targetDay)
         .map(a => a.time);
 
     if (clinic.bookingMode === BookingMode.Token) {

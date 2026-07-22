@@ -91,8 +91,8 @@ export async function getUltrasoundAppointments() { return data.getUltrasoundApp
 export async function getVaccineAppointments() { return data.getVaccineAppointmentsData(); }
 export async function getAvailableSlotsForDate(cid: string, d: string) { return data.getAvailableSlotsForDate(cid, d); }
 
-export async function updateAppointmentStatus(id: string, s: string, t: any) { 
-    const res = await data.updateAppointmentStatus(id, s, t);
+export async function updateAppointmentStatus(id: string, status: string, type: string) { 
+    const res = await data.updateAppointmentStatus(id, status, type);
     revalidatePath('/', 'layout');
     return res;
 }

@@ -1,6 +1,6 @@
 'use client';
 import type { Appointment, Clinic, LabAppointment, XRayAppointment, XRayStudy, UltrasoundAppointment, UltrasoundStudy, VaccineAppointment, Vaccine, Prescription, Patient } from "./definitions";
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { logoBase64 } from './logo-data';
 
@@ -85,11 +85,32 @@ export async function downloadExcel(data: any[], filename: string) {
     
     const worksheetData = data.map(
         (item) => {
+            // SAFELY PARSE DATES (Senior implementation)
+            let fechaCita = 'N/A';
+            if (item.date) {
+                try {
+                    const parsed = typeof item.date === 'string' ? parseISO(item.date) : item.date;
+                    if (isValid(parsed)) {
+                        fechaCita = format(parsed, 'dd/MM/yyyy');
+                    }
+                } catch (e) {}
+            }
+
+            let fechaRegistro = 'N/A';
+            if (item.createdAt) {
+                try {
+                    const parsedReg = typeof item.createdAt === 'string' ? parseISO(item.createdAt) : item.createdAt;
+                    if (isValid(parsedReg)) {
+                        fechaRegistro = format(parsedReg, 'dd/MM/yyyy HH:mm', { locale: es });
+                    }
+                } catch (e) {}
+            }
+
             const baseData: any = {
                 'Folio': item.appointmentNumber,
-                'Fecha Cita': format(parseISO(item.date), 'dd/MM/yyyy'),
+                'Fecha Cita': fechaCita,
                 'Hora': item.time,
-                'Fecha Registro': item.createdAt ? format(parseISO(item.createdAt), 'dd/MM/yyyy HH:mm', { locale: es }) : 'N/A',
+                'Fecha Registro': fechaRegistro,
                 'Estado': item.status,
                 'Paciente': item.patient ? `${item.patient.name} ${item.patient.paternalLastName} ${item.patient.maternalLastName}`: 'N/A',
                 'CURP': item.patient?.curp || 'N/A',
