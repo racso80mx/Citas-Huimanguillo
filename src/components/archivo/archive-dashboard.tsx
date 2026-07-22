@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -28,13 +27,15 @@ import {
   Eye,
   Calendar as CalendarIcon,
   FileText,
-  Filter
+  Filter,
+  Trash2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { 
   getPatients, 
   getPatientCounts, 
   deletePatient, 
+  deletePatients,
   updatePatientStatus, 
   savePatient, 
   getAppointments, 
@@ -107,6 +108,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const [hasSearched, setHasSearched] = useState(false);
   
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [selectedPatientIds, setSelectedPatientIds] = useState<string[]>([]);
   const [counts, setCounts] = useState<ArchiveCounts>({ total: 0, vigente: 0, bajaTemporal: 0, bajaDefinitiva: 0 });
   const [statusFilter, setStatusFilter] = useState<'Total' | PatientStatusEnum>(PatientStatusEnum.Vigente);
   
@@ -141,7 +143,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     if (manualSearch) setHasSearched(true);
     
     try {
-      // 1. Cargar metadatos siempre (Conteos, Clínicas, etc)
       const [countsData, clinicsData, serviceTypesData, coloniasData] = await Promise.all([
         getPatientCounts(), getClinics(), getServiceTypes(), getColonias()
       ]);
@@ -150,13 +151,11 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
       setServiceTypes(serviceTypesData);
       setColonias(coloniasData);
 
-      // 2. Cargar Agenda solo si se solicita o estamos en esa pestaña
       if (activeTab === 'appointments' || manualSearch) {
           const apps = await getAppointments();
           setAllAppointments(apps);
       }
 
-      // 3. Cargar Pacientes SOLO si es búsqueda manual
       if (manualSearch && activeTab === 'patients') {
           const searchOptions: any = { 
               status: statusFilter,
@@ -167,6 +166,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
           const patientsData = await getPatients(searchOptions);
           setPatients(patientsData);
           setCurrentPage(1);
+          setSelectedPatientIds([]);
       }
     } catch (e) {
       toast({ title: 'Error de Red', variant: 'destructive' });
@@ -176,9 +176,8 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   }, [statusFilter, searchName, searchCurp, searchExpediente, activeTab, toast]);
   
   useEffect(() => {
-    // Inicialización: Solo cargar conteos y catálogos, NO pacientes
     loadData(false);
-  }, []); // Solo al montar
+  }, []);
 
   const handleClearSearch = () => {
       setSearchName('');
@@ -186,6 +185,21 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
       setSearchExpediente('');
       setPatients([]);
       setHasSearched(false);
+      setSelectedPatientIds([]);
+  };
+
+  const handleStatusCardClick = (status: 'Total' | PatientStatusEnum) => {
+      setStatusFilter(status);
+      setHasSearched(true);
+      startSubmitTransition(async () => {
+          setIsDataLoading(true);
+          const patientsData = await getPatients({ status: status });
+          setPatients(patientsData);
+          setCounts(await getPatientCounts());
+          setIsDataLoading(false);
+          setCurrentPage(1);
+          setSelectedPatientIds([]);
+      });
   };
 
   const paginatedPatients = useMemo(() => {
@@ -201,14 +215,40 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   
   const handleDelete = (patientId: string) => {
     if (isReadOnly) return;
+    // Senior Interaction: Quitar de la lista inmediatamente (Optimistic UI)
+    setPatients(prev => prev.filter(p => p.id !== patientId));
+    setSelectedPatientIds(prev => prev.filter(id => id !== patientId));
+    
     startSubmitTransition(async () => {
       const result = await deletePatient(patientId);
       if(result.success) {
         toast({ title: "Paciente Eliminado"});
+        // No forzamos recarga total para eficiencia, el optimismo ya lo quitó
+      } else {
+        // Revertir si falló
         loadData(true);
       }
     });
   }
+
+  const handleBulkDelete = () => {
+      if (selectedPatientIds.length === 0 || isReadOnly) return;
+      const count = selectedPatientIds.length;
+      
+      // Optimistic
+      setPatients(prev => prev.filter(p => !selectedPatientIds.includes(p.id)));
+      
+      startSubmitTransition(async () => {
+          const result = await deletePatients(selectedPatientIds);
+          if (result.success) {
+              toast({ title: "Eliminación Masiva", description: `Se eliminaron ${count} pacientes correctamente.` });
+              setSelectedPatientIds([]);
+              setCounts(await getPatientCounts());
+          } else {
+              loadData(true);
+          }
+      });
+  };
 
   const handleStatusChange = (patientId: string, newStatus: PatientStatusEnum) => {
     if (isReadOnly) return;
@@ -224,7 +264,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const handleSavePatient = (patientData: Omit<Patient, 'id'>, id?: string) => {
     if (isReadOnly) return;
     startSubmitTransition(async () => {
-      // CRÍTICO: Usar siempre CURP como ID para evitar duplicidad
       const finalId = patientData.curp.toUpperCase().trim();
       const result = id ? await updatePatient(id, patientData) : await savePatient(patientData, finalId);
        if(result.success) {
@@ -307,7 +346,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
           { label: 'Baja Definitiva', count: counts.bajaDefinitiva, status: PatientStatusEnum.BajaDefinitiva, icon: UserX, color: 'text-red-600' },
           { label: 'Total Padrón', count: counts.total, status: 'Total' as const, icon: Users, color: 'text-primary' }
         ].map((item) => (
-          <button key={item.label} onClick={() => { setStatusFilter(item.status); setPatients([]); setHasSearched(false); }} className={cn("flex flex-col items-start p-4 rounded-xl border transition-all text-left", statusFilter === item.status ? "bg-card border-primary ring-2 ring-primary/20 shadow-lg scale-[1.02]" : "bg-muted/30 border-transparent hover:bg-muted/50")}>
+          <button key={item.label} onClick={() => handleStatusCardClick(item.status)} className={cn("flex flex-col items-start p-4 rounded-xl border transition-all text-left", statusFilter === item.status ? "bg-card border-primary ring-2 ring-primary/20 shadow-lg scale-[1.02]" : "bg-muted/30 border-transparent hover:bg-muted/50")}>
             <div className="flex items-center justify-between w-full mb-2"><item.icon className={cn("h-5 w-5", item.color)} />{statusFilter === item.status && <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />}</div>
             <span className="text-[10px] font-black uppercase text-muted-foreground">{item.label}</span>
             <span className={cn("text-2xl font-black", item.color)}>{item.count.toLocaleString()}</span>
@@ -333,9 +372,16 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                         <Button variant="outline" onClick={handleClearSearch} className="h-11"><X className="h-4 w-4" /></Button>
                     </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-dashed">
-                    {!isReadOnly && <><Button onClick={handleAddNew} size="sm" className="font-bold"><PlusCircle className="mr-2 h-4 w-4" /> Nuevo Paciente</Button><Button onClick={() => setIsUploadOpen(true)} variant="secondary" size="sm" className="font-bold"><Upload className="mr-2 h-4 w-4" /> Cargar Excel</Button></>}
-                    <Button onClick={handleExportExcel} variant="outline" size="sm" className="font-bold"><Download className="mr-2 h-4 w-4" /> Exportar</Button>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-dashed">
+                    <div className="flex flex-wrap items-center gap-2">
+                        {!isReadOnly && <><Button onClick={handleAddNew} size="sm" className="font-bold"><PlusCircle className="mr-2 h-4 w-4" /> Nuevo Paciente</Button><Button onClick={() => setIsUploadOpen(true)} variant="secondary" size="sm" className="font-bold"><Upload className="mr-2 h-4 w-4" /> Cargar Excel</Button></>}
+                        <Button onClick={handleExportExcel} variant="outline" size="sm" className="font-bold"><Download className="mr-2 h-4 w-4" /> Exportar</Button>
+                    </div>
+                    {selectedPatientIds.length > 0 && !isReadOnly && (
+                        <Button variant="destructive" size="sm" className="font-black animate-in fade-in zoom-in" onClick={handleBulkDelete}>
+                            <Trash2 className="mr-2 h-4 w-4" /> ELIMINAR SELECCIONADOS ({selectedPatientIds.length})
+                        </Button>
+                    )}
                 </div>
             </CardHeader>
             <CardContent className="relative min-h-[400px] pt-4">
@@ -346,7 +392,17 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                   <div className="text-center py-32 opacity-60"><UserX className="h-20 w-20 mx-auto mb-4" /><p className="text-xl font-bold uppercase">Sin coincidencias</p></div>
               ) : (
                 <div className={cn(isDataLoading && "opacity-40 blur-[1px]")}>
-                  <PatientList patients={paginatedPatients} onEdit={handleEdit} onDelete={handleDelete} onStatusChange={handleStatusChange} onSchedule={handleSchedule} isSubmitting={isSubmitting} isReadOnly={isReadOnly} />
+                  <PatientList 
+                    patients={paginatedPatients} 
+                    onEdit={handleEdit} 
+                    onDelete={handleDelete} 
+                    onStatusChange={handleStatusChange} 
+                    onSchedule={handleSchedule} 
+                    isSubmitting={isSubmitting} 
+                    isReadOnly={isReadOnly}
+                    selectedIds={selectedPatientIds}
+                    onSelectionChange={setSelectedPatientIds}
+                  />
                   <div className="flex items-center justify-between border-t mt-6 pt-4">
                       <div className="flex items-center gap-2"><span className="text-xs font-bold text-muted-foreground">Mostrando {paginatedPatients.length} de {patients.length} encontrados</span></div>
                       <div className="flex items-center gap-2">

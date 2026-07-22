@@ -194,13 +194,14 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     else if (options?.searchExpediente) q = query(colRef, where('expediente', '==', options.searchExpediente.trim()), limit(100));
     else if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
-        q = query(colRef, where('nombreCompleto', '>=', term), where('nombreCompleto', '<=', term + '\uf8ff'), limit(options.limitNum || 200));
+        q = query(colRef, where('nombreCompleto', '>=', term), where('nombreCompleto', '<=', term + '\uf8ff'), limit(options.limitNum || 500));
+    } else if (options?.status && options.status !== 'Total') {
+        q = query(colRef, where('status', '==', options.status), limit(options.limitNum || 1000));
     } else { 
         q = query(colRef, limit(options.limitNum || 100)); 
     }
     const snap = await getDocs(q);
     let res = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
-    if (options?.status && options.status !== 'Total') res = res.filter(p => (p.status || PatientStatus.Vigente) === options.status);
     return serializeData(res);
 }
 
@@ -258,9 +259,9 @@ export async function updatePatientStatus(id: string, status: string) {
 
 export async function deletePatient(id: string) { await deleteDoc(doc(adminDb, 'patients', id)); return { success: true }; }
 export async function deletePatients(ids: string[]) {
-    for (let i = 0; i < ids.length; i += 30) {
+    for (let i = 0; i < ids.length; i += 450) {
         const b = writeBatch(adminDb);
-        ids.slice(i, i + 30).forEach(id => b.delete(doc(adminDb, 'patients', id)));
+        ids.slice(i, i + 450).forEach(id => b.delete(doc(adminDb, 'patients', id)));
         await b.commit();
     }
     return { success: true };
@@ -308,7 +309,7 @@ export async function rebuildNombreCompletoAction() {
     return { success: true, count: docs.length };
 }
 
-// --- CITAS (BLINDAJE ERROR 9 - FILTRADO EN MEMORIA) ---
+// --- CITAS ---
 export async function getAppointmentsData() {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(5000)));
     return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
@@ -347,7 +348,7 @@ export async function getAppointmentCountOnDate(cid: string, d: string) {
 export async function getAvailableSlotsForDate(clinicId: string, dateIso: string) {
     const cDoc = await getDoc(doc(adminDb, 'clinics', clinicId));
     if (!cDoc.exists()) return {};
-    const clinic = cDoc.data() as Clinic;
+    const clinic = serializeData(cDoc.data()) as Clinic;
     const targetDay = format(parseISO(dateIso), 'yyyy-MM-dd');
     
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId)));
@@ -465,7 +466,7 @@ export async function getPatientPrescriptionsCountTodayAction(pid: string) {
     const s = await getDocs(q); return s.docs.filter(d => (d.data().date || d.data().createdAt) >= start).length;
 }
 
-// --- FARMACIA (SANITZACIÓN DE IDS Y MAPEO ROBUSTO) ---
+// --- FARMACIA ---
 export async function getMedications() { const s = await getDocs(query(collection(adminDb, 'medications'), limit(5000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function getSupplies() { const s = await getDocs(query(collection(adminDb, 'supplies'), limit(5000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 
