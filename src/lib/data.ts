@@ -464,7 +464,7 @@ export async function getPatientPrescriptionsCountTodayAction(pid: string) {
     const s = await getDocs(q); return s.docs.filter(d => (d.data().date || d.data().createdAt) >= start).length;
 }
 
-// --- FARMACIA (MAPEO INTELIGENTE ACENTOS E IMSS) ---
+// --- FARMACIA (SANITZACIÓN DE IDS Y MAPEO ROBUSTO) ---
 export async function getMedications() { const s = await getDocs(query(collection(adminDb, 'medications'), limit(5000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function getSupplies() { const s = await getDocs(query(collection(adminDb, 'supplies'), limit(5000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 
@@ -486,16 +486,19 @@ export async function bulkInsertMedications(items: any[], source: string) {
             else if (typeof rawFecha === 'number' && rawFecha > 40000) fCad = new Date((rawFecha - 25569) * 86400 * 1000).toLocaleDateString('es-MX');
             else fCad = String(rawFecha || 'SIN FECHA').trim();
             
+            const rawLote = String(findFld(raw, ['LOTE', 'NUMERO DE LOTE', 'NUMEROLOTE', 'LOTES']) || 'S/L').toUpperCase().trim();
             const mapped: any = {
                 claveCuadroBasico: String(findFld(raw, ['CLAVE DE CUADRO BASICO', 'CLAVE', 'CODIGO', 'CUI', 'CLAVEDECUADROBASICO']) || '').trim(),
                 descripcion: String(findFld(raw, ['DESCRIPCION', 'DENOMINACION GENERICA', 'NOMBRE DEL MEDICAMENTO', 'CONCEPTO', 'DENOMINACION', 'NOMBRE', 'ARTICULO']) || '').toUpperCase().trim(),
                 existencia: Number(findFld(raw, ['EXISTENCIA', 'CANTIDAD', 'STOCK', 'SALDO', 'DISPONIBLE']) || 0),
-                lote: String(findFld(raw, ['LOTE', 'NUMERO DE LOTE', 'NUMEROLOTE', 'LOTES']) || 'S/L').toUpperCase().trim(),
+                lote: rawLote,
                 fechaCaducidad: fCad, fuenteEtiqueta: source, updatedAt: new Date().toISOString()
             };
 
             if (!mapped.descripcion) return;
-            const id = `${mapped.claveCuadroBasico || uuidv4().split('-')[0]}_${source}_${mapped.lote}`;
+            // SENIOR FIX: Sanitizar lote para evitar diagonales en el ID de documento de Firestore
+            const sanitizedLote = rawLote.replace(/\//g, '-');
+            const id = `${mapped.claveCuadroBasico || uuidv4().split('-')[0]}_${source}_${sanitizedLote}`;
             batch.set(doc(adminDb, colName, id), { ...mapped, id }, { merge: true });
         });
         await batch.commit();
