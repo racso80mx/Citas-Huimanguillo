@@ -23,22 +23,10 @@ import { adminDb } from '@/firebase/server-config';
 import type { 
   Patient, 
   Appointment, 
-  Holiday, 
-  SpecialActionDay, 
-  LabStudy, 
-  LabSettings,
-  XRayStudy, 
-  XRaySettings,
-  UltrasoundStudy, 
-  UltrasoundSettings,
-  Vaccine, 
-  VaccineSettings,
-  ModuleSettings,
-  AdminSettings,
-  ArchiveSettings,
-  PharmacySettings,
-  WarehouseSettings,
-  BISettings,
+  LabAppointment,
+  XRayAppointment,
+  UltrasoundAppointment,
+  VaccineAppointment,
   Clinic,
   Colonia,
   ServiceType,
@@ -52,14 +40,14 @@ import type {
 } from './definitions';
 import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
-import { startOfDay, endOfDay, parseISO, format } from 'date-fns';
+import { startOfDay, endOfDay, parseISO, format, isValid } from 'date-fns';
 
-// Exportamos adminDb para que actions.ts pueda usarlo si es necesario
-export { adminDb };
+export { 
+    adminDb, collection, doc, getDoc, getDocs, writeBatch, 
+    setDoc, updateDoc, deleteDoc, addDoc, query, where, 
+    limit, orderBy, increment, documentId, Timestamp, getCountFromServer
+};
 
-/**
- * MOTOR DE SERIALIZACIÓN PROFESIONAL
- */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return data;
   if (typeof data.toDate === 'function') return data.toDate().toISOString();
@@ -138,22 +126,6 @@ export async function getModuleSettings(): Promise<ModuleSettings> {
 }
 export async function updateModuleSettings(s: ModuleSettings) { await setDoc(doc(adminDb, 'settings', 'moduleSettings'), s, { merge: true }); return { success: true }; }
 
-// --- SEGURIDAD ---
-export async function verifyModulePassword(module: string, password: string) {
-    if (module === 'superadmin') {
-        const sa = await getDoc(doc(adminDb, 'settings', 'adminSettings'));
-        return { success: (sa.exists() ? sa.data()?.password : 'Hu1m4ngu1ll0') === password };
-    }
-    const docId = { archive: 'archiveSettings', pharmacy: 'pharmacySettings', warehouse: 'warehouseSettings', bi: 'biSettings' }[module] || `${module}Settings`;
-    const snap = await getDoc(doc(adminDb, 'settings', docId));
-    const dbPass = snap.exists() ? snap.data()?.password : '123';
-    return { success: dbPass === password || password === 'citas2026' };
-}
-export async function verifyClinicPassword(id: string, password: string) {
-    const s = await getDoc(doc(adminDb, 'clinics', id));
-    return { success: s.exists() && (s.data()?.password === password || password === 'citas2026') };
-}
-
 // --- PACIENTES ---
 export async function getPatientCounts(): Promise<ArchiveCounts> {
     const coll = collection(adminDb, 'patients');
@@ -171,9 +143,9 @@ export async function getPatientCounts(): Promise<ArchiveCounts> {
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     let q;
-    const MAX_LIMIT = options?.limitNum || 10000;
+    const MAX_LIMIT = 10000;
     if (options?.searchCurp) q = query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(100));
-    else if (options?.searchExpediente) q = query(colRef, where('expediente', '==', options.searchExpediente.trim()), limit(100));
+    else if (options?.searchExpediente) q = query(colRef, where('expediente', '==', String(options.searchExpediente).trim()), limit(100));
     else if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
         q = query(colRef, where('nombreCompleto', '>=', term), where('nombreCompleto', '<=', term + '\uf8ff'), limit(MAX_LIMIT));
@@ -225,7 +197,7 @@ export async function deletePatients(ids: string[]) {
     ids.slice(i, i + CHUNK_SIZE).forEach(id => batch.delete(doc(adminDb, 'patients', id)));
     await batch.commit();
   }
-  return { success: true };
+  return { success: true, deletedCount: ids.length };
 }
 export async function bulkInsertPatients(patients: any[]) {
     for (let i = 0; i < patients.length; i += 450) {
@@ -263,19 +235,6 @@ export async function applyStatusUpdateChunk(expedientes: string[], status: Pati
     return { success: true, count };
 }
 
-export async function rebuildNombreCompletoAction() {
-    const snap = await getDocs(query(collection(adminDb, 'patients'), limit(10000)));
-    const batch = writeBatch(adminDb);
-    let count = 0;
-    snap.forEach(d => {
-        const data = d.data();
-        batch.update(d.ref, { nombreCompleto: generateNombreCompleto(data) });
-        count++;
-    });
-    await batch.commit();
-    return { success: true, count };
-}
-
 // --- CITAS ---
 export async function getAppointmentsData() {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(10000)));
@@ -297,18 +256,59 @@ export async function getVaccineAppointmentsData() {
     const snap = await getDocs(query(collection(adminDb, 'vaccineAppointments'), limit(10000)));
     return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
 }
+export async function deleteAppointment(id: string) { await deleteDoc(doc(adminDb, 'appointments', id)); return { success: true }; }
+export async function deleteLabAppointment(id: string) { await deleteDoc(doc(adminDb, 'labAppointments', id)); return { success: true }; }
+export async function deleteXRayAppointment(id: string) { await deleteDoc(doc(adminDb, 'xrayAppointments', id)); return { success: true }; }
+export async function deleteUltrasoundAppointment(id: string) { await deleteDoc(doc(adminDb, 'ultrasoundAppointments', id)); return { success: true }; }
+export async function deleteVaccineAppointment(id: string) { await deleteDoc(doc(adminDb, 'vaccineAppointments', id)); return { success: true }; }
+
+// --- REPROGRAMACIÓN ---
+export async function rescheduleAppointment(id: string, date: string, type: string, time: string) {
+    const colMap: Record<string, string> = {
+        'medical': 'appointments', 'lab': 'labAppointments', 'xray': 'xrayAppointments',
+        'ultrasound': 'ultrasoundAppointments', 'vaccine': 'vaccineAppointments'
+    };
+    const colName = colMap[type] || 'appointments';
+    await updateDoc(doc(adminDb, colName, id), { date, time });
+    return { success: true, message: 'Cita reprogramada exitosamente.' };
+}
+
+export async function cloneAppointment(id: string, date: string, type: string, time: string) {
+    const colMap: Record<string, string> = {
+        'medical': 'appointments', 'lab': 'labAppointments', 'xray': 'xrayAppointments',
+        'ultrasound': 'ultrasoundAppointments', 'vaccine': 'vaccineAppointments'
+    };
+    const colName = colMap[type] || 'appointments';
+    const oldDoc = await getDoc(doc(adminDb, colName, id));
+    if (!oldDoc.exists()) return { success: false, message: 'Cita original no encontrada.' };
+    const data = oldDoc.data();
+    const newId = uuidv4();
+    const appNum = `${data.appointmentNumber}-N`;
+    await setDoc(doc(adminDb, colName, newId), {
+        ...data, id: newId, date, time, appointmentNumber: appNum, status: 'Agendada', createdAt: new Date().toISOString()
+    });
+    return { success: true, message: `Nueva cita asignada con folio ${appNum}` };
+}
+
 export async function getAvailableSlotsForDate(clinicId: string, dateIso: string) {
     const cDoc = await getDoc(doc(adminDb, 'clinics', clinicId)); if (!cDoc.exists()) return {};
-    const clinic = serializeData(cDoc.data()) as Clinic; const targetDay = format(parseISO(dateIso), 'yyyy-MM-dd');
+    const clinic = serializeData(cDoc.data()) as Clinic; 
+    const targetDay = format(parseISO(dateIso), 'yyyy-MM-dd');
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId)));
     const taken = snap.docs.map(d => serializeData(d.data())).filter(a => format(parseISO(a.date), 'yyyy-MM-dd') === targetDay).map(a => a.time);
+    
     if (clinic.bookingMode === BookingMode.Token) {
         const tot = (clinic.dailySlots || 15) + (clinic.waitlistSlots || 0);
         return { tokens: Array.from({ length: tot }, (_, i) => i + 1).filter(t => !taken.includes(`Ficha ${t}`)) };
     } else {
         const slots: string[] = []; const sH = clinic.startTime || '08:00'; const eH = clinic.endTime || '13:00';
-        try { let curr = new Date(`1970-01-01T${sH}:00`); const stop = new Date(`1970-01-01T${eH}:00`);
-            while (curr < stop) { const t = curr.toTimeString().substring(0, 5); if (t !== clinic.breakTime) slots.push(t); curr = new Date(curr.getTime() + (clinic.consultationDuration || 30) * 60000); }
+        try { 
+            let curr = new Date(`1970-01-01T${sH}:00`); const stop = new Date(`1970-01-01T${eH}:00`);
+            while (curr < stop) { 
+                const t = curr.toTimeString().substring(0, 5); 
+                if (t !== clinic.breakTime) slots.push(t); 
+                curr = new Date(curr.getTime() + (clinic.consultationDuration || 30) * 60000); 
+            }
         } catch (e) {}
         return { timeSlots: slots.filter(s => !taken.includes(s)) };
     }
@@ -323,6 +323,10 @@ export async function getConsultationsByPatientId(pid: string) {
     const s = await getDocs(query(collection(adminDb, 'medicalConsultations'), where('patientId', '==', pid)));
     return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id })).sort((a: any, b: any) => String(b.date).localeCompare(String(a.date))));
 }
+export async function getConsultationByAppointmentId(aid: string) {
+    const s = await getDocs(query(collection(adminDb, 'medicalConsultations'), where('appointmentId', '==', aid), limit(1)));
+    return s.empty ? null : serializeData({ ...s.docs[0].data(), id: s.docs[0].id });
+}
 export async function saveMedicalConsultation(c: any) {
     const id = c.id || uuidv4(); await setDoc(doc(adminDb, 'medicalConsultations', id), { ...c, id, createdAt: new Date().toISOString() });
     if (c.isFinal) await updateDoc(doc(adminDb, 'appointments', c.appointmentId), { status: 'Atendido' });
@@ -334,6 +338,16 @@ export async function createPrescription(p: any) {
     await setDoc(doc(adminDb, 'prescriptions', id), { ...p, id, folio, status: 'pendiente', createdAt: new Date().toISOString(), expiresAt: exp.toISOString() });
     return { success: true, folio, prescription: { ...p, id, folio, status: 'pendiente' } };
 }
+export async function updatePrescription(id: string, data: any) {
+    const docRef = doc(adminDb, 'prescriptions', id);
+    await updateDoc(docRef, { ...data, updatedAt: new Date().toISOString() });
+    return { success: true };
+}
+export async function deletePrescription(id: string) {
+    const docRef = doc(adminDb, 'prescriptions', id);
+    await deleteDoc(docRef);
+    return { success: true };
+}
 export async function dispensePrescription(id: string, items: any[]) {
     const b = writeBatch(adminDb); items.forEach(i => b.update(doc(adminDb, 'medications', i.medicationId), { existencia: increment(-i.quantity) }));
     b.update(doc(adminDb, 'prescriptions', id), { status: 'surtida', dispensedAt: new Date().toISOString() });
@@ -341,6 +355,10 @@ export async function dispensePrescription(id: string, items: any[]) {
 }
 
 // --- FARMACIA ---
+export async function getMedications() {
+    const snap = await getDocs(query(collection(adminDb, 'medications'), limit(10000)));
+    return serializeData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+}
 export async function bulkInsertMedications(items: any[], source: string) {
     const findFld = (row: any, names: string[]) => { const search = names.map(normalizeString); const kFound = Object.keys(row).find(k => search.includes(normalizeString(k))); return kFound ? row[kFound] : null; };
     const colName = source === 'EXTERNO' ? 'supplies' : 'medications';
@@ -366,6 +384,12 @@ export async function bulkInsertMedications(items: any[], source: string) {
     }
     return { success: true };
 }
+export async function deleteMedicationsBySource(source: string) {
+    const colName = source === 'EXTERNO' ? 'supplies' : 'medications';
+    const snap = await getDocs(query(collection(adminDb, colName), where('fuenteEtiqueta', '==', source)));
+    const batch = writeBatch(adminDb); snap.forEach(d => batch.delete(d.ref));
+    await batch.commit(); return { success: true, deletedCount: snap.size };
+}
 
 // --- MANTENIMIENTO ---
 export async function cleanupOldRecords() {
@@ -382,58 +406,11 @@ export async function downloadBackupAction() {
 
 // --- CATALOGOS ---
 export async function getClinicsData() { return (await getDocs(collection(adminDb, 'clinics'))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
-export async function updateClinics(clinics: Clinic[]) { for (const c of clinics) await setDoc(doc(adminDb, 'clinics', c.id), c, { merge: true }); return { success: true }; }
-export async function deleteClinic(id: string) { await deleteDoc(doc(adminDb, 'clinics', id)); return { success: true }; }
 export async function getHolidaysData() { return (await getDocs(collection(adminDb, 'holidays'))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function getColoniasData() { return (await getDocs(collection(adminDb, 'colonias'))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function getServiceTypesData() { return (await getDocs(collection(adminDb, 'serviceTypes'))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function getSpecialtiesData() { return (await getDocs(collection(adminDb, 'specialties'))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function getDepartmentsData() { return (await getDocs(collection(adminDb, 'departments'))).docs.map(d => serializeData({ ...d.data(), id: d.id })); }
-export async function searchCie10(t: string) { 
-    const term = t.toUpperCase().trim(); const q = query(collection(adminDb, 'cie10Catalog'), where('nombre', '>=', term), where('nombre', '<=', term + '\uf8ff'), limit(50));
-    return (await getDocs(q)).docs.map(d => ({ ...serializeData(d.data()), id: d.id }));
-}
-
-// --- GUARDADO ESPECIALIZADO CITAS ---
-export async function saveNewLabAppointment(a: any, p: any) {
-    const b = writeBatch(adminDb); const pid = p.curp.toUpperCase().trim();
-    b.set(doc(adminDb, 'patients', pid), { ...p, id: pid, nombreCompleto: generateNombreCompleto(p) }, { merge: true });
-    b.set(doc(adminDb, 'labAppointments', uuidv4()), { ...a, patientId: pid, createdAt: new Date().toISOString() });
-    await b.commit(); return { success: true, data: { ...a, patient: p } };
-}
-export async function saveNewXRayAppointment(a: any, p: any) {
-    const b = writeBatch(adminDb); const pid = p.curp.toUpperCase().trim();
-    b.set(doc(adminDb, 'patients', pid), { ...p, id: pid, nombreCompleto: generateNombreCompleto(p) }, { merge: true });
-    b.set(doc(adminDb, 'xrayAppointments', uuidv4()), { ...a, patientId: pid, createdAt: new Date().toISOString() });
-    await b.commit(); return { success: true };
-}
-export async function saveNewUltrasoundAppointment(a: any, p: any) {
-    const b = writeBatch(adminDb); const pid = p.curp.toUpperCase().trim();
-    b.set(doc(adminDb, 'patients', pid), { ...p, id: pid, nombreCompleto: generateNombreCompleto(p) }, { merge: true });
-    b.set(doc(adminDb, 'ultrasoundAppointments', uuidv4()), { ...a, patientId: pid, createdAt: new Date().toISOString() });
-    await b.commit(); return { success: true };
-}
-export async function saveNewVaccineAppointment(a: any, p: any) {
-    const b = writeBatch(adminDb); const pid = p.curp.toUpperCase().trim();
-    b.set(doc(adminDb, 'patients', pid), { ...p, id: pid, nombreCompleto: generateNombreCompleto(p) }, { merge: true });
-    b.set(doc(adminDb, 'vaccineAppointments', uuidv4()), { ...a, patientId: pid, createdAt: new Date().toISOString() });
-    await b.commit(); return { success: true };
-}
-
-export async function getPrescriptionHistory(filters: any) {
-    let q = query(collection(adminDb, 'prescriptions'), orderBy('createdAt', 'desc'));
-    if (filters?.startDate && filters?.endDate) {
-        q = query(q, where('createdAt', '>=', filters.startDate), where('createdAt', '<=', filters.endDate));
-    }
-    const snap = await getDocs(q);
-    return serializeData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
-}
-
-export async function getPatientPrescriptionsCountTodayAction(pid: string) {
-    const today = startOfDay(new Date()).toISOString();
-    const snap = await getCountFromServer(query(collection(adminDb, 'prescriptions'), where('patientId', '==', pid), where('createdAt', '>=', today)));
-    return snap.data().count;
-}
 
 export async function getAttendedPatientsForClinic(clinicId: string) {
     const snap = await getDocs(query(collection(adminDb, 'medicalConsultations'), where('clinicId', '==', clinicId), limit(1000)));
@@ -459,23 +436,9 @@ export async function createPharmacyVoucher(v: any) {
     const id = uuidv4();
     const folio = `VALE-${uuidv4().split('-')[0].toUpperCase()}`;
     const batch = writeBatch(adminDb);
-    
-    // Update inventory
-    for (const item of v.items) {
-        batch.update(doc(adminDb, 'medications', item.medicationId), { existencia: increment(-item.quantity) });
-    }
-    
-    // Save voucher
+    for (const item of v.items) batch.update(doc(adminDb, 'medications', item.medicationId), { existencia: increment(-item.quantity) });
     batch.set(doc(adminDb, 'pharmacyVouchers', id), { ...v, id, folio, createdAt: new Date().toISOString() });
-    
-    await batch.commit();
-    return { success: true, folio };
-}
-
-export async function getPrescriptionByFolio(folio: string) {
-    const snap = await getDocs(query(collection(adminDb, 'prescriptions'), where('folio', '==', folio), limit(1)));
-    if (snap.empty) return null;
-    return serializeData({ ...snap.docs[0].data(), id: snap.docs[0].id });
+    await batch.commit(); return { success: true, folio };
 }
 
 export async function getPendingPrescriptions(filters?: { folio?: string, clinicId?: string }) {
@@ -484,4 +447,124 @@ export async function getPendingPrescriptions(filters?: { folio?: string, clinic
     if (filters?.clinicId) q = query(q, where('clinicId', '==', filters.clinicId));
     const snap = await getDocs(q);
     return serializeData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+}
+
+export async function saveNewAppointment(appointment: any, patient: any, isDouble: boolean, colonia?: string) {
+    const b = writeBatch(adminDb); const pid = patient.curp.toUpperCase().trim();
+    b.set(doc(adminDb, 'patients', pid), { ...patient, id: pid, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
+    const appNum = `APP-${uuidv4().split('-')[0].toUpperCase()}`;
+    const data = { ...appointment, patientId: pid, appointmentNumber: appNum, coloniaName: colonia, createdAt: new Date().toISOString() };
+    b.set(doc(adminDb, 'appointments', uuidv4()), data);
+    if (isDouble) {
+        let nextTime = appointment.time; try { const d = new Date(`1970-01-01T${appointment.time}:00`); d.setMinutes(d.getMinutes() + 30); nextTime = d.toTimeString().substring(0, 5); } catch(e){}
+        b.set(doc(adminDb, 'appointments', uuidv4()), { ...data, time: nextTime, appointmentNumber: `${appNum}-2` });
+    }
+    await b.commit(); return { success: true, data: { appointment: { ...data, id: 'tmp' }, clinic: {} } };
+}
+
+export async function saveNewLabAppointment(a: any, p: any) {
+    const b = writeBatch(adminDb); const pid = p.curp.toUpperCase().trim();
+    b.set(doc(adminDb, 'patients', pid), { ...p, id: pid, nombreCompleto: generateNombreCompleto(p) }, { merge: true });
+    const data = { ...a, patientId: pid, createdAt: new Date().toISOString() };
+    b.set(doc(adminDb, 'labAppointments', uuidv4()), data);
+    await b.commit(); return { success: true, data: { ...data, patient: p } };
+}
+export async function saveNewXRayAppointment(a: any, p: any) {
+    const b = writeBatch(adminDb); const pid = p.curp.toUpperCase().trim();
+    b.set(doc(adminDb, 'patients', pid), { ...p, id: pid, nombreCompleto: generateNombreCompleto(p) }, { merge: true });
+    const data = { ...a, patientId: pid, createdAt: new Date().toISOString() };
+    b.set(doc(adminDb, 'xrayAppointments', uuidv4()), data);
+    await b.commit(); return { success: true, data: { appointment: { ...data, patient: p }, study: { name: a.studyName, indications: '' } } };
+}
+export async function saveNewUltrasoundAppointment(a: any, p: any) {
+    const b = writeBatch(adminDb); const pid = p.curp.toUpperCase().trim();
+    b.set(doc(adminDb, 'patients', pid), { ...p, id: pid, nombreCompleto: generateNombreCompleto(p) }, { merge: true });
+    const data = { ...a, patientId: pid, createdAt: new Date().toISOString() };
+    b.set(doc(adminDb, 'ultrasoundAppointments', uuidv4()), data);
+    await b.commit(); return { success: true, data: { appointment: { ...data, patient: p }, study: { name: a.studyName, indications: '' } } };
+}
+export async function saveNewVaccineAppointment(a: any, p: any) {
+    const b = writeBatch(adminDb); const pid = p.curp.toUpperCase().trim();
+    b.set(doc(adminDb, 'patients', pid), { ...p, id: pid, nombreCompleto: generateNombreCompleto(p) }, { merge: true });
+    const data = { ...a, patientId: pid, createdAt: new Date().toISOString() };
+    b.set(doc(adminDb, 'vaccineAppointments', uuidv4()), data);
+    await b.commit(); return { success: true, data: { ...data, patient: p } };
+}
+
+export async function getPrescriptionHistory(filters: any) {
+    let q = query(collection(adminDb, 'prescriptions'), where('status', '==', 'surtida'));
+    if (filters?.startDate) q = query(q, where('dispensedAt', '>=', filters.startDate));
+    const snap = await getDocs(q);
+    return serializeData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+}
+
+export async function getPatientPrescriptionsCountTodayAction(pid: string) {
+    const snap = await getDocs(query(collection(adminDb, 'prescriptions'), where('patientId', '==', pid), where('createdAt', '>=', startOfDay(new Date()).toISOString())));
+    return snap.size;
+}
+
+export async function searchCie10(term: string): Promise<Cie10Record[]> {
+    const t = term.toUpperCase().trim();
+    const snap = await getDocs(query(collection(adminDb, 'cie10Catalog'), where('nombre', '>=', t), where('nombre', '<=', t + '\uf8ff'), limit(20)));
+    if (snap.empty) {
+        const snapCode = await getDocs(query(collection(adminDb, 'cie10Catalog'), where('catalogKey', '>=', t), where('catalogKey', '<=', t + '\uf8ff'), limit(20)));
+        return serializeData(snapCode.docs.map(d => ({ ...d.data(), id: d.id })));
+    }
+    return serializeData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+}
+
+export async function normalizeExpedientesAction() {
+    const snap = await getDocs(collection(adminDb, 'patients'));
+    const batch = writeBatch(adminDb);
+    let count = 0;
+    snap.forEach(d => {
+        const exp = String(d.data().expediente || '');
+        if (exp && exp.length < 5 && !exp.startsWith('0')) {
+            batch.update(d.ref, { expediente: exp.padStart(5, '0') });
+            count++;
+        }
+    });
+    await batch.commit();
+    return { success: true, count };
+}
+
+export async function rebuildNombreCompletoAction() {
+    const snap = await getDocs(collection(adminDb, 'patients'));
+    const batch = writeBatch(adminDb);
+    let count = 0;
+    snap.forEach(d => {
+        batch.update(d.ref, { nombreCompleto: generateNombreCompleto(d.data()) });
+        count++;
+    });
+    await batch.commit();
+    return { success: true, count };
+}
+
+export async function scanDuplicates(criteria: 'expediente' | 'curp' | 'name') {
+    const snap = await getDocs(collection(adminDb, 'patients'));
+    const map = new Map<string, any[]>();
+    snap.forEach(d => {
+        const data = d.data();
+        let key = '';
+        if (criteria === 'expediente') key = String(data.expediente || '').trim();
+        else if (criteria === 'curp') key = String(data.curp || '').trim().toUpperCase();
+        else key = generateNombreCompleto(data);
+        if (!key) return;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push({ ...data, id: d.id });
+    });
+    return Array.from(map.values()).filter(group => group.length > 1);
+}
+
+export async function verifyModulePassword(type: string, p: string) {
+    const docName = type === 'superadmin' ? 'adminSettings' : type === 'medical' ? 'moduleSettings' : `${type}Settings`;
+    const s = await getDoc(doc(adminDb, 'settings', docName));
+    const success = s.exists() && (s.data().password === p || (type === 'medical' && s.data().citasMedicasPassword === p) || (type === 'archiveInquiry' && s.data().archivoConsultaPassword === p));
+    return { success, message: !success ? 'Contraseña incorrecta.' : undefined };
+}
+
+export async function verifyClinicPassword(id: string, p: string) {
+    const s = await getDoc(doc(adminDb, 'clinics', id));
+    const success = s.exists() && s.data().password === p;
+    return { success, message: !success ? 'Contraseña de consultorio incorrecta.' : undefined };
 }

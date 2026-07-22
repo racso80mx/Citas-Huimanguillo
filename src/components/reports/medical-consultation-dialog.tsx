@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -730,7 +731,7 @@ export function MedicalConsultationDialog({
                       </ScrollArea>
                   </Tabs>
 
-                  <DialogFooter className="p-6 border-t bg-muted/20 shrink-0 flex items-center justify-between sm:justify-between">
+                  <DialogFooter className="p-6 border-t bg-muted/10 shrink-0 flex items-center justify-between sm:justify-between">
                     <Button type="button" variant="outline" onClick={onClose} disabled={isSaving} className="h-12 px-8">Cancelar</Button>
                     <div className="flex gap-4">
                         <Button 

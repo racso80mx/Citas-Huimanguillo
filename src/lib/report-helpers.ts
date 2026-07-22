@@ -57,12 +57,12 @@ function addDateTimeHighlight(doc: any, date: string, time: string, currentY: nu
 
     doc.setTextColor(PRIMARY_COLOR[0], PRIMARY_COLOR[1], PRIMARY_COLOR[2]);
     doc.setFontSize(17);
-    const dateObj = typeof date === 'string' ? parseISO(date) : new Date(date);
-    const formattedDate = isValid(dateObj) ? format(dateObj, "eeee, dd 'de' MMMM 'de' yyyy", { locale: es }).toUpperCase() : 'FECHA NO VÁLIDA';
+    const dateObj = date ? (typeof date === 'string' ? parseISO(date) : new Date(date)) : null;
+    const formattedDate = dateObj && isValid(dateObj) ? format(dateObj, "eeee, dd 'de' MMMM 'de' yyyy", { locale: es }).toUpperCase() : 'FECHA NO DISPONIBLE';
     doc.text(formattedDate, 105, currentY + 10, { align: 'center' });
     
     doc.setFontSize(22);
-    doc.text(String(time || 'S/H').includes('Ficha') ? String(time).toUpperCase() : `HORA: ${time} HRS`, 105, currentY + 20, { align: 'center' });
+    doc.text(String(time || 'S/H').includes('Ficha') ? String(time).toUpperCase() : `HORA: ${time || '---'} HRS`, 105, currentY + 20, { align: 'center' });
     return currentY + 35;
 }
 
@@ -110,7 +110,7 @@ export async function downloadExcel(data: any[], filename: string) {
 
             const baseData: any = {
                 'Folio': item.appointmentNumber || 'N/A',
-                'Expediente': item.expediente || item.patient?.expediente || 'N/A',
+                'Expediente': String(item.expediente || item.patient?.expediente || 'N/A'),
                 'Fecha Cita': fechaCita,
                 'Hora': item.time || 'N/A',
                 'Fecha Registro': fechaRegistro,
@@ -175,7 +175,7 @@ export async function generateArchiveListPDF(appointments: any[], title: string,
         app.time,
         app.appointmentNumber,
         app.patient ? `${app.patient.paternalLastName} ${app.patient.maternalLastName} ${app.patient.name}` : 'PACIENTE NO DEFINIDO',
-        app.patient?.expediente || 'S/E',
+        String(app.patient?.expediente || 'S/E'),
         app.patient?.curp || 'S/C',
         app.patientType,
         app.clinicName || 'N/A',
@@ -342,7 +342,7 @@ export async function generateLabAppointmentPDF(appointment: LabAppointment, ann
         headStyles: { fillColor: PRIMARY_COLOR },
     });
 
-    let finalY = doc.lastAutoTable.finalY + 15;
+    let finalY = doc.autoTable.previous.finalY + 15;
     doc.setFontSize(10);
     doc.setFont('Helvetica', 'bold');
     doc.text('RECUERDE:', 20, finalY);
@@ -537,7 +537,7 @@ export async function generatePrescriptionPDF(prescription: Prescription) {
                 3: { cellWidth: 'auto' } 
             }
         });
-        currentY = doc.lastAutoTable.finalY + 10;
+        currentY = doc.autoTable.previous.finalY + 10;
     }
 
     if (prescription.otherMedications) {

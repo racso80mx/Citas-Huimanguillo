@@ -1,3 +1,4 @@
+
 'use client';
 import React, { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
 import type { Appointment, Clinic, LabAppointment, XRayAppointment, UltrasoundAppointment, VaccineAppointment, Patient, MedicalConsultation, Prescription, Colonia } from '@/lib/definitions';
@@ -424,7 +425,7 @@ export function ReportsDashboard({ entity, onLogout, reportType }: ReportsDashbo
                                                 <Label className="text-xs font-bold uppercase opacity-60">Buscar en historial de {entity.name}</Label>
                                                 <div className="relative">
                                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                                    <Input placeholder="Nombre, CURP o Expediente..." className="pl-9 h-11" value={historySearchTerm} onChange={e => setHistorySearchTerm(e.target.value)} />
+                                                    <Input placeholder="Nombre, CURP o Expediente..." className="pl-9 h-11" value={historySearchTerm} onChange={e => historySearchTerm(e.target.value)} />
                                                 </div>
                                             </div>
                                             <Button variant="outline" className="h-11" onClick={() => setIsSearchingArchive(!isSearchingArchive)}>

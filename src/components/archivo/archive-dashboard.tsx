@@ -40,7 +40,6 @@ import {
   getAppointments, 
   getClinics, 
   updatePatient, 
-  deleteAppointment,
   getServiceTypes,
   getColonias
 } from '@/lib/actions';
@@ -91,7 +90,7 @@ import {
 import { es } from 'date-fns/locale';
 import { DateRange } from 'react-day-picker';
 import { Calendar } from '../ui/calendar';
-import { generateArchiveListPDF, downloadExcel } from '@/lib/report-helpers';
+import { downloadExcel, generateArchiveListPDF } from '@/lib/report-helpers';
 import { Label } from '../ui/label';
 import {
   AlertDialog,
@@ -161,41 +160,32 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
           setAllAppointments(apps);
       }
 
-      // Si no es búsqueda manual y es la primera carga, traemos vigentes
-      if (!hasSearched && !manualSearch && activeTab === 'patients') {
-          const patientsData = await getPatients({ status: statusFilter, limitNum: 10000 });
-          setPatients(patientsData);
-          setHasSearched(true);
-      } else if (manualSearch && activeTab === 'patients') {
-          const searchOptions: any = { 
-              status: statusFilter === 'Total' ? undefined : statusFilter,
-              searchCurp: searchCurp.toUpperCase().trim() || undefined,
-              searchExpediente: searchExpediente.trim() || undefined,
-              searchName: searchName.toUpperCase().trim() || undefined,
-              limitNum: 10000
-          };
-          const patientsData = await getPatients(searchOptions);
-          setPatients(patientsData);
-          setCurrentPage(1);
-          setSelectedPatientIds([]);
-      }
+      const searchOptions: any = { 
+          status: statusFilter === 'Total' ? undefined : statusFilter,
+          searchCurp: searchCurp.toUpperCase().trim() || undefined,
+          searchExpediente: searchExpediente.trim() || undefined,
+          searchName: searchName.toUpperCase().trim() || undefined,
+          limitNum: 10000
+      };
+      const patientsData = await getPatients(searchOptions);
+      setPatients(patientsData);
+      setCurrentPage(1);
+      setSelectedPatientIds([]);
+      setHasSearched(true);
     } catch (e) {
       toast({ title: 'Error de Red', variant: 'destructive' });
     } finally {
       setIsDataLoading(false);
     }
-  }, [statusFilter, searchName, searchCurp, searchExpediente, activeTab, toast, hasSearched]);
+  }, [statusFilter, searchName, searchCurp, searchExpediente, activeTab, toast]);
   
   useEffect(() => {
     loadData(false);
   }, []);
 
-  /**
-   * REQUERIMIENTO SENIOR: Búsqueda por marcado automático
-   * En Baja Temporal, al buscar expediente se marca automáticamente en lugar de filtrar.
-   */
+  // AUTO-MARK LOGIC: When searching by expediente in "Baja Temporal", mark it instead of filtering
   useEffect(() => {
-    if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 3) {
+    if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 2) {
         const term = searchExpediente.trim();
         const exactMatch = patients.find(p => String(p.expediente || '').trim() === term);
         if (exactMatch && !selectedPatientIds.includes(exactMatch.id)) {
@@ -206,20 +196,20 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   }, [searchExpediente, patients, statusFilter, selectedPatientIds, toast]);
 
   const visiblePatients = useMemo(() => {
-    // Si estamos en Baja Temporal, no filtramos la lista para permitir el marcado fluido
-    if (statusFilter === PatientStatusEnum.Baja) return patients;
-    if (statusFilter === 'Total') return patients;
-    
     const sName = searchName.toUpperCase().trim();
     const sCurp = searchCurp.toUpperCase().trim();
     const sExp = searchExpediente.trim();
-
-    if (!sName && !sCurp && !sExp) return patients;
 
     return patients.filter(p => {
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
+        
+        // If status is Baja Temporal, we don't filter by expediente, we mark it (handled in useEffect)
+        if (statusFilter === PatientStatusEnum.Baja) {
+            return nameMatch && curpMatch;
+        }
+
         const expMatch = !sExp || String(p.expediente || '').includes(sExp);
         return nameMatch && curpMatch && expMatch;
     });
@@ -255,10 +245,9 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const handleEdit = (patient: Patient) => { setEditingPatient(patient); setIsEditOpen(true); };
   const handleSchedule = (patient: Patient) => { setSchedulingPatient(patient); };
   
-  /** REQUERIMIENTO SENIOR: Eliminación Lógica a Baja Definitiva con Optimismo */
   const handleDeleteLogical = (patientId: string) => {
     if (isReadOnly) return;
-    // Eliminación optimista de la lista actual
+    // Optimistic UI: move to definitive view immediately
     setPatients(prev => prev.filter(p => p.id !== patientId));
     setSelectedPatientIds(prev => prev.filter(id => id !== patientId));
     
@@ -273,6 +262,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const handleBulkToDefinitive = () => {
       if (selectedPatientIds.length === 0 || isReadOnly) return;
       const idsToChange = [...selectedPatientIds];
+      // Optimistic
       setPatients(prev => prev.filter(p => !idsToChange.includes(p.id)));
       setSelectedPatientIds([]);
       
@@ -309,7 +299,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     startSubmitTransition(async () => {
       await updatePatientStatus(patientId, newStatus);
       toast({ title: "Estado Actualizado" });
-      // Recarga optimista
       setPatients(prev => prev.filter(p => p.id !== patientId));
     });
   }
@@ -518,7 +507,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                     </div>
                 </CardHeader>
                 <CardContent className="pt-6">
-                    <AppointmentList appointments={appointmentsToDisplay} clinics={clinics} isAdmin={!isReadOnly} onDelete={async (id) => { await deleteAppointment(id); loadData(true); }} onEditSuccess={() => loadData(true)} />
+                    <AppointmentList appointments={appointmentsToDisplay} clinics={clinics} isAdmin={!isReadOnly} onDelete={handleDeleteLogical} onEditSuccess={() => loadData(true)} />
                 </CardContent>
            </Card>
         </TabsContent>
