@@ -52,7 +52,6 @@ import { MassUploadDialog } from './mass-upload-dialog';
 import { EditPatientDialog } from './edit-patient-dialog';
 import { ScheduleAppointmentDialog } from './schedule-appointment-dialog';
 import { AppointmentList } from '../appointment-list';
-import { v4 as uuidv4 } from 'uuid';
 import {
   Select,
   SelectContent,
@@ -139,6 +138,13 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const { toast } = useToast();
 
   const loadData = useCallback(async (manualSearch = false) => {
+    // Requerimiento Senior: Si hay un estatus seleccionado (no Total), el botón de búsqueda no va a la BD.
+    // El filtrado local lo maneja el useMemo 'visiblePatients'.
+    if (manualSearch && activeTab === 'patients' && statusFilter !== 'Total') {
+        setHasSearched(true);
+        return;
+    }
+
     setIsDataLoading(true);
     if (manualSearch) setHasSearched(true);
     
@@ -179,6 +185,28 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, []);
 
+  /**
+   * REQUERIMIENTO SENIOR: Filtrado local para estatus específicos.
+   * Esto permite buscar entre miles de registros cargados instantáneamente.
+   */
+  const visiblePatients = useMemo(() => {
+    if (statusFilter === 'Total') return patients;
+    
+    const sName = searchName.toUpperCase().trim();
+    const sCurp = searchCurp.toUpperCase().trim();
+    const sExp = searchExpediente.trim();
+
+    if (!sName && !sCurp && !sExp) return patients;
+
+    return patients.filter(p => {
+        const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
+        const nameMatch = !sName || fullName.includes(sName);
+        const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
+        const expMatch = !sExp || (p.expediente || '').includes(sExp);
+        return nameMatch && curpMatch && expMatch;
+    });
+  }, [patients, statusFilter, searchName, searchCurp, searchExpediente]);
+
   const handleClearSearch = () => {
       setSearchName('');
       setSearchCurp('');
@@ -193,6 +221,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
       setHasSearched(true);
       startSubmitTransition(async () => {
           setIsDataLoading(true);
+          // Al hacer clic, cargamos TODOS los registros de ese estatus para filtrado local posterior
           const patientsData = await getPatients({ status: status });
           setPatients(patientsData);
           setCounts(await getPatientCounts());
@@ -204,10 +233,10 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
   const paginatedPatients = useMemo(() => {
     const start = (currentPage - 1) * rowsPerPage;
-    return patients.slice(start, start + rowsPerPage);
-  }, [patients, currentPage, rowsPerPage]);
+    return visiblePatients.slice(start, start + rowsPerPage);
+  }, [visiblePatients, currentPage, rowsPerPage]);
 
-  const totalPages = Math.ceil(patients.length / rowsPerPage);
+  const totalPages = Math.ceil(visiblePatients.length / rowsPerPage);
 
   const handleAddNew = () => { setEditingPatient(null); setIsEditOpen(true); };
   const handleEdit = (patient: Patient) => { setEditingPatient(patient); setIsEditOpen(true); };
@@ -215,18 +244,17 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   
   const handleDelete = (patientId: string) => {
     if (isReadOnly) return;
-    // Senior Interaction: Quitar de la lista inmediatamente (Optimistic UI)
+    // Eliminación Optimista: Quitar de la lista inmediatamente sin esperar a la BD
     setPatients(prev => prev.filter(p => p.id !== patientId));
     setSelectedPatientIds(prev => prev.filter(id => id !== patientId));
     
     startSubmitTransition(async () => {
       const result = await deletePatient(patientId);
-      if(result.success) {
-        toast({ title: "Paciente Eliminado"});
-        // No forzamos recarga total para eficiencia, el optimismo ya lo quitó
+      if(!result.success) {
+        toast({ title: "Error al eliminar", variant: 'destructive'});
+        loadData(true); // Revertir si falló
       } else {
-        // Revertir si falló
-        loadData(true);
+        toast({ title: "Registro eliminado de forma eficiente" });
       }
     });
   }
@@ -235,16 +263,18 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
       if (selectedPatientIds.length === 0 || isReadOnly) return;
       const count = selectedPatientIds.length;
       
-      // Optimistic
+      // Optimismo masivo
       setPatients(prev => prev.filter(p => !selectedPatientIds.includes(p.id)));
-      
+      const idsToDelete = [...selectedPatientIds];
+      setSelectedPatientIds([]);
+
       startSubmitTransition(async () => {
-          const result = await deletePatients(selectedPatientIds);
+          const result = await deletePatients(idsToDelete);
           if (result.success) {
-              toast({ title: "Eliminación Masiva", description: `Se eliminaron ${count} pacientes correctamente.` });
-              setSelectedPatientIds([]);
+              toast({ title: "Eliminación Masiva", description: `Se eliminaron ${count} registros correctamente.` });
               setCounts(await getPatientCounts());
           } else {
+              toast({ title: "Error en proceso masivo", variant: 'destructive' });
               loadData(true);
           }
       });
@@ -317,8 +347,8 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   };
 
   const handleExportExcel = () => {
-    if (patients.length === 0) return;
-    downloadExcel(patients, `padron_pacientes_${statusFilter}`);
+    if (visiblePatients.length === 0) return;
+    downloadExcel(visiblePatients, `padron_pacientes_${statusFilter}`);
   };
 
   return (
@@ -375,7 +405,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-dashed">
                     <div className="flex flex-wrap items-center gap-2">
                         {!isReadOnly && <><Button onClick={handleAddNew} size="sm" className="font-bold"><PlusCircle className="mr-2 h-4 w-4" /> Nuevo Paciente</Button><Button onClick={() => setIsUploadOpen(true)} variant="secondary" size="sm" className="font-bold"><Upload className="mr-2 h-4 w-4" /> Cargar Excel</Button></>}
-                        <Button onClick={handleExportExcel} variant="outline" size="sm" className="font-bold"><Download className="mr-2 h-4 w-4" /> Exportar</Button>
+                        <Button onClick={handleExportExcel} variant="outline" size="sm" className="font-bold"><Download className="mr-2 h-4 w-4" /> Exportar ({visiblePatients.length})</Button>
                     </div>
                     {selectedPatientIds.length > 0 && !isReadOnly && (
                         <Button variant="destructive" size="sm" className="font-black animate-in fade-in zoom-in" onClick={handleBulkDelete}>
@@ -388,7 +418,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
               {isDataLoading && <div className="absolute inset-0 z-50 bg-background/70 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-lg"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="text-xs font-black uppercase tracking-widest mt-4 animate-pulse">Consultando Padrón...</p></div>}
               {!hasSearched ? (
                   <div className="flex flex-col items-center justify-center py-32 opacity-40 gap-4"><Users className="h-16 w-16" /><p className="text-lg font-black uppercase tracking-widest">Esperando Búsqueda</p></div>
-              ) : patients.length === 0 && !isDataLoading ? (
+              ) : visiblePatients.length === 0 && !isDataLoading ? (
                   <div className="text-center py-32 opacity-60"><UserX className="h-20 w-20 mx-auto mb-4" /><p className="text-xl font-bold uppercase">Sin coincidencias</p></div>
               ) : (
                 <div className={cn(isDataLoading && "opacity-40 blur-[1px]")}>
@@ -404,7 +434,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                     onSelectionChange={setSelectedPatientIds}
                   />
                   <div className="flex items-center justify-between border-t mt-6 pt-4">
-                      <div className="flex items-center gap-2"><span className="text-xs font-bold text-muted-foreground">Mostrando {paginatedPatients.length} de {patients.length} encontrados</span></div>
+                      <div className="flex items-center gap-2"><span className="text-xs font-bold text-muted-foreground">Mostrando {paginatedPatients.length} de {visiblePatients.length} filtrados</span></div>
                       <div className="flex items-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>Anterior</Button>
                         <Badge className="h-8 px-4 font-black">Pág {currentPage} de {totalPages || 1}</Badge>

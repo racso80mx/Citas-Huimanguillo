@@ -190,7 +190,7 @@ export async function getPatientCounts(): Promise<ArchiveCounts> {
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     let q;
-    // Capacidad aumentada a 10,000 para soporte de padrones masivos
+    // Capacidad para 10,000 registros para soporte masivo
     const MAX_LIMIT = options?.limitNum || 10000;
 
     if (options?.searchCurp) q = query(colRef, where('curp', '==', options.searchCurp.toUpperCase().trim()), limit(100));
@@ -221,7 +221,7 @@ export async function savePatient(p: Omit<Patient, 'id'>, id?: string) {
     const finalId = p.curp.toUpperCase().trim();
     const batch = writeBatch(adminDb);
     
-    // Saneamiento de duplicados heredados (UUIDs)
+    // Saneamiento senior: Eliminar duplicados huérfanos por UUID
     const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', finalId)));
     snapCheck.forEach(d => {
         if (d.id !== finalId) batch.delete(d.ref);
@@ -262,6 +262,7 @@ export async function updatePatientStatus(id: string, status: string) {
 
 export async function deletePatient(id: string) { await deleteDoc(doc(adminDb, 'patients', id)); return { success: true }; }
 export async function deletePatients(ids: string[]) {
+    // Procesamiento en lotes de 30 para respetar límites técnicos
     for (let i = 0; i < ids.length; i += 30) {
         const b = writeBatch(adminDb);
         ids.slice(i, i + 30).forEach(id => b.delete(doc(adminDb, 'patients', id)));
@@ -335,7 +336,7 @@ export async function getVaccineAppointmentsData() {
 }
 
 export async function getAppointmentsForClinic(cid: string) {
-    const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(5000)));
+    const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(10000)));
     return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
 }
 
@@ -470,8 +471,8 @@ export async function getPatientPrescriptionsCountTodayAction(pid: string) {
 }
 
 // --- FARMACIA ---
-export async function getMedications() { const s = await getDocs(query(collection(adminDb, 'medications'), limit(5000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
-export async function getSupplies() { const s = await getDocs(query(collection(adminDb, 'supplies'), limit(5000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
+export async function getMedications() { const s = await getDocs(query(collection(adminDb, 'medications'), limit(10000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
+export async function getSupplies() { const s = await getDocs(query(collection(adminDb, 'supplies'), limit(10000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 
 export async function bulkInsertMedications(items: any[], source: string) { 
     const findFld = (row: any, searchNames: string[]) => {
