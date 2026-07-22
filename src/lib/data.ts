@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -159,7 +160,7 @@ export async function verifyClinicPassword(id: string, password: string) {
     return { success: s.exists() && (s.data()?.password === password || password === 'citas2026') };
 }
 
-// --- PACIENTES ---
+// --- PACIENTES (BLINDADOS CONTRA DUPLICADOS) ---
 export async function getPatientCounts(): Promise<ArchiveCounts> {
     const coll = collection(adminDb, 'patients');
     const totalSnap = await getCountFromServer(coll);
@@ -205,7 +206,15 @@ export async function getPatientByCURP(curp: string) {
 export async function savePatient(p: Omit<Patient, 'id'>, id?: string) {
     const finalId = p.curp.toUpperCase().trim();
     const batch = writeBatch(adminDb);
+    
+    // Saneamiento de duplicados heredados (UUIDs)
+    const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', finalId)));
+    snapCheck.forEach(d => {
+        if (d.id !== finalId) batch.delete(d.ref);
+    });
+
     if (id && id !== finalId) batch.delete(doc(adminDb, 'patients', id));
+    
     const mapped = { ...p, id: finalId, curp: finalId, nombreCompleto: generateNombreCompleto(p) };
     batch.set(doc(adminDb, 'patients', finalId), mapped, { merge: true });
     await batch.commit();
@@ -214,12 +223,19 @@ export async function savePatient(p: Omit<Patient, 'id'>, id?: string) {
 
 export async function updatePatient(id: string, p: Partial<Patient>) {
     const finalId = (p.curp || id).toUpperCase().trim();
+    const batch = writeBatch(adminDb);
+    
+    // Buscar y borrar duplicados UUID antes de actualizar
+    const snapCheck = await getDocs(query(collection(adminDb, 'patients'), where('curp', '==', finalId)));
+    snapCheck.forEach(d => { if (d.id !== finalId) batch.delete(d.ref); });
+
     const docRefOld = doc(adminDb, 'patients', id);
     const current = await getDoc(docRefOld);
     if (!current.exists()) return { success: false };
+    
     const combinedData = { ...current.data(), ...p };
-    const mapped = { ...combinedData, id: finalId, nombreCompleto: generateNombreCompleto(combinedData) };
-    const batch = writeBatch(adminDb);
+    const mapped = { ...combinedData, id: finalId, curp: finalId, nombreCompleto: generateNombreCompleto(combinedData) };
+    
     if (id !== finalId) batch.delete(docRefOld);
     batch.set(doc(adminDb, 'patients', finalId), mapped, { merge: true });
     await batch.commit();
@@ -283,7 +299,7 @@ export async function rebuildNombreCompletoAction() {
     return { success: true, count: docs.length };
 }
 
-// --- CITAS (OPTIMIZADAS SIN ERROR 9) ---
+// --- CITAS (PROTEGIDAS CONTRA ERROR 9) ---
 export async function getAppointmentsData() {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(5000)));
     return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
@@ -316,7 +332,8 @@ export async function getAppointmentCountOnDate(cid: string, d: string) {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid)));
     return snap.docs.filter(doc => {
         const data = doc.data();
-        return data.date >= startStr && data.date <= endStr;
+        const appLocalDate = format(parseISO(data.date), 'yyyy-MM-dd');
+        return appLocalDate === d;
     }).length;
 }
 
@@ -324,10 +341,12 @@ export async function getAvailableSlotsForDate(clinicId: string, dateIso: string
     const cDoc = await getDoc(doc(adminDb, 'clinics', clinicId));
     if (!cDoc.exists()) return {};
     const clinic = cDoc.data() as Clinic;
-    const start = startOfDay(parseISO(dateIso)).toISOString();
-    const end = endOfDay(parseISO(dateIso)).toISOString();
+    const targetDay = format(parseISO(dateIso), 'yyyy-MM-dd');
+    
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId)));
-    const takenTimes = snap.docs.map(d => d.data()).filter(a => a.date >= start && a.date <= end).map(a => a.time);
+    const takenTimes = snap.docs.map(d => d.data())
+        .filter(a => format(parseISO(a.date), 'yyyy-MM-dd') === targetDay)
+        .map(a => a.time);
 
     if (clinic.bookingMode === BookingMode.Token) {
         const total = (clinic.dailySlots || 15) + (clinic.waitlistSlots || 0);
@@ -437,18 +456,26 @@ export async function getPatientPrescriptionsCountTodayAction(pid: string) {
     const s = await getDocs(q); return s.docs.filter(d => (d.data().date || d.data().createdAt) >= start).length;
 }
 
-// --- FARMACIA ---
+// --- FARMACIA (MAPEO INTELIGENTE ACENTOS E IMSS) ---
 export async function getMedications() { const s = await getDocs(query(collection(adminDb, 'medications'), limit(5000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 export async function getSupplies() { const s = await getDocs(query(collection(adminDb, 'supplies'), limit(5000))); return s.docs.map(d => serializeData({ ...d.data(), id: d.id })); }
 
 export async function bulkInsertMedications(items: any[], source: string) { 
+    const normalize = (s: string) => 
+        String(s || '')
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "") // Quitar acentos
+            .toUpperCase()
+            .trim()
+            .replace(/[^A-Z0-9]/g, ''); // Solo alfanumérico
+
     const findFld = (row: any, searchNames: string[]) => {
         const keys = Object.keys(row); 
-        const normalize = (s: string) => String(s || '').toUpperCase().trim().replace(/[^A-Z0-9]/g, '');
         const searchNormalized = searchNames.map(normalize); 
         const foundKey = keys.find(k => searchNormalized.includes(normalize(k))); 
         return foundKey ? row[foundKey] : undefined;
     };
+
     const colName = source === 'EXTERNO' ? 'supplies' : 'medications';
     for (let i = 0; i < items.length; i += 400) {
         const batch = writeBatch(adminDb);
@@ -460,12 +487,13 @@ export async function bulkInsertMedications(items: any[], source: string) {
             else fCad = String(rawFecha || 'SIN FECHA').trim();
             
             const mapped: any = {
-                claveCuadroBasico: String(findFld(raw, ['CLAVE', 'CODIGO', 'CLAVE DE CUADRO BASICO', 'CUI']) || '').trim(),
-                descripcion: String(findFld(raw, ['DENOMINACION GENERICA', 'NOMBRE DEL MEDICAMENTO', 'CONCEPTO', 'DENOMINACION', 'DESCRIPCION', 'NOMBRE', 'ARTICULO']) || '').toUpperCase().trim(),
+                claveCuadroBasico: String(findFld(raw, ['CLAVE', 'CODIGO', 'CLAVE DE CUADRO BASICO', 'CUI', 'CLAVEDECUADROBASICO']) || '').trim(),
+                descripcion: String(findFld(raw, ['DENOMINACION GENERICA', 'NOMBRE DEL MEDICAMENTO', 'CONCEPTO', 'DENOMINACION', 'DESCRIPCION', 'NOMBRE', 'ARTICULO', 'DESCRIPCION']) || '').toUpperCase().trim(),
                 existencia: Number(findFld(raw, ['EXISTENCIA', 'CANTIDAD', 'STOCK', 'SALDO', 'DISPONIBLE']) || 0),
                 lote: String(findFld(raw, ['NUMERO DE LOTE', 'LOTE', 'NUMEROLOTE', 'LOTES']) || 'S/L').toUpperCase().trim(),
                 fechaCaducidad: fCad, fuenteEtiqueta: source, updatedAt: new Date().toISOString()
             };
+
             if (!mapped.descripcion) return;
             const id = `${mapped.claveCuadroBasico || uuidv4().split('-')[0]}_${source}_${mapped.lote}`;
             batch.set(doc(adminDb, colName, id), { ...mapped, id }, { merge: true });

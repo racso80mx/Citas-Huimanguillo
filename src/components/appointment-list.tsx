@@ -1,3 +1,4 @@
+
 'use client';
 import React, { useState, useTransition, useMemo, useCallback, useEffect } from 'react';
 import {
@@ -330,10 +331,10 @@ export function AppointmentList({ appointments, isAdmin = false, onDelete, clini
             const whatsappEnabled = isAdmin ? settings?.archivoWhatsAppEnabled : settings?.citasMedicasWhatsAppEnabled;
             if (whatsappEnabled && reschedulingAppointment.patient?.phoneNumber) {
                 const phone = reschedulingAppointment.patient.phoneNumber.replace(/\D/g, '');
-                const oldDateFormatted = format(parseISO(reschedulingAppointment.date), "eeee dd 'de' MMMM", { locale: es });
-                const newDateFormatted = format(newDate, "eeee dd 'de' MMMM", { locale: es });
+                const oldDateFormatted = format(parseISO(reschedulingAppointment.date), "dd/MM/yyyy", { locale: es });
+                const newDateFormatted = format(newDate, "dd/MM/yyyy", { locale: es });
                 
-                const message = encodeURIComponent(`Hola ${reschedulingAppointment.patient.name}, Su cita del dia ${oldDateFormatted} a las ${reschedulingAppointment.time} a sido reagendada, para el día ${newDateFormatted} a la misma hora.`);
+                const message = encodeURIComponent(`Su cita del dia ${oldDateFormatted} a las ${reschedulingAppointment.time} a sido reagendada, para el día ${newDateFormatted}.`);
                 window.open(`https://wa.me/52${phone}?text=${message}`, '_blank');
             }
 
@@ -566,7 +567,7 @@ export function AppointmentList({ appointments, isAdmin = false, onDelete, clini
                         <DropdownMenuItem onSelect={() => {
                             setNewDate(new Date(app.date));
                             setReschedulingAppointment(app);
-                        }}>Cambiar Fecha</DropdownMenuItem>
+                        }}>Cambiar Cita</DropdownMenuItem>
                         {onPrescribe && (
                           <>
                             <DropdownMenuSeparator />
