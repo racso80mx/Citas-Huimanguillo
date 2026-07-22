@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -55,6 +56,7 @@ import { startOfDay, endOfDay, parseISO, format } from 'date-fns';
 
 /**
  * MOTOR DE SERIALIZACIÓN PROFESIONAL
+ * Convierte Timestamps, Referencias y fechas de Firestore a tipos JSON compatibles con Next.js.
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return data;
@@ -98,7 +100,7 @@ async function hydrateAppointments(appointments: any[]) {
     const patientsMap: Record<string, any> = {};
     
     if (patientIds.length > 0) {
-        const CHUNK_SIZE = 30; 
+        const CHUNK_SIZE = 30; // Límite estricto de Firestore para operador 'IN'
         for (let i = 0; i < patientIds.length; i += CHUNK_SIZE) {
             const chunk = patientIds.slice(i, i + CHUNK_SIZE);
             const snap = await getDocs(query(collection(adminDb, 'patients'), where(documentId(), 'in', chunk)));
@@ -337,7 +339,7 @@ export async function getAppointmentsForClinic(cid: string) {
 export async function getAppointmentCountOnDate(cid: string, d: string) {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid)));
     return snap.docs.filter(doc => {
-        const data = doc.data();
+        const data = serializeData(doc.data());
         const appLocalDate = format(parseISO(data.date), 'yyyy-MM-dd');
         return appLocalDate === d;
     }).length;
@@ -350,7 +352,7 @@ export async function getAvailableSlotsForDate(clinicId: string, dateIso: string
     const targetDay = format(parseISO(dateIso), 'yyyy-MM-dd');
     
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId)));
-    const takenTimes = snap.docs.map(d => d.data())
+    const takenTimes = snap.docs.map(d => serializeData(d.data()))
         .filter(a => format(parseISO(a.date), 'yyyy-MM-dd') === targetDay)
         .map(a => a.time);
 
@@ -496,7 +498,7 @@ export async function bulkInsertMedications(items: any[], source: string) {
             };
 
             if (!mapped.descripcion) return;
-            // SENIOR FIX: Sanitizar lote para evitar diagonales en el ID de documento de Firestore
+            // Sanitizar lote para evitar diagonales en el ID de Firestore
             const sanitizedLote = rawLote.replace(/\//g, '-');
             const id = `${mapped.claveCuadroBasico || uuidv4().split('-')[0]}_${source}_${sanitizedLote}`;
             batch.set(doc(adminDb, colName, id), { ...mapped, id }, { merge: true });
@@ -588,7 +590,7 @@ export async function updateDepartments(t: Department[]) { const b = writeBatch(
 // --- BI / REPORTES ---
 export async function getAttendedPatientsForClinic(cid: string) {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', cid)));
-    const results = snap.docs.map(d => d.data()).filter(a => a.status === 'Atendido');
+    const results = snap.docs.map(d => serializeData(d.data())).filter(a => a.status === 'Atendido');
     const pIds = Array.from(new Set(results.map(d => d.patientId))).filter(Boolean);
     if (pIds.length === 0) return [];
     const patients: any[] = []; const CHUNK_SIZE = 30;
