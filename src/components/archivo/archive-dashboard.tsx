@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -101,6 +100,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
 type DateFilterType = 'today' | 'tomorrow' | 'week' | 'month' | 'range';
@@ -169,7 +169,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       const patientsData = await getPatients(searchOptions);
       
-      // PERSISTENCIA DE SELECCIÓN:
       setPatients(prev => {
           const currentlySelected = prev.filter(p => selectedPatientIds.includes(p.id));
           const newResults = [...patientsData];
@@ -193,7 +192,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, [statusFilter, activeTab, loadData]);
 
-  // SMART MARK: Marcado automático por expediente en Baja Temporal
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = String(searchExpediente).trim();
@@ -246,7 +244,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   
   const handleDeleteLogical = (patientId: string) => {
     if (isReadOnly) return;
-    // Optimistic:
     setPatients(prev => prev.filter(p => p.id !== patientId));
     
     startSubmitTransition(async () => {
@@ -255,7 +252,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
           toast({ title: "Movido a Baja Definitiva" });
           loadData(true);
       } else {
-          fetchData(); // Rollback
+          loadData(true);
       }
     });
   }
@@ -263,7 +260,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const handleBulkToDefinitive = () => {
       if (selectedPatientIds.length === 0 || isReadOnly) return;
       const ids = [...selectedPatientIds];
-      // Optimistic
       setPatients(prev => prev.filter(p => !ids.includes(p.id)));
       setSelectedPatientIds([]);
 
@@ -281,7 +277,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     const ids = patients.map(p => p.id);
     if (ids.length === 0) return;
     
-    // Optimistic
     setPatients([]);
     
     startSubmitTransition(async () => {
@@ -290,7 +285,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
             toast({ title: "Depuración Física Completada" });
             loadData(true);
         } else {
-            loadData(true); // Rollback
+            loadData(true);
         }
     });
   }

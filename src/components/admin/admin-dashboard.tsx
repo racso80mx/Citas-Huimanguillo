@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useTransition, useEffect, useCallback } from 'react';
 import {
@@ -162,7 +161,7 @@ function AppointmentsViewer() {
     useEffect(() => { fetchData(); }, [fetchData]);
 
     const handlePatientDelete = async (id: string, type: string) => {
-        // Optimistic update: remove from local UI instantly
+        // Optimistic UI: remove from local data instantly
         setData((prev: any) => {
             const keyMap: any = { medical: 'apps', lab: 'lab', xr: 'xr', us: 'us', vac: 'vac' };
             const k = keyMap[type];
@@ -178,7 +177,7 @@ function AppointmentsViewer() {
         
         if (!res?.success) {
             toast({ title: 'Error al eliminar', variant: 'destructive' });
-            fetchData(); // Rollback on error
+            fetchData(); // Rollback
         }
     };
 
