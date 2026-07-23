@@ -122,7 +122,7 @@ export default function PageContent({
 
         const isDateBlocked = clinic.unavailableDates?.includes(dateString);
         const isWeekendBlocked = isWeekend && !clinic.weekendBookingEnabled;
-        const isActionDay = clinic.daysOfAction && !clinic.daysOfAction.includes(dayName);
+        const isActionDay = clinic.daysOfAction && clinic.daysOfAction.length > 0 && !clinic.daysOfAction.includes(dayName);
 
         const isBlocked = isDateBlocked || isHoliday || isWeekendBlocked || isSpecialActionDay || isActionDay;
 
@@ -154,6 +154,7 @@ export default function PageContent({
   }, [generateDynamicTimeSlots, serviceTypes]);
 
   const fetchAvailabilityForRange = React.useCallback(async (targetClinicId: string, startDate: Date, endDate: Date, cacheKey: string) => {
+      // Verificamos caché
       if (availabilityCache[cacheKey]) {
           setAvailability(prev => {
               const combined = [...prev];
@@ -181,6 +182,7 @@ export default function PageContent({
           
           if (targetClinic) {
               const targetAvail = calculateForClinic(targetClinic, startDate, endDate, allAppointments, holidaySet, freshSpecialActionDays);
+              
               setAvailability(prev => {
                   const combined = [...prev];
                   targetAvail.forEach(item => {
@@ -190,6 +192,7 @@ export default function PageContent({
                   });
                   return combined.sort((a,b) => a.date.localeCompare(b.date));
               });
+              
               setAvailabilityCache(prev => ({ ...prev, [cacheKey]: targetAvail }));
           }
       } finally {
@@ -200,7 +203,7 @@ export default function PageContent({
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
         const today = startOfToday();
-        const end = addDays(today, 45);
+        const end = addDays(today, 60); // Ampliamos a 60 días para cubrir cambios de mes en la grid
         fetchAvailabilityForRange(selectedClinicId, today, end, `${selectedClinicId}-initial`);
     }
   }, [isAuthenticated, selectedClinicId, fetchAvailabilityForRange]);
@@ -230,6 +233,7 @@ export default function PageContent({
     setSelectedColoniaId(undefined);
     setSelectedTime(undefined);
     setAvailability([]);
+    setAvailabilityCache({});
   };
 
   const handleManualRefresh = () => {
@@ -237,7 +241,7 @@ export default function PageContent({
           setAvailabilityCache({});
           setAvailability([]);
           const today = startOfToday();
-          const end = addDays(today, 45);
+          const end = addDays(today, 60);
           fetchAvailabilityForRange(selectedClinicId, today, end, `${selectedClinicId}-initial`);
           toast({ title: 'Agenda Sincronizada' });
       }
