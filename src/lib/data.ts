@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -94,8 +95,7 @@ export function serializeData(data: any): any {
 
 /**
  * Normaliza los datos de un paciente antes de guardarlos.
- * ESTRATEGIA ANTI-DUPLICIDAD SENIOR: El ID del documento es SIEMPRE la CURP.
- * Eliminamos cualquier ID previo para forzar la unificación por CURP.
+ * ESTRATEGIA ANTI-DUPLICIDAD: El ID del documento es SIEMPRE la CURP sanitizada.
  */
 function normalizePatientData(p: any) {
     const cleanCurp = String(p.curp || '').trim().toUpperCase();
@@ -105,11 +105,8 @@ function normalizePatientData(p: any) {
     const ap = (p.paternalLastName || '').trim().toUpperCase();
     const am = (p.maternalLastName || '').trim().toUpperCase();
     
-    // Extraemos campos para no heredar IDs aleatorios que causen duplicidad
-    const { id, ...rest } = p;
-
     return {
-        ...rest,
+        ...p,
         id: cleanCurp, 
         curp: cleanCurp,
         name: n,
@@ -243,7 +240,6 @@ export async function getPatientCounts(): Promise<ArchiveCounts> {
 
 export async function savePatient(p: Omit<Patient, 'id'>, id?: string) {
     const normalized = normalizePatientData(p);
-    // Usamos la CURP como ID del documento para evitar duplicidades
     const finalId = normalized.id; 
     await setDoc(doc(adminDb, 'patients', finalId), normalized, { merge: true });
     return { success: true };
@@ -405,12 +401,29 @@ export async function deleteVaccineAppointment(id: string) {
 
 export async function saveNewAppointment(appointment: any, patient: any, isDoubleSlot: boolean, coloniaName?: string) {
     const normalized = normalizePatientData(patient);
-    const batch = writeBatch(adminDb);
     
+    // VALIDACIÓN DE DUPLICIDAD (Mismo paciente, misma fecha, mismo consultorio)
+    const dateObj = parseISO(appointment.date);
+    const start = startOfDay(dateObj).toISOString();
+    const end = endOfDay(dateObj).toISOString();
+    
+    const qDuplicate = query(
+        collection(adminDb, 'appointments'),
+        where('patientId', '==', normalized.id),
+        where('clinicId', '==', appointment.clinicId),
+        where('date', '>=', start),
+        where('date', '<=', end)
+    );
+    
+    const duplicateSnap = await getDocs(qDuplicate);
+    if (!duplicateSnap.empty) {
+        return { success: false, error: 'Este paciente ya cuenta con una cita agendada en este consultorio para la fecha seleccionada.' };
+    }
+
+    const batch = writeBatch(adminDb);
     const patientRef = doc(adminDb, 'patients', normalized.id);
     batch.set(patientRef, normalized, { merge: true });
     
-    // Generamos el Folio que faltaba
     const appointmentNumber = `APP-${uuidv4().split('-')[0].toUpperCase()}`;
     const appData = { 
         ...appointment, 
@@ -424,7 +437,13 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
     
     await batch.commit();
     const clinicDoc = await getDoc(doc(adminDb, 'clinics', appointment.clinicId));
-    return serializeData({ success: true, data: { appointment: { ...appData, patient: normalized }, clinic: clinicDoc.data() } });
+    return serializeData({ 
+        success: true, 
+        data: { 
+            appointment: { ...appData, patient: normalized }, 
+            clinic: clinicDoc.data() 
+        } 
+    });
 }
 
 export async function saveNewLabAppointment(appointment: any, patient: any) {
@@ -489,6 +508,11 @@ export async function cloneAppointment(id: string, date: string, type: string, t
 }
 
 export async function getAvailableSlotsForDate(clinicId: string, dateStr: string) {
+    const clinics = await getClinicsData();
+    const clinic = clinics.find(c => c.id === clinicId);
+    if (!clinic) return { timeSlots: [], tokens: [] };
+
+    // Simulación de slots disponibles (Lógica MVP)
     return { 
         timeSlots: ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00"], 
         tokens: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] 
