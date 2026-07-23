@@ -200,8 +200,6 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     } else if (options?.searchName) {
         const term = options.searchName.toUpperCase().trim();
         q = query(colRef, where('nombreCompleto', '>=', term), where('nombreCompleto', '<=', term + '\uf8ff'), limit(pageLimit));
-    } else if (options?.status && options.status !== 'Total') {
-        q = query(colRef, where('status', '==', options.status), limit(pageLimit));
     } else {
         q = query(colRef, limit(pageLimit));
     }
@@ -209,6 +207,7 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     const snap = await getDocs(q);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
     
+    // FILTRO DE SEGURIDAD POST-QUERY: Asegura que el estatus coincida con el solicitado
     if (options?.status && options.status !== 'Total') {
         const target = options.status as PatientStatus;
         results = results.filter(p => {
@@ -343,7 +342,7 @@ async function hydrateAppointments(appointments: any[]) {
 }
 
 export async function getAppointmentsData(options?: { startDate?: string, endDate?: string }) {
-    // Si se provee fecha de inicio, calculamos el fin basado en esa fecha (ej. +45 días) si no se provee.
+    // RESOLUCIÓN DE RANGO: Si el usuario pide un rango futuro, el servidor DEBE respetarlo.
     const start = options?.startDate ? Timestamp.fromDate(parseISO(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 3));
     const end = options?.endDate ? Timestamp.fromDate(parseISO(options.endDate)) : (options?.startDate ? Timestamp.fromDate(addDays(parseISO(options.startDate), 45)) : Timestamp.fromDate(addDays(new Date(), 30)));
     
@@ -927,11 +926,15 @@ export async function getAvailableSlotsForDate(clinicId: string, date: string) {
     } else {
         const generateTimeSlots = (start: string, end: string, dur: number) => {
             const slots = [];
-            let curr = new Date(`1970-01-01T${start}:00`);
-            const endD = new Date(`1970-01-01T${end}:00`);
+            const currentStart = start || "08:00";
+            const currentEnd = end || "14:00";
+            const currentDuration = dur || 30;
+            
+            let curr = new Date(`1970-01-01T${currentStart}:00`);
+            const endD = new Date(`1970-01-01T${currentEnd}:00`);
             while (curr < endD) {
                 slots.push(curr.toTimeString().substring(0, 5));
-                curr = new Date(curr.getTime() + dur * 60000);
+                curr = new Date(curr.getTime() + currentDuration * 60000);
             }
             return slots;
         };
@@ -943,7 +946,7 @@ export async function getAvailableSlotsForDate(clinicId: string, date: string) {
 
 export async function getAppointmentCountOnDate(id: string, dateStr: string) {
     const start = Timestamp.fromDate(startOfDay(parseISO(dateStr)));
-    const end = Timestamp.fromDate(endOfDay(parseISO(dateStr)));
+    const end = Timestamp.fromDate(endOfDay(dateStr));
     const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', id), where('date', '>=', start), where('date', '<=', end));
     const s = await getCountFromServer(q);
     return s.data().count;
@@ -1094,6 +1097,5 @@ export async function updateVaccines(items: Vaccine[]) {
 }
 
 export async function getBIData() {
-    // Retornamos un objeto vacío ya que el módulo BI fue eliminado
     return { appointments: [], labAppointments: [], xRayAppointments: [], ultrasoundAppointments: [], vaccineAppointments: [], clinics: [], colonias: [] };
 }

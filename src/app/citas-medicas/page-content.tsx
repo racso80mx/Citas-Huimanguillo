@@ -20,7 +20,7 @@ import { getAppointments, getClinics, getHolidays, verifyCitasMedicasPassword, g
 
 import { useToast } from '@/hooks/use-toast';
 import { Bell, MapPin, Hospital, LayoutList, Clock, CalendarDays, CalendarPlus, Check, Loader2, RefreshCw } from 'lucide-react';
-import { format, eachDayOfInterval, isSaturday, isSunday, startOfToday, addDays, isSameDay, startOfMonth, endOfMonth } from 'date-fns';
+import { format, eachDayOfInterval, isSaturday, isSunday, startOfToday, addDays, isSameDay, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
   Select,
@@ -76,22 +76,26 @@ export default function PageContent({
   const { toast } = useToast();
 
   const generateDynamicTimeSlots = React.useCallback((startTimeStr: string, endTimeStr: string, duration: number): string[] => {
-    if (!startTimeStr || !endTimeStr || !duration) return [];
+    const startHour = startTimeStr || "08:00";
+    const endHour = endTimeStr || "14:00";
+    const slotDuration = duration || 30;
+    
     const slots: string[] = [];
     try {
-        const start = new Date(`1970-01-01T${startTimeStr}:00`);
-        const end = new Date(`1970-01-01T${endTimeStr}:00`);
+        const start = new Date(`1970-01-01T${startHour}:00`);
+        const end = new Date(`1970-01-01T${endHour}:00`);
         let current = start;
         while (current < end) {
             slots.push(current.toTimeString().substring(0, 5));
-            current = new Date(current.getTime() + duration * 60000);
+            current = new Date(current.getTime() + slotDuration * 60000);
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error("Error generating slots", e);
+    }
     return slots;
   }, []);
 
   const calculateForClinic = useCallback((clinic: Clinic, startDate: Date, endDate: Date, allAppointments: any[], holidaySet: Set<string>, freshSpecialActionDays: SpecialActionDay[]): DailyAvailability[] => {
-      // PRECISIÓN: Agrupar por Fecha y Consultorio específicamente
       const dayClinicMap = new Map<string, Map<string, any[]>>();
       allAppointments.forEach(app => {
           const d = app.date.split('T')[0];
@@ -122,7 +126,13 @@ export default function PageContent({
 
         const isDateBlocked = clinic.unavailableDates?.includes(dateString);
         const isWeekendBlocked = isWeekend && !clinic.weekendBookingEnabled;
-        const isActionDay = clinic.daysOfAction && clinic.daysOfAction.length > 0 && !clinic.daysOfAction.includes(dayName);
+        
+        // Permisividad: Si no hay días de acción configurados, atiende de Lunes a Viernes
+        const effectiveDaysOfAction = clinic.daysOfAction && clinic.daysOfAction.length > 0 
+            ? clinic.daysOfAction 
+            : ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
+            
+        const isActionDay = !effectiveDaysOfAction.includes(dayName);
 
         const isBlocked = isDateBlocked || isHoliday || isWeekendBlocked || isSpecialActionDay || isActionDay;
 
@@ -131,10 +141,12 @@ export default function PageContent({
 
         if (!isBlocked) {
             const customSchedule = clinic.customSchedules?.find(s => s.date === dateString);
-            const currentEndTime = customSchedule ? customSchedule.endTime : clinic.endTime;
+            const currentEndTime = customSchedule ? customSchedule.endTime : (clinic.endTime || "14:00");
+            const currentStartTime = clinic.startTime || "08:00";
+            const currentDuration = clinic.consultationDuration || 30;
 
-            if (clinic.bookingMode === BookingMode.Time && clinic.consultationDuration) {
-                const allSlots = generateDynamicTimeSlots(clinic.startTime, currentEndTime, clinic.consultationDuration);
+            if (clinic.bookingMode === BookingMode.Time) {
+                const allSlots = generateDynamicTimeSlots(currentStartTime, currentEndTime, currentDuration);
                 const filteredSlots = allSlots.filter(s => s !== clinic.breakTime);
                 availableSlotsForClinic = Math.max(0, filteredSlots.length - dayBooked.length);
             } else {
@@ -154,7 +166,6 @@ export default function PageContent({
   }, [generateDynamicTimeSlots, serviceTypes]);
 
   const fetchAvailabilityForRange = React.useCallback(async (targetClinicId: string, startDate: Date, endDate: Date, cacheKey: string) => {
-      // Verificamos caché
       if (availabilityCache[cacheKey]) {
           setAvailability(prev => {
               const combined = [...prev];
@@ -170,7 +181,6 @@ export default function PageContent({
 
       setIsLoadingAvailability(true);
       try {
-          // PRECISIÓN: Enviar fechas en ISO puro para filtrado atómico en servidor
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
             getAppointments({ startDate: startDate.toISOString(), endDate: endDate.toISOString() }), 
             getHolidays(), 
@@ -195,6 +205,8 @@ export default function PageContent({
               
               setAvailabilityCache(prev => ({ ...prev, [cacheKey]: targetAvail }));
           }
+      } catch (e) {
+          console.error("Fetch availability error", e);
       } finally {
           setIsLoadingAvailability(false); 
       }
@@ -203,7 +215,7 @@ export default function PageContent({
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
         const today = startOfToday();
-        const end = addDays(today, 60); // Ampliamos a 60 días para cubrir cambios de mes en la grid
+        const end = addDays(today, 60); 
         fetchAvailabilityForRange(selectedClinicId, today, end, `${selectedClinicId}-initial`);
     }
   }, [isAuthenticated, selectedClinicId, fetchAvailabilityForRange]);
@@ -275,10 +287,12 @@ export default function PageContent({
             date, 
             dateStr, 
             slots: avail?.availableSlots ?? 0, 
-            isClosed: !avail || avail.availableSlots === 0 
+            // isClosed solo si existe el registro de disponibilidad y es 0
+            isClosed: avail ? avail.availableSlots === 0 : false,
+            isLoading: !avail && isLoadingAvailability
         };
     });
-  }, [selectedClinicId, availability]);
+  }, [selectedClinicId, availability, isLoadingAvailability]);
 
   const availableTimeSlots = React.useMemo(() => {
     if (!selectedClinic || !selectedDate || selectedClinic.bookingMode !== BookingMode.Time) return [];
@@ -288,9 +302,11 @@ export default function PageContent({
 
     const booked = dayAvail.takenTimesByClinic[selectedClinic.id] || [];
     const customSchedule = selectedClinic.customSchedules?.find(s => s.date === dateString);
-    const endTime = customSchedule ? customSchedule.endTime : selectedClinic.endTime;
+    const endTime = customSchedule ? customSchedule.endTime : (selectedClinic.endTime || "14:00");
+    const startTime = selectedClinic.startTime || "08:00";
+    const duration = selectedClinic.consultationDuration || 30;
     
-    const allSlots = generateDynamicTimeSlots(selectedClinic.startTime, endTime, selectedClinic.consultationDuration || 30);
+    const allSlots = generateDynamicTimeSlots(startTime, endTime, duration);
     const slots = allSlots.filter(s => s !== selectedClinic.breakTime && !booked.some(a => a.time === s));
 
     if (patientType === PatientType.Embarazada && isDoubleSlot) {
@@ -417,16 +433,17 @@ export default function PageContent({
                                       <button 
                                         key={item.dateStr}
                                         onClick={() => handleDateSelect(item.date)}
-                                        disabled={item.isClosed && !isLoadingAvailability}
+                                        disabled={item.isClosed || item.isLoading}
                                         className={cn(
                                             "relative flex flex-col items-center p-3 rounded-2xl border-2 transition-all group",
-                                            isSameDay(selectedDate || new Date(0), item.date) ? "bg-primary border-primary text-white shadow-lg ring-4 ring-primary/10 scale-105 z-10" : (item.isClosed && !isLoadingAvailability) ? "bg-muted/30 border-muted opacity-40 cursor-not-allowed grayscale" : "bg-background border-muted hover:border-primary/40 hover:bg-primary/5"
+                                            isSameDay(selectedDate || new Date(0), item.date) ? "bg-primary border-primary text-white shadow-lg ring-4 ring-primary/10 scale-105 z-10" : (item.isClosed) ? "bg-muted/30 border-muted opacity-40 cursor-not-allowed grayscale" : "bg-background border-muted hover:border-primary/40 hover:bg-primary/5",
+                                            item.isLoading && "animate-pulse"
                                         )}
                                       >
                                           <span className={cn("text-[9px] font-black uppercase tracking-tighter mb-1", isSameDay(selectedDate || new Date(0), item.date) ? "text-white/60" : "text-muted-foreground")}>{format(item.date, 'EEEE', { locale: es })}</span>
                                           <span className="text-lg font-black leading-none">{format(item.date, 'dd')}</span>
                                           <span className={cn("text-[9px] font-bold uppercase", isSameDay(selectedDate || new Date(0), item.date) ? "text-white/80" : "text-muted-foreground")}>{format(item.date, 'MMM', { locale: es })}</span>
-                                          {isLoadingAvailability && !availability.some(a => a.date === item.dateStr) ? (
+                                          {item.isLoading ? (
                                               <Loader2 className="h-4 w-4 animate-spin mt-2 text-primary opacity-40" />
                                           ) : (
                                               <>
