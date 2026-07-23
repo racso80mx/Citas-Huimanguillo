@@ -65,7 +65,6 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandShortcut,
 } from '@/components/ui/command';
 import {
   Popover,
@@ -86,8 +85,7 @@ import {
   isWithinInterval, 
   addDays,
   format,
-  isValid,
-  parse
+  isValid
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { DateRange } from 'react-day-picker';
@@ -103,7 +101,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 
 type DateFilterType = 'today' | 'tomorrow' | 'week' | 'month' | 'range';
@@ -172,16 +169,18 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       const patientsData = await getPatients(searchOptions);
       
-      // PERSISTENCIA SENIOR: Combinamos los datos nuevos con los ya seleccionados para no perder la marca del lote
+      // PERSISTENCIA DE SELECCIÓN: Mezclamos los nuevos pacientes con los ya seleccionados para no perder el rastro
       setPatients(prev => {
-          const currentlySelected = prev.filter(p => selectedPatientIds.includes(p.id));
+          const selectedInPrev = prev.filter(p => selectedPatientIds.includes(p.id));
           const newBatch = [...patientsData];
           
-          currentlySelected.forEach(sel => {
+          // Agregamos a la lista visible cualquier paciente seleccionado que no esté en el nuevo resultado
+          selectedInPrev.forEach(sel => {
               if (!newBatch.some(n => n.id === sel.id)) {
                   newBatch.push(sel);
               }
           });
+          
           return newBatch;
       });
       
@@ -197,14 +196,22 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, [statusFilter, activeTab, loadData]);
 
-  // SMART SEARCH: Marcado automático en Baja Temporal al encontrar expediente exacto
+  /**
+   * MARCADO AUTOMÁTICO (Smart Mark):
+   * En la pestaña de Baja Temporal, al escribir un expediente exacto, se marca automáticamente.
+   */
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = String(searchExpediente).trim();
         const found = patients.find(p => String(p.expediente || '').trim() === term);
         if (found && !selectedPatientIds.includes(found.id)) {
             setSelectedPatientIds(prev => [...prev, found.id]);
-            toast({ title: "Expediente Marcado", description: `${found.name} agregado al lote.`, duration: 1000 });
+            toast({ 
+                title: "Marcado Automático", 
+                description: `${found.name} agregado al lote de procesamiento.`, 
+                duration: 1000 
+            });
+            // Limpiamos el campo para el siguiente escaneo sin ocultar la lista
             setSearchExpediente(''); 
         }
     }
@@ -216,16 +223,16 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     const sExp = searchExpediente.trim();
 
     return patients.filter(p => {
-        // Los pacientes seleccionados SIEMPRE deben ser visibles para no perder el acumulado del trabajo
+        // Los pacientes seleccionados SIEMPRE son visibles
         if (selectedPatientIds.includes(p.id)) return true;
-
+        
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
         
-        // En Baja Temporal el campo expediente es para Marcado Rápido, no filtra la lista
+        // Si estamos en Baja Temporal, no filtramos por expediente para permitir el "Smart Mark"
         if (statusFilter === PatientStatusEnum.Baja) return nameMatch && curpMatch;
-
+        
         const expMatch = !sExp || String(p.expediente || '').includes(sExp);
         return nameMatch && curpMatch && expMatch;
     });
@@ -270,7 +277,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
               await updatePatientStatus(id, PatientStatusEnum.BajaDefinitiva);
           }
           setSelectedPatientIds([]);
-          toast({ title: "Proceso Masivo Finalizado", description: `${ids.length} registros movidos a Baja Definitiva.` });
+          toast({ title: "Lote Procesado", description: `${ids.length} registros movidos a Baja Definitiva.` });
           loadData(true);
       });
   };
@@ -303,7 +310,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     startTransition(async () => {
       const result = id ? await updatePatient(id, patientData) : await savePatient(patientData);
        if(result.success) {
-        toast({ title: "Registro Maestro Guardado" });
+        toast({ title: "Información Guardada" });
         setIsEditOpen(false); setEditingPatient(null); loadData(true);
       } else {
           toast({ title: 'Error al guardar', description: result.message, variant: 'destructive' });
@@ -352,7 +359,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
             {isReadOnly ? <Eye className="h-8 w-8 text-blue-600" /> : <Users className="h-8 w-8 text-primary" />}
             <div>
                 <h1 className="text-3xl font-bold font-headline uppercase">{isReadOnly ? 'Consulta de Padrón' : 'Gestión de Archivo'}</h1>
-                <p className="text-muted-foreground">{isReadOnly ? 'Revisión técnica de registros (Lectura).' : 'Mantenimiento preventivo y correctivo del padrón.'}</p>
+                <p className="text-muted-foreground">{isReadOnly ? 'Revisión técnica de registros (Lectura).' : 'Mantenimiento preventivo y depuración del padrón.'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -390,8 +397,8 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">Nombre o Apellidos</Label><Input placeholder="FILTRAR POR NOMBRE..." value={searchName} onChange={e => setSearchName(e.target.value.toUpperCase())} className="h-11 border-primary/20" /></div>
                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">CURP</Label><Input placeholder="CURP (18 CARAC)..." value={searchCurp} onChange={e => setSearchCurp(e.target.value.toUpperCase())} className="h-11 border-primary/20" maxLength={18} /></div>
                     <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Expediente {statusFilter === PatientStatusEnum.Baja && "(Auto-Mark)"}</Label>
-                        <Input placeholder={statusFilter === PatientStatusEnum.Baja ? "ESCRIBE PARA MARCAR..." : "FILTRAR POR EXP..."} value={searchExpediente} onChange={e => setSearchExpediente(e.target.value)} className="h-11 border-primary/20" />
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Expediente {statusFilter === PatientStatusEnum.Baja && "(Smart Mark)"}</Label>
+                        <Input placeholder={statusFilter === PatientStatusEnum.Baja ? "ESCRIBE EXP PARA MARCAR..." : "FILTRAR POR EXP..."} value={searchExpediente} onChange={e => setSearchExpediente(e.target.value)} className="h-11 border-primary/20" />
                     </div>
                     <div className="flex gap-2 items-end">
                         <Button onClick={() => loadData(true)} className="h-11 flex-1 font-black bg-primary hover:bg-primary/90" disabled={isDataLoading}>{isDataLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />} FILTRAR</Button>
@@ -410,14 +417,14 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                                     <Button variant="destructive" size="sm" className="font-black bg-red-700"><DatabaseZap className="mr-2 h-4 w-4" /> VACIAR BAJA DEFINITIVA</Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
-                                    <AlertDialogHeader><AlertDialogTitle className="text-red-700 flex items-center gap-2"><AlertTriangle /> ACCIÓN IRREVERSIBLE</AlertDialogTitle><AlertDialogDescription>Se eliminarán <span className="font-bold">{patients.length}</span> registros de forma física de la base de datos. ¿Deseas continuar?</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogHeader><AlertDialogTitle className="text-red-700 flex items-center gap-2"><AlertTriangle /> ACCIÓN IRREVERSIBLE</AlertDialogTitle><AlertDialogDescription>Se eliminarán <span className="font-bold">{patients.length}</span> registros físicos del sistema. ¿Deseas continuar?</AlertDialogDescription></AlertDialogHeader>
                                     <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handlePhysicalDeleteAll} className="bg-red-700 hover:bg-red-800 font-bold">SÍ, BORRAR DEFINITIVAMENTE</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                              </AlertDialog>
                         )}
                         {selectedPatientIds.length > 0 && !isReadOnly && (
                             <Button variant="destructive" size="sm" className="font-black animate-in fade-in zoom-in" onClick={handleBulkToDefinitive}>
-                                <UserX className="mr-2 h-4 w-4" /> BAJA DEFINITIVA ({selectedPatientIds.length})
+                                <UserX className="mr-2 h-4 w-4" /> MOVER A DEFINITIVA ({selectedPatientIds.length})
                             </Button>
                         )}
                     </div>
@@ -426,7 +433,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
             <CardContent className="relative min-h-[400px] pt-4">
               {isDataLoading && <div className="absolute inset-0 z-50 bg-background/70 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-lg"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="text-xs font-black uppercase tracking-widest mt-4 animate-pulse">Sincronizando Base de Datos...</p></div>}
               {visiblePatients.length === 0 && !isDataLoading ? (
-                  <div className="text-center py-32 opacity-40"><UserX className="h-20 w-20 mx-auto mb-4" /><p className="text-xl font-bold uppercase">Sin registros en este estatus</p></div>
+                  <div className="text-center py-32 opacity-40"><UserX className="h-20 w-20 mx-auto mb-4" /><p className="text-xl font-bold uppercase">Sin registros coincidentes</p></div>
               ) : (
                 <div className={cn(isDataLoading && "opacity-40 blur-[1px]")}>
                   <PatientList patients={paginatedPatients} onEdit={handleEdit} onDelete={handleDeleteLogical} onStatusChange={handleStatusChange} onSchedule={handleSchedule} isSubmitting={isSubmitting} isReadOnly={isReadOnly} selectedIds={selectedPatientIds} onSelectionChange={setSelectedPatientIds} />

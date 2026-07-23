@@ -62,7 +62,7 @@ export async function updateAnnouncements(m: string[]) {
     return res;
 }
 
-// --- VERIFICACIONES DE CONTRASEÑA ---
+// --- VERIFICACIONES ---
 export async function verifyAdminPassword(p: string) { 
     const s = await data.getAdminSettingsData();
     return s.password === p ? { success: true } : { success: false };
@@ -145,6 +145,12 @@ export async function getXRayAppointments() { return data.getXRayAppointmentsDat
 export async function getUltrasoundAppointments() { return data.getUltrasoundAppointmentsData(); }
 export async function getVaccineAppointments() { return data.getVaccineAppointmentsData(); }
 export async function getAppointmentsForClinic(id: string) { return data.getAppointmentsForClinic(id); }
+
+export async function deleteAppointment(id: string) { return data.deleteAppointment(id); }
+export async function deleteLabAppointment(id: string) { return data.deleteLabAppointment(id); }
+export async function deleteXRayAppointment(id: string) { return data.deleteXRayAppointment(id); }
+export async function deleteUltrasoundAppointment(id: string) { return data.deleteUltrasoundAppointment(id); }
+export async function deleteVaccineAppointment(id: string) { return data.deleteVaccineAppointment(id); }
 
 export async function saveNewAppointment(a: any, p: any, d: boolean, c?: string) { return data.saveNewAppointment(a, p, d, c); }
 export async function saveNewLabAppointment(a: any, p: any) { return data.saveNewLabAppointment(a, p); }
@@ -237,7 +243,7 @@ export async function searchCie10(term: string) { return data.searchCie10(term);
 export async function bulkInsertCie10Catalog(items: any[]) { return data.bulkInsertCie10Catalog(items); }
 export async function deleteAllCie10Catalog() { return data.deleteAllCie10Catalog(); }
 
-// --- CONFIGURACIÓN DE MÓDULOS ---
+// --- CONFIGURACIÓN DE MÓDULOS ESPECÍFICOS ---
 export async function getLabStudies() { return data.getLabStudies(); }
 export async function getLabSettings() { return data.getLabSettings(); }
 export async function updateLabSettings(s: LabSettings) { return data.updateLabSettings(s); }

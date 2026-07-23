@@ -280,7 +280,6 @@ export function BookingForm({
           description: result.error || 'No se pudo agendar la cita. Es posible que el horario ya haya sido ocupado.',
           variant: 'destructive',
         });
-        // Refresh availability without clearing form data
         onBookingSuccess(false);
       }
     });
