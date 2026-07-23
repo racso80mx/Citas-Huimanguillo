@@ -91,11 +91,14 @@ export default function PageContent({
   }, []);
 
   const calculateForClinic = useCallback((clinic: Clinic, startDate: Date, endDate: Date, allAppointments: any[], holidaySet: Set<string>, freshSpecialActionDays: SpecialActionDay[]): DailyAvailability[] => {
-      const dayMap = new Map<string, any[]>();
+      // PRECISIÓN: Agrupar por Fecha y Consultorio específicamente
+      const dayClinicMap = new Map<string, Map<string, any[]>>();
       allAppointments.forEach(app => {
           const d = app.date.split('T')[0];
-          if (!dayMap.has(d)) dayMap.set(d, []);
-          dayMap.get(d)!.push(app);
+          if (!dayClinicMap.has(d)) dayClinicMap.set(d, new Map());
+          const clinicMap = dayClinicMap.get(d)!;
+          if (!clinicMap.has(app.clinicId)) clinicMap.set(app.clinicId, []);
+          clinicMap.get(app.clinicId)!.push(app);
       });
 
       const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
@@ -104,7 +107,7 @@ export default function PageContent({
 
       for (const day of daysInInterval) {
         const dateString = format(day, 'yyyy-MM-dd'); 
-        const dayBooked = dayMap.get(dateString) || [];
+        const dayBooked = dayClinicMap.get(dateString)?.get(clinic.id) || [];
         const dayName = dayNames[day.getDay()];
         
         const isHoliday = holidaySet.has(dateString);
@@ -166,6 +169,7 @@ export default function PageContent({
 
       setIsLoadingAvailability(true);
       try {
+          // PRECISIÓN: Enviar fechas en ISO puro para filtrado atómico en servidor
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
             getAppointments({ startDate: startDate.toISOString(), endDate: endDate.toISOString() }), 
             getHolidays(), 
@@ -228,11 +232,6 @@ export default function PageContent({
     setAvailability([]);
   };
 
-  const handleColoniaSelect = (coloniaId: string) => {
-      setSelectedColoniaId(coloniaId);
-      setSelectedTime(undefined);
-  };
-
   const handleManualRefresh = () => {
       if (selectedClinicId) {
           setAvailabilityCache({});
@@ -261,10 +260,21 @@ export default function PageContent({
         })).sort((a,b) => a.label.localeCompare(b.label));
   }, [clinics, selectedServiceTypeId, serviceTypes]);
 
-  const filteredColonias = React.useMemo(() => {
+  const projectedGridData = useMemo(() => {
     if (!selectedClinicId) return [];
-    return colonias.filter(c => c.clinicId === selectedClinicId).sort((a,b) => a.name.localeCompare(b.name));
-  }, [colonias, selectedClinicId]);
+    const today = startOfToday();
+    const range = Array.from({ length: 7 }, (_, i) => addDays(today, i));
+    return range.map(date => {
+        const dateStr = format(date, 'yyyy-MM-dd');
+        const avail = availability.find(a => a.date === dateStr);
+        return { 
+            date, 
+            dateStr, 
+            slots: avail?.availableSlots ?? 0, 
+            isClosed: !avail || avail.availableSlots === 0 
+        };
+    });
+  }, [selectedClinicId, availability]);
 
   const availableTimeSlots = React.useMemo(() => {
     if (!selectedClinic || !selectedDate || selectedClinic.bookingMode !== BookingMode.Time) return [];
@@ -310,21 +320,10 @@ export default function PageContent({
     return freeTokens;
   }, [selectedClinic, availability, selectedDate, patientType, isDoubleSlot]);
 
-  const projectedGridData = useMemo(() => {
+  const filteredColonias = React.useMemo(() => {
     if (!selectedClinicId) return [];
-    const today = startOfToday();
-    const range = Array.from({ length: 7 }, (_, i) => addDays(today, i));
-    return range.map(date => {
-        const dateStr = format(date, 'yyyy-MM-dd');
-        const avail = availability.find(a => a.date === dateStr);
-        return { 
-            date, 
-            dateStr, 
-            slots: avail?.availableSlots ?? 0, 
-            isClosed: !avail || avail.availableSlots === 0 
-        };
-    });
-  }, [selectedClinicId, availability]);
+    return colonias.filter(c => c.clinicId === selectedClinicId).sort((a,b) => a.name.localeCompare(b.name));
+  }, [colonias, selectedClinicId]);
 
   if (!isAuthenticated) return <ModuleLoginForm title="Citas Médicas" onVerify={verifyCitasMedicasPassword} onSuccess={() => setIsAuthenticated(true)} />;
 
@@ -332,8 +331,8 @@ export default function PageContent({
     <div className="container mx-auto px-4 py-8 md:py-12">
       <div className="text-center mb-10 flex flex-col items-center">
         <div className="text-primary mb-4"><Image src={logoBase64} alt="Logo" width={80} height={80} className="rounded-md" /></div>
-        <h1 className="text-4xl lg:text-5xl font-bold font-headline">Reserva tu Cita Médica</h1>
-        <p className="text-muted-foreground mt-2 font-medium">Sigue los pasos para agendar tu consulta de forma segura.</p>
+        <h1 className="text-4xl lg:text-5xl font-bold font-headline text-foreground tracking-tight">Reserva tu Cita Médica</h1>
+        <p className="text-muted-foreground mt-2 font-medium max-w-2xl mx-auto">Consulta los espacios disponibles y agenda tu cita en pocos pasos.</p>
       </div>
 
       <div className="grid lg:grid-cols-12 gap-8 max-w-7xl mx-auto">
@@ -390,8 +389,8 @@ export default function PageContent({
               {!selectedClinicId ? (
                   <div className="h-full min-h-[500px] flex flex-col items-center justify-center border-2 border-dashed rounded-[2.5rem] opacity-20 bg-muted/5">
                       <CalendarPlus className="h-20 w-20 mb-4" />
-                      <p className="text-2xl font-black uppercase tracking-widest">Espera de Selección</p>
-                      <p className="font-bold">Selecciona una categoría y consultorio para ver disponibilidad.</p>
+                      <p className="text-2xl font-black uppercase tracking-widest text-center">Espera de Selección</p>
+                      <p className="font-bold text-center">Selecciona una categoría y consultorio para ver disponibilidad.</p>
                   </div>
               ) : (
                   <div className="space-y-8 animate-in fade-in zoom-in-95 duration-500">
@@ -461,7 +460,7 @@ export default function PageContent({
                                   <div className="grid md:grid-cols-2 gap-10">
                                       <div className="space-y-4">
                                           <h3 className="text-lg font-black uppercase text-primary tracking-widest flex items-center gap-2"><MapPin className="h-5 w-5" /> 4. Tu Localidad</h3>
-                                          <Select onValueChange={handleColoniaSelect} value={selectedColoniaId}>
+                                          <Select onValueChange={setSelectedColoniaId} value={selectedColoniaId}>
                                               <SelectTrigger className="h-12 text-base font-bold border-primary/20"><SelectValue placeholder="Busca tu colonia..." /></SelectTrigger>
                                               <SelectContent>{filteredColonias.length > 0 ? (filteredColonias.map(c => <SelectItem key={c.id} value={c.id} className="font-bold uppercase text-xs">{c.name}</SelectItem>)) : (<div className="p-4 text-center text-sm text-muted-foreground italic">No hay localidades vinculadas a este consultorio.</div>)}</SelectContent>
                                           </Select>

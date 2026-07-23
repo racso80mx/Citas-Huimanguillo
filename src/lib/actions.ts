@@ -1,3 +1,4 @@
+
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -214,6 +215,9 @@ export async function getPrescriptionsByPatientId(pid: string) { return data.get
 export async function getPendingPrescriptions(filters: any) { return data.getPendingPrescriptions(filters); }
 export async function getPrescriptionHistory(filters: any) { return data.getPrescriptionHistory(filters); }
 export async function getPatientPrescriptionsCountTodayAction(pid: string) { return data.getPatientPrescriptionsCountTodayAction(pid); }
+
+// --- BI (ELIMINADO) ---
+export async function getBIData() { return data.getBIData(); }
 
 // --- FARMACIA ---
 export async function getMedications() { return data.getMedications(); }

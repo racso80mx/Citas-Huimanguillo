@@ -379,7 +379,7 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
     const start = Timestamp.fromDate(startOfDay(dateObj));
     const end = Timestamp.fromDate(endOfDay(dateObj));
     
-    // VALIDACIÓN DE DUPLICIDAD ATÓMICA
+    // VALIDACIÓN DE DUPLICIDAD ATÓMICA: Mismo consultorio y mismo día
     const qDuplicate = query(
         collection(adminDb, 'appointments'),
         where('patientId', '==', normalized.id),
@@ -1090,4 +1090,9 @@ export async function updateVaccines(items: Vaccine[]) {
     items.forEach(i => b.set(doc(adminDb, 'vaccines', i.id), i));
     await b.commit();
     return { success: true };
+}
+
+export async function getBIData() {
+    // Retornamos un objeto vacío ya que el módulo BI fue eliminado
+    return { appointments: [], labAppointments: [], xRayAppointments: [], ultrasoundAppointments: [], vaccineAppointments: [], clinics: [], colonias: [] };
 }
