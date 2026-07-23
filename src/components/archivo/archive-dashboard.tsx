@@ -164,24 +164,25 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
       if (manualSearch) {
           if (searchName) searchOptions.searchName = searchName;
           if (searchCurp) searchOptions.searchCurp = searchCurp;
-          if (searchExpediente) searchOptions.searchExpediente = searchExpediente;
+          if (searchExpediente && statusFilter !== PatientStatusEnum.Baja) searchOptions.searchExpediente = searchExpediente;
       }
 
       const patientsData = await getPatients(searchOptions);
       
-      // PERSISTENCIA DE SELECCIÓN: Mezclamos los nuevos pacientes con los ya seleccionados para no perder el rastro
+      // PERSISTENCIA DE SELECCIÓN SENIOR:
+      // Mantener los pacientes ya seleccionados en la lista aunque cambie el filtro de búsqueda
       setPatients(prev => {
-          const selectedInPrev = prev.filter(p => selectedPatientIds.includes(p.id));
-          const newBatch = [...patientsData];
+          const currentlySelected = prev.filter(p => selectedPatientIds.includes(p.id));
+          const newResults = [...patientsData];
           
-          // Agregamos a la lista visible cualquier paciente seleccionado que no esté en el nuevo resultado
-          selectedInPrev.forEach(sel => {
-              if (!newBatch.some(n => n.id === sel.id)) {
-                  newBatch.push(sel);
+          // Agregamos a los seleccionados que no estén en el nuevo resultado
+          currentlySelected.forEach(sel => {
+              if (!newResults.some(n => n.id === sel.id)) {
+                  newResults.push(sel);
               }
           });
           
-          return newBatch;
+          return newResults;
       });
       
       if (!manualSearch) setCurrentPage(1);
@@ -196,10 +197,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, [statusFilter, activeTab, loadData]);
 
-  /**
-   * MARCADO AUTOMÁTICO (Smart Mark):
-   * En la pestaña de Baja Temporal, al escribir un expediente exacto, se marca automáticamente.
-   */
+  // SMART MARK: Marcado automático por expediente en Baja Temporal
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = String(searchExpediente).trim();
@@ -211,7 +209,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                 description: `${found.name} agregado al lote de procesamiento.`, 
                 duration: 1000 
             });
-            // Limpiamos el campo para el siguiente escaneo sin ocultar la lista
+            // Limpiamos solo si fue marcado para permitir el siguiente escaneo
             setSearchExpediente(''); 
         }
     }
@@ -223,14 +221,14 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     const sExp = searchExpediente.trim();
 
     return patients.filter(p => {
-        // Los pacientes seleccionados SIEMPRE son visibles
+        // Los pacientes seleccionados SIEMPRE son visibles para mantenimiento acumulativo
         if (selectedPatientIds.includes(p.id)) return true;
         
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
         
-        // Si estamos en Baja Temporal, no filtramos por expediente para permitir el "Smart Mark"
+        // En Baja Temporal el expediente no filtra la lista (Smart Mark local)
         if (statusFilter === PatientStatusEnum.Baja) return nameMatch && curpMatch;
         
         const expMatch = !sExp || String(p.expediente || '').includes(sExp);

@@ -71,7 +71,8 @@ function addDateTimeHighlight(doc: any, date: string, time: string, currentY: nu
     doc.text(formattedDate, 105, currentY + 10, { align: 'center' });
     
     doc.setFontSize(22);
-    doc.text(String(time || 'S/H').includes('Ficha') ? String(time).toUpperCase() : `HORA: ${time || '---'} HRS`, 105, currentY + 20, { align: 'center' });
+    const timeText = String(time || 'S/H').includes('Ficha') ? String(time).toUpperCase() : `HORA: ${time || '---'} HRS`;
+    doc.text(timeText, 105, currentY + 20, { align: 'center' });
     return currentY + 35;
 }
 
@@ -264,29 +265,29 @@ export async function generateAppointmentPDF(appointmentData: Appointment, clini
     leftY += (pNameLines.length * 5) + 1;
     
     doc.setTextColor(100); doc.text('CURP:', 20, leftY);
-    doc.setTextColor(0); doc.text(patient?.curp || 'N/A', 45, leftY);
+    doc.setTextColor(0); doc.text(String(patient?.curp || 'N/A'), 45, leftY);
     leftY += 6;
     
     doc.setTextColor(100); doc.text('Tipo:', 20, leftY);
-    doc.setTextColor(0); doc.text(patientType.toUpperCase(), 45, leftY);
+    doc.setTextColor(0); doc.text(String(patientType || 'GENERAL').toUpperCase(), 45, leftY);
     leftY += 6;
     
     doc.setTextColor(100); doc.text('Unidad:', 110, rightY);
     doc.setTextColor(0); 
-    const unitLines = doc.splitTextToSize(clinicData.name.toUpperCase(), 55);
+    const unitLines = doc.splitTextToSize(String(clinicData?.name || 'HOSPITAL GENERAL').toUpperCase(), 55);
     doc.text(unitLines, 135, rightY);
     rightY += (unitLines.length * 5) + 1;
 
     doc.setTextColor(100); doc.text('Médico:', 110, rightY);
     doc.setTextColor(0); 
-    const doctorLines = doc.splitTextToSize(`DR(A). ${clinicData.doctorName.toUpperCase()}`, 55);
+    const doctorLines = doc.splitTextToSize(`DR(A). ${String(clinicData?.doctorName || 'POR ASIGNAR').toUpperCase()}`, 55);
     doc.text(doctorLines, 135, rightY);
     rightY += (doctorLines.length * 5) + 1;
 
     doc.setTextColor(100); doc.text('Folio:', 110, rightY);
     doc.setTextColor(PRIMARY_COLOR[0], PRIMARY_COLOR[1], PRIMARY_COLOR[2]);
     doc.setFont('Helvetica', 'bold');
-    doc.text(appointmentNumber, 135, rightY);
+    doc.text(String(appointmentNumber || 'S/N'), 135, rightY);
     rightY += 6;
 
     currentY = Math.max(leftY, rightY) + 12;
@@ -307,7 +308,7 @@ export async function generateAppointmentPDF(appointmentData: Appointment, clini
     }
 
     addPDFFooter(doc);
-    doc.save(`cita_${appointmentNumber}.pdf`);
+    doc.save(`cita_${appointmentNumber || 'folio'}.pdf`);
 }
 
 export async function generateLabAppointmentPDF(appointment: LabAppointment, announcements: string[]) {
@@ -480,7 +481,7 @@ export async function generatePrescriptionPDF(prescription: Prescription) {
 
     doc.setFontSize(11);
     doc.setTextColor(0);
-    doc.text(`FOLIO: ${prescription.folio}`, 20, 44);
+    doc.text(`FOLIO: ${String(prescription.folio || 'S/F')}`, 20, 44);
     doc.text(`FECHA: ${format(parseISO(prescription.date), 'dd/MM/yyyy HH:mm')}`, 190, 44, { align: 'right' });
 
     doc.setFillColor(245, 245, 245);
@@ -491,7 +492,7 @@ export async function generatePrescriptionPDF(prescription: Prescription) {
     doc.text('DATOS DEL PACIENTE', 25, 56);
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(11);
-    const pNameLines = doc.splitTextToSize(`NOMBRE: ${prescription.patientName.toUpperCase()}`, 85);
+    const pNameLines = doc.splitTextToSize(`NOMBRE: ${String(prescription.patientName || 'N/A').toUpperCase()}`, 85);
     doc.text(pNameLines, 25, 64);
     
     doc.setFontSize(9);
@@ -499,10 +500,10 @@ export async function generatePrescriptionPDF(prescription: Prescription) {
     doc.text('MÉDICO QUE PRESCRIBE', 115, 56);
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(10);
-    const doctorLines = doc.splitTextToSize(`DR(A): ${prescription.doctorName.toUpperCase()}`, 70);
+    const doctorLines = doc.splitTextToSize(`DR(A): ${String(prescription.doctorName || 'POR ASIGNAR').toUpperCase()}`, 70);
     doc.text(doctorLines, 115, 64);
     const nextY = 64 + (doctorLines.length * 4.5);
-    doc.text(`CED: ${prescription.doctorLicense || 'S/C'}`, 115, nextY);
+    doc.text(`CED: ${String(prescription.doctorLicense || 'S/C')}`, 115, nextY);
 
     let currentY = 85;
     doc.setFont('Helvetica', 'bold');
@@ -511,7 +512,7 @@ export async function generatePrescriptionPDF(prescription: Prescription) {
     currentY += 6;
     doc.setFont('Helvetica', 'normal');
     doc.setFontSize(10);
-    const diagnosisLines = doc.splitTextToSize(prescription.diagnosis?.toUpperCase() || 'NO ESPECIFICADO', 170);
+    const diagnosisLines = doc.splitTextToSize(String(prescription.diagnosis || 'NO ESPECIFICADO').toUpperCase(), 170);
     doc.text(diagnosisLines, 20, currentY);
     currentY += (diagnosisLines.length * 5) + 10;
 
@@ -521,7 +522,7 @@ export async function generatePrescriptionPDF(prescription: Prescription) {
         currentY += 4;
         
         const tableBody = prescription.items.map(i => [
-            `${i.name.toUpperCase()}\nLote: ${i.lote || 'N/A'}`,
+            `${String(i.name || '').toUpperCase()}\nLote: ${i.lote || 'N/A'}`,
             i.quantity,
             i.frequency || '',
             i.indications || ''
@@ -549,7 +550,7 @@ export async function generatePrescriptionPDF(prescription: Prescription) {
         doc.text('OTROS MEDICAMENTOS (ADQUISICIÓN EXTERNA):', 20, currentY);
         currentY += 6;
         doc.setFont('Helvetica', 'normal');
-        const otherMedLines = doc.splitTextToSize(prescription.otherMedications.toUpperCase(), 170);
+        const otherMedLines = doc.splitTextToSize(String(prescription.otherMedications).toUpperCase(), 170);
         doc.text(otherMedLines, 20, currentY);
         currentY += (otherMedLines.length * 5) + 10;
     }
@@ -591,5 +592,5 @@ export async function generatePrescriptionPDF(prescription: Prescription) {
     doc.text('Esta receta tiene una vigencia de 24 horas para surtido en farmacia del hospital.', 105, 280, { align: 'center' });
     doc.text('Hospital General Huimanguillo - CitaMedicaFacil', 105, 285, { align: 'center' });
 
-    doc.save(`receta_${prescription.folio}.pdf`);
+    doc.save(`receta_${prescription.folio || 'folio'}.pdf`);
 }
