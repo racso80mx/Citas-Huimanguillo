@@ -58,7 +58,7 @@ import type {
 } from './definitions';
 import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
-import { startOfDay, endOfDay, parseISO, startOfMonth, addDays, subMonths } from 'date-fns';
+import { startOfDay, endOfDay, parseISO, startOfMonth, endOfMonth, addDays, subMonths } from 'date-fns';
 
 /**
  * Serializa datos de Firestore a objetos planos para transmisión segura.
@@ -190,9 +190,6 @@ export async function updateWarehouseSettings(s: WarehouseSettings) {
 
 // --- PACIENTES ---
 
-/**
- * OPTIMIZACIÓN A: Paginación estricta y límites de lectura.
- */
 export async function getPatientsData(options?: any): Promise<Patient[]> {
     const colRef = collection(adminDb, 'patients');
     let q;
@@ -228,8 +225,6 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
 
 export async function getPatientCounts(): Promise<ArchiveCounts> {
     const coll = collection(adminDb, 'patients');
-    
-    // Uso de getCountFromServer para evitar leer todos los documentos (Bajo Costo)
     const totalSnap = await getCountFromServer(coll);
     const total = totalSnap.data().count;
     
@@ -351,13 +346,16 @@ async function hydrateAppointments(appointments: any[]) {
 }
 
 /**
- * OPTIMIZACIÓN B: Filtro por rango de fecha para evitar leer el historial completo.
+ * OPTIMIZACIÓN: Rango dinámico para evitar cargar historial masivo.
  */
-export async function getAppointmentsData() {
-    const threeMonthsAgo = Timestamp.fromDate(subMonths(new Date(), 3));
+export async function getAppointmentsData(options?: { startDate?: string, endDate?: string }) {
+    const start = options?.startDate ? Timestamp.fromDate(parseISO(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 3));
+    const end = options?.endDate ? Timestamp.fromDate(parseISO(options.endDate)) : Timestamp.fromDate(addDays(new Date(), 30));
+    
     const q = query(
         collection(adminDb, 'appointments'), 
-        where('date', '>=', threeMonthsAgo),
+        where('date', '>=', start),
+        where('date', '<=', end),
         limit(2000)
     );
     const snap = await getDocs(q);
@@ -365,11 +363,11 @@ export async function getAppointmentsData() {
 }
 
 export async function getAppointmentsForClinic(id: string) {
-    const oneMonthAgo = Timestamp.fromDate(subMonths(new Date(), 1));
+    const start = Timestamp.fromDate(subMonths(new Date(), 1));
     const q = query(
         collection(adminDb, 'appointments'), 
         where('clinicId', '==', id),
-        where('date', '>=', oneMonthAgo),
+        where('date', '>=', start),
         limit(1000)
     );
     const snap = await getDocs(q);
@@ -432,8 +430,8 @@ export async function updateAppointmentStatus(id: string, status: AppointmentSta
 }
 
 export async function getLabAppointmentsData() {
-    const threeMonthsAgo = Timestamp.fromDate(subMonths(new Date(), 3));
-    const q = query(collection(adminDb, 'labAppointments'), where('date', '>=', threeMonthsAgo), limit(1000));
+    const start = Timestamp.fromDate(subMonths(new Date(), 3));
+    const q = query(collection(adminDb, 'labAppointments'), where('date', '>=', start), limit(1000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
@@ -454,8 +452,8 @@ export async function saveNewLabAppointment(appointment: any, patient: any) {
 }
 
 export async function getXRayAppointmentsData() {
-    const threeMonthsAgo = Timestamp.fromDate(subMonths(new Date(), 3));
-    const q = query(collection(adminDb, 'xrayAppointments'), where('date', '>=', threeMonthsAgo), limit(1000));
+    const start = Timestamp.fromDate(subMonths(new Date(), 3));
+    const q = query(collection(adminDb, 'xrayAppointments'), where('date', '>=', start), limit(1000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
@@ -476,8 +474,8 @@ export async function saveNewXRayAppointment(appointment: any, patient: any) {
 }
 
 export async function getUltrasoundAppointmentsData() {
-    const threeMonthsAgo = Timestamp.fromDate(subMonths(new Date(), 3));
-    const q = query(collection(adminDb, 'ultrasoundAppointments'), where('date', '>=', threeMonthsAgo), limit(1000));
+    const start = Timestamp.fromDate(subMonths(new Date(), 3));
+    const q = query(collection(adminDb, 'ultrasoundAppointments'), where('date', '>=', start), limit(1000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
@@ -498,8 +496,8 @@ export async function saveNewUltrasoundAppointment(appointment: any, patient: an
 }
 
 export async function getVaccineAppointmentsData() {
-    const threeMonthsAgo = Timestamp.fromDate(subMonths(new Date(), 3));
-    const q = query(collection(adminDb, 'vaccineAppointments'), where('date', '>=', threeMonthsAgo), limit(1000));
+    const start = Timestamp.fromDate(subMonths(new Date(), 3));
+    const q = query(collection(adminDb, 'vaccineAppointments'), where('date', '>=', start), limit(1000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
@@ -653,19 +651,18 @@ export async function deleteMedicalConsultation(id: string) {
 }
 
 export async function getAttendedPatientsForClinic(id: string) {
-    const oneMonthAgo = Timestamp.fromDate(subMonths(new Date(), 1));
+    const start = Timestamp.fromDate(subMonths(new Date(), 1));
     const q = query(
         collection(adminDb, 'appointments'), 
         where('clinicId', '==', id), 
         where('status', '==', 'Atendido'),
-        where('date', '>=', oneMonthAgo),
+        where('date', '>=', start),
         limit(500)
     );
     const snap = await getDocs(q);
     const pIds = Array.from(new Set(snap.docs.map(d => d.data().patientId)));
     if (pIds.length === 0) return [];
     
-    // Firestore IN operator limited to 30 items
     const CHUNK_SIZE = 30;
     let results: any[] = [];
     for (let i = 0; i < pIds.length; i += CHUNK_SIZE) {

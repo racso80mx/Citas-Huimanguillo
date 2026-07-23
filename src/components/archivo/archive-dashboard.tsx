@@ -163,7 +163,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       const searchOptions: any = { 
           status: statusFilter === 'Total' ? undefined : statusFilter,
-          limitNum: 10000 
+          limitNum: 100 
       };
       
       if (manualSearch) {
@@ -174,7 +174,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       const patientsData = await getPatients(searchOptions);
       
-      // PERSISTENCIA DE SELECCIÓN ACUMULATIVA: Mantener registros marcados aunque no estén en la búsqueda actual
       setPatients(prev => {
           const currentlySelected = prev.filter(p => selectedPatientIds.includes(p.id));
           const newResults = [...patientsData];
@@ -199,7 +198,16 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, [statusFilter, activeTab, loadData]);
 
-  // SMART MARK POR EXPEDIENTE: Marca automáticamente sin filtrar (para Baja Temporal)
+  // OPTIMIZACIÓN: Debounce en buscadores de Archivo
+  useEffect(() => {
+      const timer = setTimeout(() => {
+          if (searchName.trim().length > 2 || searchCurp.trim().length > 2 || searchExpediente.trim().length > 1) {
+              loadData(true);
+          }
+      }, 800);
+      return () => clearTimeout(timer);
+  }, [searchName, searchCurp, searchExpediente, loadData]);
+
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = String(searchExpediente).trim();
@@ -207,7 +215,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         if (found && !selectedPatientIds.includes(found.id)) {
             setSelectedPatientIds(prev => [...prev, found.id]);
             toast({ title: "Marcado Automático", description: `${found.name} agregado.`, duration: 1000 });
-            setSearchExpediente(''); 
         }
     }
   }, [searchExpediente, patients, statusFilter, selectedPatientIds, toast]);
@@ -218,13 +225,11 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     const sExp = searchExpediente.trim();
 
     return patients.filter(p => {
-        // Validación estricta de estatus local para la grid
         const isVigente = !p.status || p.status === PatientStatusEnum.Vigente;
         const matchesStatus = statusFilter === 'Total' || 
                              (statusFilter === PatientStatusEnum.Vigente && isVigente) ||
                              (p.status === statusFilter);
 
-        // Si está seleccionado, siempre es visible
         if (selectedPatientIds.includes(p.id)) return true;
         if (!matchesStatus) return false;
 
@@ -261,7 +266,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   
   const handleDeleteLogical = (patientId: string) => {
     if (isReadOnly) return;
-    // OPTIMISTIC UI: Eliminar de la vista inmediatamente
     setPatients(prev => prev.filter(p => p.id !== patientId));
     startSubmitTransition(async () => {
       const res = await updatePatientStatus(patientId, PatientStatusEnum.BajaDefinitiva);
@@ -276,7 +280,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
   const handleDeleteAppointment = (appId: string) => {
     if (isReadOnly) return;
-    // OPTIMISTIC UI: Eliminar de la vista inmediatamente
     setAllAppointments(prev => prev.filter(a => a.id !== appId));
     startSubmitTransition(async () => {
       const res = await deleteAppointment(appId);

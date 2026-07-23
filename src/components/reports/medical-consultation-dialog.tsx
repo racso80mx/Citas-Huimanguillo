@@ -788,26 +788,27 @@ function Cie10DiagnosisSelector({ number, form, patient }: { number: number, for
     const isPrincipal = number === 1;
     const diagLabel = isPrincipal ? "PRINCIPAL" : `SECUNDARIO ${number - 1}`;
 
+    // OPTIMIZACIÓN: Implementamos Debounce para evitar consultas a Firestore por cada letra
     useEffect(() => {
-        const val = form.watch(`diagnosis${number}`);
-        if (val !== searchTerm && !isSearching) {
-            setSearchTerm(val || '');
-        }
-    }, [form.watch(`diagnosis${number}`)]);
+        const timer = setTimeout(() => {
+            if (searchTerm.length >= 2) {
+                handleSearch(searchTerm);
+            } else if (searchTerm === '') {
+                setResults([]);
+                setIsOpen(false);
+            }
+        }, 600); // 600ms de espera antes de disparar la búsqueda
+
+        return () => clearTimeout(timer);
+    }, [searchTerm]);
 
     const validateDiagnosis = useCallback((record: Cie10Record): { valid: boolean; reason?: string } => {
         const isMujer = patient.sex === 'Mujer';
         const isHombre = patient.sex === 'Hombre';
-        
         const isObstetricCode = record.catalogKey?.startsWith('O') || record.letra === 'O';
         
-        if (isObstetricCode && isHombre) {
-            return { valid: false, reason: 'Código exclusivo para mujeres (Obstetricia)' };
-        }
-
-        if (isObstetricCode && isMujer) {
-            return { valid: true };
-        }
+        if (isObstetricCode && isHombre) return { valid: false, reason: 'Código exclusivo para mujeres (Obstetricia)' };
+        if (isObstetricCode && isMujer) return { valid: true };
 
         const sexLimit = String(record.lsex || '3').trim();
         if (sexLimit !== '3' && sexLimit !== '0' && sexLimit !== '' && sexLimit !== 'NO') {
@@ -827,34 +828,13 @@ function Cie10DiagnosisSelector({ number, form, patient }: { number: number, for
 
         const minAge = parseAgeLimit(record.linf);
         const maxAge = parseAgeLimit(record.lsup);
-
-        if (minAge !== null && patient.age < minAge) return { valid: false, reason: 'Edad menor a la permitida por el catálogo' };
-        if (maxAge !== null && patient.age > maxAge) return { valid: false, reason: 'Edad mayor a la permitida por el catálogo' };
+        if (minAge !== null && patient.age < minAge) return { valid: false, reason: 'Edad menor a la permitida' };
+        if (maxAge !== null && patient.age > maxAge) return { valid: false, reason: 'Edad mayor a la permitida' };
 
         return { valid: true };
     }, [patient.sex, patient.age]);
 
-    const handleSearch = useCallback(async (val: string) => {
-        setSearchTerm(val);
-        
-        if (val === '') {
-            form.setValue(`diagnosis${number}`, '');
-            form.setValue(`diagnosis${number}Code`, '');
-            setResults([]);
-            setIsOpen(false);
-            return;
-        }
-        
-        const currentDiag = form.getValues(`diagnosis${number}`);
-        if (val !== currentDiag) {
-            form.setValue(`diagnosis${number}Code`, '');
-        }
-
-        if (val.length < 2) {
-            setResults([]);
-            return;
-        }
-        
+    const handleSearch = async (val: string) => {
         setIsSearching(true);
         try {
             const data = await searchCie10(val);
@@ -863,18 +843,10 @@ function Cie10DiagnosisSelector({ number, form, patient }: { number: number, for
         } finally {
             setIsSearching(false);
         }
-    }, [form, number]);
+    };
 
     const handleCodeLookup = useCallback(async (code: string) => {
-        if (!code) {
-            form.setValue(`diagnosis${number}`, '');
-            setSearchTerm('');
-            setResults([]);
-            return;
-        }
-
-        if (code.length < 3) return;
-        
+        if (!code || code.length < 3) return;
         setIsSearching(true);
         try {
             const data = await searchCie10(code);
@@ -896,10 +868,9 @@ function Cie10DiagnosisSelector({ number, form, patient }: { number: number, for
     const onSelect = (record: Cie10Record) => {
         const { valid, reason } = validateDiagnosis(record);
         if (!valid) {
-            alert(`ATENCIÓN: El diagnóstico ${record.catalogKey} no es compatible con el perfil del paciente.\nMotivo: ${reason}`);
+            alert(`ATENCIÓN: Incompatible.\nMotivo: ${reason}`);
             return;
         }
-
         form.setValue(`diagnosis${number}`, record.nombre);
         form.setValue(`diagnosis${number}Code`, record.catalogKey);
         setSearchTerm(record.nombre);
@@ -916,7 +887,6 @@ function Cie10DiagnosisSelector({ number, form, patient }: { number: number, for
                 <Badge variant={isPrincipal ? "default" : "secondary"} className="text-[10px] font-black tracking-widest px-3">
                     {diagLabel}
                 </Badge>
-                {isPrincipal && <span className="text-[10px] font-bold text-primary animate-pulse italic">REQUERIDO</span>}
             </div>
 
             <div className="sm:col-span-1 space-y-1.5 relative">
@@ -942,16 +912,16 @@ function Cie10DiagnosisSelector({ number, form, patient }: { number: number, for
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input 
-                        placeholder={`Escribe nombre de enfermedad o código...`}
+                        placeholder={`Escribe nombre...`}
                         value={searchTerm}
-                        onChange={e => handleSearch(e.target.value.toUpperCase())}
+                        onChange={e => setSearchTerm(e.target.value.toUpperCase())}
                         className="pl-9 pr-9 h-11 font-bold uppercase"
                     />
                     {isSearching && <Loader2 className="absolute right-10 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-primary" />}
                     {searchTerm && (
                         <button 
                             type="button"
-                            onClick={() => handleSearch('')}
+                            onClick={() => setSearchTerm('')}
                             className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                         >
                             <X className="h-4 w-4" />

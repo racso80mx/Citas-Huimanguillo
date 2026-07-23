@@ -93,7 +93,8 @@ export default function PageContent({
 
   const calculateForClinic = useCallback((clinic: Clinic, allAppointments: any[], holidaySet: Set<string>, freshSpecialActionDays: SpecialActionDay[]): DailyAvailability[] => {
       const startDate = startOfToday();
-      const endDate = addDays(startDate, 180); 
+      // OPTIMIZACIÓN: Reducimos el cálculo a 30 días para ahorrar recursos, aunque solo mostremos 7 en la grid
+      const endDate = addDays(startDate, 30); 
       
       const clinicAppointments = allAppointments.filter(app => 
           app.clinicId === clinic.id || 
@@ -142,7 +143,6 @@ export default function PageContent({
             if (clinic.bookingMode === BookingMode.Time && clinic.consultationDuration) {
                 const allSlots = generateDynamicTimeSlots(clinic.startTime, currentEndTime, clinic.consultationDuration);
                 const filteredSlots = allSlots.filter(s => s !== clinic.breakTime);
-                // CORRECCIÓN: Restamos por capacidad real, no por horarios únicos para evitar sobrecupo con duplicados
                 availableSlotsForClinic = Math.max(0, filteredSlots.length - dayBooked.length);
             } else {
                 const totalSlots = (clinic.dailySlots || 15) + (clinic.waitlistSlots || 0);
@@ -301,7 +301,8 @@ export default function PageContent({
   const projectedGridData = useMemo(() => {
     if (!selectedClinicId || availability.length === 0) return [];
     const today = startOfToday();
-    const range = Array.from({ length: 14 }, (_, i) => addDays(today, i));
+    // OPTIMIZACIÓN: Mostrar solo los próximos 7 días en la grid para reducir carga visual y transaccional
+    const range = Array.from({ length: 7 }, (_, i) => addDays(today, i));
     return range.map(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
         const avail = availability.find(a => a.date === dateStr);
@@ -381,7 +382,7 @@ export default function PageContent({
                       <Card className="shadow-xl border-primary/10 overflow-hidden rounded-[2.5rem] relative">
                           <CardHeader className="bg-primary/5 pb-4 border-b border-primary/5">
                                <div className="flex items-center justify-between">
-                                    <CardTitle className="text-xl font-black uppercase text-primary tracking-wider flex items-center gap-2"><CalendarDays className="h-6 w-6" /> 3. Disponibilidad Próximas 2 Semanas</CardTitle>
+                                    <CardTitle className="text-xl font-black uppercase text-primary tracking-wider flex items-center gap-2"><CalendarDays className="h-6 w-6" /> 3. Disponibilidad Próximos 7 Días</CardTitle>
                                     <Badge variant="outline" className="font-bold bg-background">Cupo en {selectedClinic?.name}</Badge>
                                </div>
                           </CardHeader>
