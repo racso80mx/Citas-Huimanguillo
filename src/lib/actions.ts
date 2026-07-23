@@ -152,10 +152,7 @@ export async function getLabAppointments() { return data.getLabAppointmentsData(
 export async function getXRayAppointments() { return data.getXRayAppointmentsData(); }
 export async function getUltrasoundAppointments() { return data.getUltrasoundAppointmentsData(); }
 export async function getVaccineAppointments() { return data.getVaccineAppointmentsData(); }
-export async function getAppointmentsForClinic(id: string) {
-    const snap = await data.getDocs(data.query(data.collection(data.adminDb, 'appointments'), data.where('clinicId', '==', id)));
-    return data.serializeData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
-}
+export async function getAppointmentsForClinic(id: string) { return data.getAppointmentsForClinic(id); }
 
 export async function saveNewAppointment(a: any, p: any, d: boolean, c?: string) { return data.saveNewAppointment(a, p, d, c); }
 export async function saveNewLabAppointment(a: any, p: any) { return data.saveNewLabAppointment(a, p); }

@@ -56,12 +56,8 @@ import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
 import { startOfDay, endOfDay, parseISO, format, isValid, startOfMonth, isSaturday, isSunday } from 'date-fns';
 
-// Re-export core Firestore methods for internal use by actions
-export { 
-    adminDb, collection, doc, getDoc, getDocs, writeBatch, 
-    setDoc, updateDoc, deleteDoc, addDoc, query, where, 
-    limit, orderBy, increment, documentId, Timestamp, getCountFromServer
-};
+// Re-export constants needed by Server Actions
+export { adminDb };
 
 /**
  * Serializes Firestore data to plain objects for safe transmission via Server Actions.
@@ -104,24 +100,35 @@ function generateDynamicTimeSlots(startTimeStr: string, endTimeStr: string, dura
     return slots;
 }
 
+/**
+ * Hydrates appointment list with patient data and clinic names.
+ */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
+    
     const patientIds = Array.from(new Set(appointments.map(a => a.patientId).filter(Boolean)));
     const patientsMap: Record<string, any> = {};
+    
     if (patientIds.length > 0) {
         const CHUNK_SIZE = 30; 
         for (let i = 0; i < patientIds.length; i += CHUNK_SIZE) {
             const chunk = patientIds.slice(i, i + CHUNK_SIZE);
             const snap = await getDocs(query(collection(adminDb, 'patients'), where(documentId(), 'in', chunk)));
-            snap.forEach(d => { patientsMap[d.id] = { ...d.data(), id: d.id }; });
+            snap.forEach(d => { 
+                patientsMap[d.id] = { ...d.data(), id: d.id }; 
+            });
         }
     }
+    
     const clinicsSnap = await getDocs(collection(adminDb, 'clinics'));
     const clinicsMap: Record<string, string> = {};
-    clinicsSnap.forEach(d => { clinicsMap[d.id] = d.data().name; });
+    clinicsSnap.forEach(d => { 
+        clinicsMap[d.id] = d.data().name; 
+    });
+    
     return appointments.map(app => ({
         ...app,
-        patient: serializeData(patientsMap[app.patientId] || app.patient || {}),
+        patient: serializeData(patientsMap[app.patientId] || app.patient || { name: 'PACIENTE NO ENCONTRADO', curp: app.patientId }),
         clinicName: clinicsMap[app.clinicId] || app.clinicName || app.clinicId
     }));
 }
@@ -355,23 +362,29 @@ export async function applyStatusUpdateChunk(expedientes: string[], status: Pati
 // --- APPOINTMENTS ---
 export async function getAppointmentsData() {
     const snap = await getDocs(query(collection(adminDb, 'appointments'), limit(10000)));
-    return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
+    return await hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
 }
 export async function getLabAppointmentsData() {
     const snap = await getDocs(query(collection(adminDb, 'labAppointments'), limit(10000)));
-    return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
+    return await hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
 }
 export async function getXRayAppointmentsData() {
     const snap = await getDocs(query(collection(adminDb, 'xrayAppointments'), limit(10000)));
-    return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
+    return await hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
 }
 export async function getUltrasoundAppointmentsData() {
     const snap = await getDocs(query(collection(adminDb, 'ultrasoundAppointments'), limit(10000)));
-    return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
+    return await hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
 }
 export async function getVaccineAppointmentsData() {
     const snap = await getDocs(query(collection(adminDb, 'vaccineAppointments'), limit(10000)));
-    return hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
+    return await hydrateAppointments(snap.docs.map(d => ({ ...serializeData(d.data()), id: d.id })));
+}
+
+export async function getAppointmentsForClinic(id: string) {
+    const snap = await getDocs(query(collection(adminDb, 'appointments'), where('clinicId', '==', id)));
+    const apps = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    return serializeData(await hydrateAppointments(apps));
 }
 
 export async function deleteAppointment(id: string) { await deleteDoc(doc(adminDb, 'appointments', id)); return { success: true }; }
@@ -400,7 +413,8 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
     batch.set(doc(adminDb, 'appointments', appointmentId), appData);
     await batch.commit();
     
-    const clinicData = (await getDoc(doc(adminDb, 'clinics', appointment.clinicId))).data();
+    const clinicDoc = await getDoc(doc(adminDb, 'clinics', appointment.clinicId));
+    const clinicData = clinicDoc.data();
     return { success: true, data: { appointment: appData, clinic: clinicData } };
 }
 
@@ -423,7 +437,8 @@ export async function saveNewXRayAppointment(appointment: any, patient: any) {
     const appData = { ...appointment, id: appointmentId, patientId: patient.curp, createdAt: new Date().toISOString() };
     batch.set(doc(adminDb, 'xrayAppointments', appointmentId), appData);
     await batch.commit();
-    const studyData = (await getDoc(doc(adminDb, 'xRayStudies', appointment.studyId))).data();
+    const studyDoc = await getDoc(doc(adminDb, 'xRayStudies', appointment.studyId));
+    const studyData = studyDoc.data();
     return { success: true, data: { appointment: appData, study: studyData } };
 }
 
@@ -435,7 +450,8 @@ export async function saveNewUltrasoundAppointment(appointment: any, patient: an
     const appData = { ...appointment, id: appointmentId, patientId: patient.curp, createdAt: new Date().toISOString() };
     batch.set(doc(adminDb, 'ultrasoundAppointments', appointmentId), appData);
     await batch.commit();
-    const studyData = (await getDoc(doc(adminDb, 'ultrasoundStudies', appointment.studyId))).data();
+    const studyDoc = await getDoc(doc(adminDb, 'ultrasoundStudies', appointment.studyId));
+    const studyData = studyDoc.data();
     return { success: true, data: { appointment: appData, study: studyData } };
 }
 
