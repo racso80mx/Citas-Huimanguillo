@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -160,17 +161,13 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       const searchOptions: any = { 
           status: statusFilter === 'Total' ? undefined : statusFilter,
-          limitNum: 10000 // Load large set for local filtering/marking
+          limitNum: 10000 
       };
       const patientsData = await getPatients(searchOptions);
       setPatients(patientsData);
       setCurrentPage(1);
       
-      // SENIOR FIX: Only clear selection if we are changing the main status filter or the tab
-      // This prevents clearing the list while searching in the same view.
-      if (manualSearch === false) {
-          // setSelectedPatientIds([]); // Disabled globally to allow persistent marking during "scan" sessions
-      }
+      // PERSISTENCIA: No borramos selectedPatientIds al recargar para permitir marcados sucesivos (Senior Requirement)
     } catch (e) {
       toast({ title: 'Error de Red', variant: 'destructive' });
     } finally {
@@ -182,7 +179,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, [statusFilter, activeTab, loadData]);
 
-  // AUTO-MARK LOGIC: En "Baja Temporal", buscar un expediente lo selecciona automáticamente en lugar de ocultar a los demás.
+  // AUTO-MARK LOGIC: En "Baja Temporal", buscar un expediente lo selecciona automáticamente sin filtrar la lista.
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = searchExpediente.trim();
@@ -190,6 +187,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         if (exactMatch && !selectedPatientIds.includes(exactMatch.id)) {
             setSelectedPatientIds(prev => [...prev, exactMatch.id]);
             toast({ title: "Marcado automático", description: `${exactMatch.name} seleccionado.` });
+            setSearchExpediente(''); // Limpiar para el siguiente escaneo
         }
     }
   }, [searchExpediente, patients, statusFilter, selectedPatientIds, toast]);
@@ -200,6 +198,9 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     const sExp = searchExpediente.trim();
 
     return patients.filter(p => {
+        // PERMANENCIA: Si el paciente ya está seleccionado, lo mantenemos siempre visible (Senior Requirement)
+        if (selectedPatientIds.includes(p.id)) return true;
+
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
@@ -213,16 +214,18 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         const expMatch = !sExp || String(p.expediente || '').includes(sExp);
         return nameMatch && curpMatch && expMatch;
     });
-  }, [patients, statusFilter, searchName, searchCurp, searchExpediente]);
+  }, [patients, statusFilter, searchName, searchCurp, searchExpediente, selectedPatientIds]);
 
   const handleClearSearch = () => {
       setSearchName(''); setSearchCurp(''); setSearchExpediente('');
-      setSelectedPatientIds([]);
   };
 
   const handleStatusCardClick = (status: 'Total' | PatientStatusEnum) => {
-      setSelectedPatientIds([]); // Reset selection when switching main views
-      setStatusFilter(status);
+      if (status !== statusFilter) {
+          // No borramos la seleccion al cambiar de pestaña de estatus para permitir depuracion cruzada si se requiere
+          setStatusFilter(status);
+          setCurrentPage(1);
+      }
   };
 
   const paginatedPatients = useMemo(() => {
@@ -238,9 +241,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   
   const handleDeleteLogical = (patientId: string) => {
     if (isReadOnly) return;
-    // Mover a Baja Definitiva inmediatamente en la UI (Optimista)
     setPatients(prev => prev.filter(p => p.id !== patientId));
-    setSelectedPatientIds(prev => prev.filter(id => id !== patientId));
     
     startSubmitTransition(async () => {
       await updatePatientStatus(patientId, PatientStatusEnum.BajaDefinitiva);

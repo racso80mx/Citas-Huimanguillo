@@ -1,3 +1,4 @@
+
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -63,28 +64,28 @@ export async function updateAnnouncements(m: string[]) {
 // --- PASSWORD VERIFICATIONS ---
 export async function verifyAdminPassword(p: string) { 
     const s = await data.getDoc(data.doc(data.adminDb, 'settings', 'adminSettings'));
-    return s.exists() && s.data().password === p ? { success: true } : { success: false };
+    return s.exists() && s.data()?.password === p ? { success: true } : { success: false };
 }
 export async function verifyCitasMedicasPassword(p: string) { return (await data.getModuleSettings()).citasMedicasPassword === p ? { success: true } : { success: false }; }
 export async function verifyArchivePassword(p: string) { 
     const s = await data.getDoc(data.doc(data.adminDb, 'settings', 'archiveSettings'));
-    return s.exists() && s.data().password === p ? { success: true } : { success: false };
+    return s.exists() && s.data()?.password === p ? { success: true } : { success: false };
 }
 export async function verifyPharmacyPassword(p: string) {
     const s = await data.getDoc(data.doc(data.adminDb, 'settings', 'pharmacySettings'));
-    return s.exists() && s.data().password === p ? { success: true } : { success: false };
+    return s.exists() && s.data()?.password === p ? { success: true } : { success: false };
 }
 export async function verifyWarehousePassword(p: string) {
     const s = await data.getDoc(data.doc(data.adminDb, 'settings', 'warehouseSettings'));
-    return s.exists() && s.data().password === p ? { success: true } : { success: false };
+    return s.exists() && s.data()?.password === p ? { success: true } : { success: false };
 }
 export async function verifyBIPassword(p: string) {
     const s = await data.getDoc(data.doc(data.adminDb, 'settings', 'biSettings'));
-    return s.exists() && s.data().password === p ? { success: true } : { success: false };
+    return s.exists() && s.data()?.password === p ? { success: true } : { success: false };
 }
 export async function verifyClinicPassword(id: string, p: string) {
     const s = await data.getDoc(data.doc(data.adminDb, 'clinics', id));
-    return s.exists() && s.data().password === p ? { success: true } : { success: false };
+    return s.exists() && s.data()?.password === p ? { success: true } : { success: false };
 }
 
 // --- PATIENTS ---
@@ -151,8 +152,8 @@ export async function updateAppointmentStatus(id: string, status: string, type: 
 export async function deleteAppointment(id: string) { await data.deleteAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
 export async function deleteLabAppointment(id: string) { await data.deleteLabAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
 export async function deleteXRayAppointment(id: string) { await data.deleteXRayAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
-export async function deleteUltrasoundAppointment(id: string) { await data.deleteUltrasoundAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
-export async function deleteVaccineAppointment(id: string) { await data.deleteVaccineAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
+export async function deleteUltrasoundAppointment(id: string) { await deleteUltrasoundAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
+export async function deleteVaccineAppointment(id: string) { await deleteVaccineAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
 
 export async function rescheduleAppointment(id: string, date: string, type: string, time: string) {
     const res = await data.rescheduleAppointment(id, date, type, time);
@@ -251,15 +252,3 @@ export async function searchCie10(term: string) { return data.searchCie10(term);
 // --- MAINTENANCE ---
 export async function cleanupOldRecords() { return data.cleanupOldRecords(); }
 export async function downloadBackupAction() { return data.downloadBackupAction(); }
-export async function getBIData() {
-    const [apps, lab, xr, us, vac, clinics, colonias] = await Promise.all([
-        data.getAppointmentsData(), data.getLabAppointmentsData(), data.getXRayAppointmentsData(),
-        data.getUltrasoundAppointmentsData(), data.getVaccineAppointmentsData(),
-        data.getClinicsData(), data.getColoniasData()
-    ]);
-    return {
-        appointments: apps, labAppointments: lab, xRayAppointments: xr,
-        ultrasoundAppointments: us, vaccineAppointments: vac,
-        clinics: clinics, colonias: colonias
-    };
-}
