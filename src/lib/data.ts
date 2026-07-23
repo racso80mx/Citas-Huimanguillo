@@ -402,10 +402,10 @@ export async function deleteVaccineAppointment(id: string) {
 export async function saveNewAppointment(appointment: any, patient: any, isDoubleSlot: boolean, coloniaName?: string) {
     const normalized = normalizePatientData(patient);
     
-    // BLINDAJE SENIOR: VALIDACIÓN DE DUPLICIDAD ATÓMICA (MISMO DÍA, MISMO PACIENTE, MISMO NÚCLEO)
+    // BLINDAJE SENIOR: VALIDACIÓN DE DUPLICIDAD ATÓMICA USANDO TIMESTAMPS
     const dateObj = parseISO(appointment.date);
-    const start = startOfDay(dateObj).toISOString();
-    const end = endOfDay(dateObj).toISOString();
+    const start = Timestamp.fromDate(startOfDay(dateObj));
+    const end = Timestamp.fromDate(endOfDay(dateObj));
     
     const qDuplicate = query(
         collection(adminDb, 'appointments'),
@@ -430,8 +430,9 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
         appointmentNumber,
         patientId: normalized.id, 
         id: uuidv4(), 
-        coloniaName, 
-        createdAt: new Date().toISOString() 
+        coloniaName,
+        date: Timestamp.fromDate(dateObj), // Guardar como Timestamp para consultas de rango robustas
+        createdAt: Timestamp.now() 
     };
     batch.set(doc(adminDb, 'appointments', appData.id), appData);
     
@@ -450,7 +451,13 @@ export async function saveNewLabAppointment(appointment: any, patient: any) {
     const normalized = normalizePatientData(patient);
     const batch = writeBatch(adminDb);
     batch.set(doc(adminDb, 'patients', normalized.id), normalized, { merge: true });
-    const appData = { ...appointment, patientId: normalized.id, id: uuidv4(), createdAt: new Date().toISOString() };
+    const appData = { 
+        ...appointment, 
+        patientId: normalized.id, 
+        id: uuidv4(), 
+        date: Timestamp.fromDate(parseISO(appointment.date)),
+        createdAt: Timestamp.now() 
+    };
     batch.set(doc(adminDb, 'labAppointments', appData.id), appData);
     await batch.commit();
     return serializeData({ success: true, data: { ...appData, patient: normalized } });
@@ -460,7 +467,13 @@ export async function saveNewXRayAppointment(appointment: any, patient: any) {
     const normalized = normalizePatientData(patient);
     const batch = writeBatch(adminDb);
     batch.set(doc(adminDb, 'patients', normalized.id), normalized, { merge: true });
-    const appData = { ...appointment, patientId: normalized.id, id: uuidv4(), createdAt: new Date().toISOString() };
+    const appData = { 
+        ...appointment, 
+        patientId: normalized.id, 
+        id: uuidv4(), 
+        date: Timestamp.fromDate(parseISO(appointment.date)),
+        createdAt: Timestamp.now() 
+    };
     batch.set(doc(adminDb, 'xrayAppointments', appData.id), appData);
     await batch.commit();
     return serializeData({ success: true, data: { appointment: { ...appData, patient: normalized }, study: { name: appointment.studyName, indications: '' } } });
@@ -470,7 +483,13 @@ export async function saveNewUltrasoundAppointment(appointment: any, patient: an
     const normalized = normalizePatientData(patient);
     const batch = writeBatch(adminDb);
     batch.set(doc(adminDb, 'patients', normalized.id), normalized, { merge: true });
-    const appData = { ...appointment, patientId: normalized.id, id: uuidv4(), createdAt: new Date().toISOString() };
+    const appData = { 
+        ...appointment, 
+        patientId: normalized.id, 
+        id: uuidv4(), 
+        date: Timestamp.fromDate(parseISO(appointment.date)),
+        createdAt: Timestamp.now() 
+    };
     batch.set(doc(adminDb, 'ultrasoundAppointments', appData.id), appData);
     await batch.commit();
     return serializeData({ success: true, data: { appointment: { ...appData, patient: normalized }, study: { name: appointment.studyName, indications: '' } } });
@@ -480,7 +499,13 @@ export async function saveNewVaccineAppointment(appointment: any, patient: any) 
     const normalized = normalizePatientData(patient);
     const batch = writeBatch(adminDb);
     batch.set(doc(adminDb, 'patients', normalized.id), normalized, { merge: true });
-    const appData = { ...appointment, patientId: normalized.id, id: uuidv4(), createdAt: new Date().toISOString() };
+    const appData = { 
+        ...appointment, 
+        patientId: normalized.id, 
+        id: uuidv4(), 
+        date: Timestamp.fromDate(parseISO(appointment.date)),
+        createdAt: Timestamp.now() 
+    };
     batch.set(doc(adminDb, 'vaccineAppointments', appData.id), appData);
     await batch.commit();
     return serializeData({ success: true, data: { ...appData, patient: normalized } });
@@ -494,7 +519,10 @@ export async function updateAppointmentStatus(id: string, status: string, type: 
 
 export async function rescheduleAppointment(id: string, date: string, type: string, time: string) {
     const col = type === 'lab' ? 'labAppointments' : type === 'xray' ? 'xrayAppointments' : type === 'ultrasound' ? 'ultrasoundAppointments' : type === 'vaccine' ? 'vaccineAppointments' : 'appointments';
-    await updateDoc(doc(adminDb, col, id), { date, time });
+    await updateDoc(doc(adminDb, col, id), { 
+        date: Timestamp.fromDate(parseISO(date)), 
+        time 
+    });
     return { success: true, message: 'Cita reprogramada.' };
 }
 
@@ -503,7 +531,14 @@ export async function cloneAppointment(id: string, date: string, type: string, t
     const s = await getDoc(doc(adminDb, col, id));
     if (!s.exists()) return { success: false };
     const newId = uuidv4();
-    await setDoc(doc(adminDb, col, newId), { ...s.data(), id: newId, date, time, status: 'Agendada', createdAt: new Date().toISOString() });
+    await setDoc(doc(adminDb, col, newId), { 
+        ...s.data(), 
+        id: newId, 
+        date: Timestamp.fromDate(parseISO(date)), 
+        time, 
+        status: 'Agendada', 
+        createdAt: Timestamp.now() 
+    });
     return { success: true };
 }
 
@@ -518,7 +553,12 @@ export async function getAvailableSlotsForDate(clinicId: string, dateStr: string
 }
 
 export async function getAppointmentCountOnDate(id: string, d: string) {
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', id), where('date', '>=', startOfDay(parseISO(d)).toISOString()), where('date', '<=', endOfDay(parseISO(d)).toISOString()));
+    const q = query(
+        collection(adminDb, 'appointments'), 
+        where('clinicId', '==', id), 
+        where('date', '>=', Timestamp.fromDate(startOfDay(parseISO(d)))), 
+        where('date', '<=', Timestamp.fromDate(endOfDay(parseISO(d))))
+    );
     const s = await getCountFromServer(q);
     return s.data().count;
 }
@@ -656,7 +696,7 @@ export async function getConsultationByAppointmentId(aid: string) {
 
 export async function saveMedicalConsultation(c: any) {
     const id = c.id || uuidv4();
-    await setDoc(doc(adminDb, 'medicalConsultations', id), { ...c, id, createdAt: new Date().toISOString() });
+    await setDoc(doc(adminDb, 'medicalConsultations', id), { ...c, id, createdAt: Timestamp.now() });
     return { success: true, id };
 }
 
@@ -677,7 +717,15 @@ export async function getAttendedPatientsForClinic(id: string) {
 export async function createPrescription(p: any) {
     const folio = `REC-${uuidv4().split('-')[0].toUpperCase()}`;
     const id = uuidv4();
-    const rx = { ...p, id, folio, status: 'pendiente', expiresAt: addDays(new Date(), 1).toISOString(), createdAt: new Date().toISOString() };
+    const rx = { 
+        ...p, 
+        id, 
+        folio, 
+        status: 'pendiente', 
+        date: Timestamp.fromDate(parseISO(p.date)),
+        expiresAt: Timestamp.fromDate(addDays(new Date(), 1)), 
+        createdAt: Timestamp.now() 
+    };
     await setDoc(doc(adminDb, 'prescriptions', id), rx);
     return serializeData({ success: true, folio, prescription: rx });
 }
@@ -695,7 +743,7 @@ export async function deletePrescription(id: string) {
 export async function dispensePrescription(id: string, items: any[]) {
     const b = writeBatch(adminDb);
     items.forEach(i => b.update(doc(adminDb, 'medications', i.medicationId), { existencia: increment(-i.quantity) }));
-    b.update(doc(adminDb, 'prescriptions', id), { status: 'surtida', dispensedAt: new Date().toISOString() });
+    b.update(doc(adminDb, 'prescriptions', id), { status: 'surtida', dispensedAt: Timestamp.now() });
     await b.commit();
     return { success: true };
 }
@@ -715,16 +763,16 @@ export async function getPendingPrescriptions(filters: any) {
 
 export async function getPrescriptionHistory(filters: any) {
     let q = query(collection(adminDb, 'prescriptions'), where('status', '==', 'surtida'), orderBy('dispensedAt', 'desc'));
-    if (filters.startDate) q = query(q, where('dispensedAt', '>=', filters.startDate));
-    if (filters.endDate) q = query(q, where('dispensedAt', '<=', filters.endDate));
+    if (filters.startDate) q = query(q, where('dispensedAt', '>=', Timestamp.fromDate(parseISO(filters.startDate))));
+    if (filters.endDate) q = query(q, where('dispensedAt', '<=', Timestamp.fromDate(parseISO(filters.endDate))));
     const snap = await getDocs(q);
     return serializeData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 
 export async function getPatientPrescriptionsCountTodayAction(pid: string) {
-    const start = startOfDay(new Date()).toISOString();
-    const end = endOfDay(new Date()).toISOString();
-    const q = query(collection(adminDb, 'prescriptions'), where('patientId', '==', pid), where('date', '>=', start), where('date', '<=', end));
+    const start = Timestamp.fromDate(startOfDay(new Date()));
+    const end = Timestamp.fromDate(endOfDay(new Date()));
+    const q = query(collection(adminDb, 'prescriptions'), where('patientId', '==', pid), where('createdAt', '>=', start), where('createdAt', '<=', end));
     const s = await getCountFromServer(q);
     return s.data().count;
 }
@@ -748,7 +796,7 @@ export async function bulkInsertMedications(meds: any[], source: string) {
             lote: String(m.lote || m.Lote || 'N/A'),
             fechaCaducidad: String(m.fechaCaducidad || m.Caducidad || ''),
             fuenteEtiqueta: source,
-            updatedAt: new Date().toISOString()
+            updatedAt: Timestamp.now()
         });
     });
     await b.commit();
@@ -805,7 +853,7 @@ export async function createPharmacyVoucher(v: any) {
     const folio = `VAL-${uuidv4().split('-')[0].toUpperCase()}`;
     const b = writeBatch(adminDb);
     v.items.forEach((i: any) => b.update(doc(adminDb, 'medications', i.medicationId), { existencia: increment(-i.quantity) }));
-    b.set(doc(adminDb, 'pharmacyVouchers', uuidv4()), { ...v, folio, createdAt: new Date().toISOString() });
+    b.set(doc(adminDb, 'pharmacyVouchers', uuidv4()), { ...v, folio, createdAt: Timestamp.now() });
     await b.commit();
     return { success: true, folio };
 }
@@ -873,7 +921,7 @@ export async function cleanupOldRecords() {
     const cols = ['appointments', 'labAppointments', 'xrayAppointments', 'ultrasoundAppointments', 'vaccineAppointments'];
     let deletedCount = 0;
     for (const c of cols) {
-        const snap = await getDocs(query(collection(adminDb, c), where('date', '<', dateLimit.toISOString())));
+        const snap = await getDocs(query(collection(adminDb, c), where('date', '<', Timestamp.fromDate(dateLimit))));
         const b = writeBatch(adminDb);
         snap.forEach(d => { b.delete(d.ref); deletedCount++; });
         await b.commit();
@@ -892,7 +940,7 @@ export async function downloadBackupAction() {
 }
 
 export async function logActivity(action: string, details: string) {
-    await addDoc(collection(adminDb, 'activityLog'), { timestamp: new Date().toISOString(), action, details });
+    await addDoc(collection(adminDb, 'activityLog'), { timestamp: Timestamp.now(), action, details });
     return { success: true };
 }
 
