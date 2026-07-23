@@ -169,19 +169,15 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       const patientsData = await getPatients(searchOptions);
       
-      // PERSISTENCIA DE SELECCIÓN SENIOR:
-      // Mantener los pacientes ya seleccionados en la lista aunque cambie el filtro de búsqueda
+      // PERSISTENCIA DE SELECCIÓN:
       setPatients(prev => {
           const currentlySelected = prev.filter(p => selectedPatientIds.includes(p.id));
           const newResults = [...patientsData];
-          
-          // Agregamos a los seleccionados que no estén en el nuevo resultado
           currentlySelected.forEach(sel => {
               if (!newResults.some(n => n.id === sel.id)) {
                   newResults.push(sel);
               }
           });
-          
           return newResults;
       });
       
@@ -204,12 +200,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         const found = patients.find(p => String(p.expediente || '').trim() === term);
         if (found && !selectedPatientIds.includes(found.id)) {
             setSelectedPatientIds(prev => [...prev, found.id]);
-            toast({ 
-                title: "Marcado Automático", 
-                description: `${found.name} agregado al lote de procesamiento.`, 
-                duration: 1000 
-            });
-            // Limpiamos solo si fue marcado para permitir el siguiente escaneo
+            toast({ title: "Marcado Automático", description: `${found.name} agregado.`, duration: 1000 });
             setSearchExpediente(''); 
         }
     }
@@ -221,16 +212,11 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     const sExp = searchExpediente.trim();
 
     return patients.filter(p => {
-        // Los pacientes seleccionados SIEMPRE son visibles para mantenimiento acumulativo
         if (selectedPatientIds.includes(p.id)) return true;
-        
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
-        
-        // En Baja Temporal el expediente no filtra la lista (Smart Mark local)
         if (statusFilter === PatientStatusEnum.Baja) return nameMatch && curpMatch;
-        
         const expMatch = !sExp || String(p.expediente || '').includes(sExp);
         return nameMatch && curpMatch && expMatch;
     });
@@ -260,22 +246,32 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   
   const handleDeleteLogical = (patientId: string) => {
     if (isReadOnly) return;
+    // Optimistic:
+    setPatients(prev => prev.filter(p => p.id !== patientId));
+    
     startSubmitTransition(async () => {
-      await updatePatientStatus(patientId, PatientStatusEnum.BajaDefinitiva);
-      toast({ title: "Movido a Baja Definitiva" });
-      loadData(true);
+      const res = await updatePatientStatus(patientId, PatientStatusEnum.BajaDefinitiva);
+      if (res.success) {
+          toast({ title: "Movido a Baja Definitiva" });
+          loadData(true);
+      } else {
+          fetchData(); // Rollback
+      }
     });
   }
 
   const handleBulkToDefinitive = () => {
       if (selectedPatientIds.length === 0 || isReadOnly) return;
       const ids = [...selectedPatientIds];
+      // Optimistic
+      setPatients(prev => prev.filter(p => !ids.includes(p.id)));
+      setSelectedPatientIds([]);
+
       startSubmitTransition(async () => {
           for (const id of ids) {
               await updatePatientStatus(id, PatientStatusEnum.BajaDefinitiva);
           }
-          setSelectedPatientIds([]);
-          toast({ title: "Lote Procesado", description: `${ids.length} registros movidos a Baja Definitiva.` });
+          toast({ title: "Lote Procesado", description: `${ids.length} registros movidos.` });
           loadData(true);
       });
   };
@@ -285,11 +281,16 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     const ids = patients.map(p => p.id);
     if (ids.length === 0) return;
     
+    // Optimistic
+    setPatients([]);
+    
     startSubmitTransition(async () => {
         const result = await deletePatients(ids);
         if (result.success) {
             toast({ title: "Depuración Física Completada" });
             loadData(true);
+        } else {
+            loadData(true); // Rollback
         }
     });
   }

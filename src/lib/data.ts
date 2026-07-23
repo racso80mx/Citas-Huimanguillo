@@ -51,7 +51,8 @@ import type {
   Holiday,
   SpecialActionDay,
   Medication,
-  Supply
+  Supply,
+  PrescriptionItem
 } from './definitions';
 import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
@@ -402,7 +403,7 @@ export async function deleteVaccineAppointment(id: string) {
 export async function saveNewAppointment(appointment: any, patient: any, isDoubleSlot: boolean, coloniaName?: string) {
     const normalized = normalizePatientData(patient);
     
-    // VALIDACIÓN DE DUPLICIDAD (Mismo paciente, misma fecha, mismo consultorio)
+    // VALIDACIÓN DE DUPLICIDAD ATÓMICA
     const dateObj = parseISO(appointment.date);
     const start = startOfDay(dateObj).toISOString();
     const end = endOfDay(dateObj).toISOString();
@@ -511,8 +512,6 @@ export async function getAvailableSlotsForDate(clinicId: string, dateStr: string
     const clinics = await getClinicsData();
     const clinic = clinics.find(c => c.id === clinicId);
     if (!clinic) return { timeSlots: [], tokens: [] };
-
-    // Simulación de slots disponibles (Lógica MVP)
     return { 
         timeSlots: ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00"], 
         tokens: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] 

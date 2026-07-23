@@ -137,6 +137,7 @@ function AppointmentsViewer() {
     const [searchTerm, setSearchTerm] = useState('');
     const [data, setData] = useState<any>({ apps: [], lab: [], xr: [], us: [], vac: [], clinics: [], services: [] });
     const [loading, setLoading] = useState(true);
+    const { toast } = useToast();
     
     const [dateFilter, setDateFilter] = useState<'today' | 'tomorrow' | 'week' | 'month' | 'range'>('today');
     const [dateRange, setDateRange] = useState<DateRange | undefined>();
@@ -161,13 +162,24 @@ function AppointmentsViewer() {
     useEffect(() => { fetchData(); }, [fetchData]);
 
     const handlePatientDelete = async (id: string, type: string) => {
+        // Optimistic update: remove from local UI instantly
+        setData((prev: any) => {
+            const keyMap: any = { medical: 'apps', lab: 'lab', xr: 'xr', us: 'us', vac: 'vac' };
+            const k = keyMap[type];
+            return { ...prev, [k]: prev[k].filter((a: any) => a.id !== id) };
+        });
+
         let res;
         if (type === 'medical') res = await deleteAppointment(id);
-        if (type === 'lab') res = await deleteLabAppointment(id);
-        if (type === 'xr') res = await deleteXRayAppointment(id);
-        if (type === 'us') res = await deleteUltrasoundAppointment(id);
-        if (type === 'vac') res = await deleteVaccineAppointment(id);
-        if (res?.success) fetchData();
+        else if (type === 'lab') res = await deleteLabAppointment(id);
+        else if (type === 'xr') res = await deleteXRayAppointment(id);
+        else if (type === 'us') res = await deleteUltrasoundAppointment(id);
+        else if (type === 'vac') res = await deleteVaccineAppointment(id);
+        
+        if (!res?.success) {
+            toast({ title: 'Error al eliminar', variant: 'destructive' });
+            fetchData(); // Rollback on error
+        }
     };
 
     const handleManualDateChange = (dm: string, y: string) => {
@@ -217,7 +229,6 @@ function AppointmentsViewer() {
                 results = results.filter(a => a.clinicId && data.clinics.find((c: any) => c.id === a.clinicId)?.serviceTypeId === selectedServiceType);
             }
             if (selectedClinics.length > 0) {
-                // CORRECCIÓN: Filtramos por ID o por Nombre de consultorio para unificar con el módulo de reportes
                 results = results.filter(a => {
                     const matchById = a.clinicId && selectedClinics.includes(a.clinicId);
                     const clinicNames = selectedClinics.map(id => data.clinics.find((c:any) => c.id === id)?.name?.toUpperCase().trim()).filter(Boolean);
