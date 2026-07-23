@@ -144,7 +144,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const { toast } = useToast();
 
   const loadData = useCallback(async (manualSearch = false) => {
-    setIsDataLoading(manualSearch || activeTab === 'patients');
+    if (activeTab === 'patients') setIsDataLoading(true);
     if (activeTab === 'appointments') setIsAgendaLoading(true);
 
     try {

@@ -52,7 +52,8 @@ import type {
   SpecialActionDay,
   Medication,
   Supply,
-  PrescriptionItem
+  PrescriptionItem,
+  AppointmentStatus
 } from './definitions';
 import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
@@ -405,6 +406,17 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
     await batch.commit();
     const clinicDoc = await getDoc(doc(adminDb, 'clinics', appointment.clinicId));
     return serializeData({ success: true, data: { appointment: { ...appData, patient: normalized }, clinic: clinicDoc.data() } });
+}
+
+export async function updateAppointmentStatus(id: string, status: AppointmentStatus, type: string) {
+    const colName = type === 'medical' ? 'appointments' : 
+                   type === 'lab' ? 'labAppointments' :
+                   type === 'xray' ? 'xrayAppointments' :
+                   type === 'ultrasound' ? 'ultrasoundAppointments' :
+                   'vaccineAppointments';
+    
+    await updateDoc(doc(adminDb, colName, id), { status });
+    return { success: true };
 }
 
 export async function getLabAppointmentsData() {
