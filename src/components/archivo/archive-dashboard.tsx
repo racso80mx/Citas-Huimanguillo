@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -41,8 +40,6 @@ import {
   updatePatient, 
   getServiceTypes,
   getColonias,
-  getAnnouncements,
-  getModuleSettings,
   deleteAppointment
 } from '@/lib/actions';
 import type { Patient, Appointment, Clinic, ArchiveCounts, ServiceType, Colonia } from '@/lib/definitions';
@@ -85,8 +82,7 @@ import {
   parseISO, 
   isWithinInterval, 
   addDays,
-  format,
-  isValid
+  format
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { DateRange } from 'react-day-picker';
@@ -161,6 +157,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
           setAllAppointments(apps);
       }
 
+      // OPTIMIZACIÓN FIRESTORE: Solo buscar si hay acción manual del usuario o cambio de filtro de estatus
       const searchOptions: any = { 
           status: statusFilter === 'Total' ? undefined : statusFilter,
           limitNum: 100 
@@ -198,16 +195,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, [statusFilter, activeTab, loadData]);
 
-  // OPTIMIZACIÓN: Debounce en buscadores de Archivo
-  useEffect(() => {
-      const timer = setTimeout(() => {
-          if (searchName.trim().length > 2 || searchCurp.trim().length > 2 || searchExpediente.trim().length > 1) {
-              loadData(true);
-          }
-      }, 800);
-      return () => clearTimeout(timer);
-  }, [searchName, searchCurp, searchExpediente, loadData]);
-
+  // SMART MARK: Marcado local sin costo de lectura en Firebase
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = String(searchExpediente).trim();
@@ -421,11 +409,11 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
           <Card className="relative overflow-hidden shadow-md border-primary/10">
             <CardHeader className="pb-4 bg-muted/5">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">Nombre o Apellidos</Label><Input placeholder="FILTRAR POR NOMBRE..." value={searchName} onChange={e => setSearchName(e.target.value.toUpperCase())} className="h-11 border-primary/20" /></div>
-                    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">CURP</Label><Input placeholder="CURP (18 CARAC)..." value={searchCurp} onChange={e => setSearchCurp(e.target.value.toUpperCase())} className="h-11 border-primary/20" maxLength={18} /></div>
+                    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">Nombre o Apellidos</Label><Input placeholder="ESCRIBE NOMBRE Y PULSA FILTRAR..." value={searchName} onChange={e => setSearchName(e.target.value.toUpperCase())} className="h-11 border-primary/20" onKeyDown={e => e.key === 'Enter' && loadData(true)} /></div>
+                    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">CURP</Label><Input placeholder="ESCRIBE CURP Y PULSA FILTRAR..." value={searchCurp} onChange={e => setSearchCurp(e.target.value.toUpperCase())} className="h-11 border-primary/20" maxLength={18} onKeyDown={e => e.key === 'Enter' && loadData(true)} /></div>
                     <div className="space-y-1.5">
                         <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Expediente {statusFilter === PatientStatusEnum.Baja && "(Smart Mark)"}</Label>
-                        <Input placeholder={statusFilter === PatientStatusEnum.Baja ? "ESCRIBE EXP PARA MARCAR..." : "FILTRAR POR EXP..."} value={searchExpediente} onChange={e => setSearchExpediente(e.target.value)} className="h-11 border-primary/20" />
+                        <Input placeholder={statusFilter === PatientStatusEnum.Baja ? "ESCRIBE EXP PARA MARCAR..." : "ESCRIBE EXP Y PULSA FILTRAR..."} value={searchExpediente} onChange={e => setSearchExpediente(e.target.value)} className="h-11 border-primary/20" onKeyDown={e => e.key === 'Enter' && loadData(true)} />
                     </div>
                     <div className="flex gap-2 items-end">
                         <Button onClick={() => loadData(true)} className="h-11 flex-1 font-black bg-primary hover:bg-primary/90" disabled={isDataLoading}>{isDataLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />} FILTRAR</Button>
@@ -530,7 +518,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                             <Input placeholder="Buscar por Nombre, Folio o CURP..." className="pl-9 h-10 border-primary/20 bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                         </div>
                         <div className="flex gap-2">
-                             <Button variant="outline" size="icon" onClick={() => loadData(true)} className="h-10 w-10 bg-background"><RefreshCw className={cn("h-4 w-4", (isDataLoading || isAgendaLoading) && "animate-spin")} /></Button>
+                             <Button variant="outline" size="icon" onClick={() => loadData(true)} className="h-10 w-10 bg-background"><RefreshCw className={cn("h-4 w-4", (isAgendaLoading || isDataLoading) && "animate-spin")} /></Button>
                              <Button variant="outline" size="sm" onClick={() => generateArchiveListPDF(appointmentsToDisplay, 'Agenda de Citas', `Filtro: ${dateFilter}`)} className="font-bold h-10 px-4 text-red-700 border-red-200"><FileText className="mr-2 h-4 w-4" /> PDF</Button>
                         </div>
                     </div>

@@ -1,6 +1,5 @@
-
 'use client';
-import { useState, useCallback, useEffect, useTransition, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import React from 'react';
 import Image from 'next/image';
 import { logoBase64 } from '@/lib/logo-data';
@@ -63,7 +62,7 @@ export default function PageContent({
   const [isDoubleSlot, setIsDoubleSlot] = React.useState(false);
   const [selectedTime, setSelectedTime] = React.useState<string | undefined>();
   
-  // CACHE SYSTEM: Key is "clinicId-YYYY-MM"
+  // CACHE SYSTEM: Key is "clinicId-YYYY-MM" or "clinicId-initial"
   const [availabilityCache, setAvailabilityCache] = useState<Record<string, DailyAvailability[]>>({});
   const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
   
@@ -74,7 +73,6 @@ export default function PageContent({
   const [serviceTypes] = React.useState<ServiceType[]>(initialServiceTypes);
   
   const [currentMonth, setCurrentMonth] = React.useState(new Date());
-  const [isPending, startTransition] = React.useTransition();
   const { toast } = useToast();
 
   const generateDynamicTimeSlots = React.useCallback((startTimeStr: string, endTimeStr: string, duration: number): string[] => {
@@ -92,10 +90,7 @@ export default function PageContent({
     return slots;
   }, []);
 
-  const calculateForClinic = useCallback((clinic: Clinic, monthDate: Date, allAppointments: any[], holidaySet: Set<string>, freshSpecialActionDays: SpecialActionDay[]): DailyAvailability[] => {
-      const startDate = startOfMonth(monthDate);
-      const endDate = endOfMonth(monthDate);
-      
+  const calculateForClinic = useCallback((clinic: Clinic, startDate: Date, endDate: Date, allAppointments: any[], holidaySet: Set<string>, freshSpecialActionDays: SpecialActionDay[]): DailyAvailability[] => {
       const dayMap = new Map<string, any[]>();
       allAppointments.forEach(app => {
           const d = app.date.split('T')[0];
@@ -155,38 +150,67 @@ export default function PageContent({
       return availabilityResult;
   }, [generateDynamicTimeSlots, serviceTypes]);
 
-  const fetchAvailabilityByMonth = React.useCallback(async (targetClinicId: string, monthDate: Date) => {
-      const monthKey = `${targetClinicId}-${format(monthDate, 'yyyy-MM')}`;
-      if (availabilityCache[monthKey]) {
-          setAvailability(availabilityCache[monthKey]);
+  // CARGA INTELIGENTE: Fetch 45 días desde hoy inicialmente, luego por mes.
+  const fetchAvailabilityForRange = React.useCallback(async (targetClinicId: string, startDate: Date, endDate: Date, cacheKey: string) => {
+      if (availabilityCache[cacheKey]) {
+          setAvailability(prev => {
+              const newAvail = [...prev];
+              availabilityCache[cacheKey].forEach(item => {
+                  if (!newAvail.some(n => n.date === item.date)) newAvail.push(item);
+              });
+              return newAvail;
+          });
           return;
       }
 
       setIsLoadingAvailability(true);
-      
-      const startDate = startOfMonth(monthDate).toISOString();
-      const endDate = endOfMonth(monthDate).toISOString();
-
-      const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
-        getAppointments({ startDate, endDate }), getHolidays(), getSpecialActionDays()
-      ]);
-      
-      const holidaySet = new Set(freshHolidays.map(h => h.date));
-      const targetClinic = clinics.find(c => c.id === targetClinicId);
-      
-      if (targetClinic) {
-          const targetAvail = calculateForClinic(targetClinic, monthDate, allAppointments, holidaySet, freshSpecialActionDays);
-          setAvailability(targetAvail);
-          setAvailabilityCache(prev => ({ ...prev, [monthKey]: targetAvail }));
+      try {
+          const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
+            getAppointments({ startDate: startDate.toISOString(), endDate: endDate.toISOString() }), 
+            getHolidays(), 
+            getSpecialActionDays()
+          ]);
+          
+          const holidaySet = new Set(freshHolidays.map(h => h.date));
+          const targetClinic = clinics.find(c => c.id === targetClinicId);
+          
+          if (targetClinic) {
+              const targetAvail = calculateForClinic(targetClinic, startDate, endDate, allAppointments, holidaySet, freshSpecialActionDays);
+              setAvailability(prev => {
+                  const combined = [...prev];
+                  targetAvail.forEach(item => {
+                      const idx = combined.findIndex(c => c.date === item.date);
+                      if (idx >= 0) combined[idx] = item;
+                      else combined.push(item);
+                  });
+                  return combined;
+              });
+              setAvailabilityCache(prev => ({ ...prev, [cacheKey]: targetAvail }));
+          }
+      } finally {
+          setIsLoadingAvailability(false); 
       }
-      setIsLoadingAvailability(false); 
   }, [clinics, calculateForClinic, availabilityCache]);
 
+  // Selección inicial o cambio de clínica: Cargar próximos 45 días para cubrir Grid + Calendario
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
-        fetchAvailabilityByMonth(selectedClinicId, currentMonth);
+        const today = startOfToday();
+        const end = addDays(today, 45);
+        fetchAvailabilityForRange(selectedClinicId, today, end, `${selectedClinicId}-initial`);
     }
-  }, [isAuthenticated, selectedClinicId, currentMonth, fetchAvailabilityByMonth]);
+  }, [isAuthenticated, selectedClinicId, fetchAvailabilityForRange]);
+
+  // Cambio de mes en calendario: Cargar mes específico
+  const handleMonthChange = (monthDate: Date) => {
+    setCurrentMonth(monthDate);
+    if (selectedClinicId) {
+        const start = startOfMonth(monthDate);
+        const end = endOfMonth(monthDate);
+        const cacheKey = `${selectedClinicId}-${format(monthDate, 'yyyy-MM')}`;
+        fetchAvailabilityForRange(selectedClinicId, start, end, cacheKey);
+    }
+  };
 
   const handleDateSelect = (date: Date | undefined) => {
     if (date && date < startOfToday()) {
@@ -202,7 +226,6 @@ export default function PageContent({
     setSelectedDate(undefined);
     setSelectedColoniaId(undefined);
     setSelectedTime(undefined);
-    // Availability will fetch automatically due to useEffect
   };
 
   const handleColoniaSelect = (coloniaId: string) => {
@@ -213,8 +236,11 @@ export default function PageContent({
   const handleManualRefresh = () => {
       if (selectedClinicId) {
           setAvailabilityCache({});
-          fetchAvailabilityByMonth(selectedClinicId, currentMonth);
-          toast({ title: 'Agenda Sincronizada', description: 'Se han actualizado los horarios disponibles.' });
+          setAvailability([]);
+          const today = startOfToday();
+          const end = addDays(today, 45);
+          fetchAvailabilityForRange(selectedClinicId, today, end, `${selectedClinicId}-initial`);
+          toast({ title: 'Agenda Sincronizada' });
       }
   };
 
@@ -409,7 +435,7 @@ export default function PageContent({
                                                 selectedDate={selectedDate} 
                                                 onDateSelect={handleDateSelect} 
                                                 availability={availability} 
-                                                onMonthChange={setCurrentMonth} 
+                                                onMonthChange={handleMonthChange} 
                                                 isLoading={isLoadingAvailability} 
                                             />
                                         </PopoverContent>
@@ -439,7 +465,7 @@ export default function PageContent({
                                       </div>
                                   </div>
                                   <Separator className="opacity-50" />
-                                  {selectedColoniaId && (
+                                  {(selectedColoniaId || selectedClinic?.serviceTypeId.toUpperCase().includes('ESPECIALIZADA')) && (
                                       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
                                           <h3 className="text-lg font-black uppercase text-primary tracking-widest flex items-center gap-2"><Clock className="h-5 w-5" /> 5. Elige tu Horario</h3>
                                           {selectedClinic?.bookingMode === BookingMode.Time ? (
@@ -450,7 +476,7 @@ export default function PageContent({
                                           ) : (
                                               <div className="max-w-md mx-auto"><Select onValueChange={setSelectedTime} value={selectedTime}><SelectTrigger className="h-14 text-lg font-black border-primary/30 rounded-2xl"><SelectValue placeholder="Selecciona una ficha disponible..." /></SelectTrigger><SelectContent>{availableTokens.map(token => <SelectItem key={token} value={token} className="font-bold">{token}</SelectItem>)}</SelectContent></Select></div>
                                           )}
-                                          {selectedTime && (<div className="pt-10 animate-in fade-in zoom-in-95 duration-500 border-t border-dashed mt-10"><div className="bg-primary/5 p-8 rounded-[2rem] border border-primary/10"><div className="flex items-center gap-3 mb-8"><div className="bg-primary text-white h-8 w-8 rounded-full flex items-center justify-center font-black">6</div><h3 className="text-xl font-black uppercase text-primary tracking-widest">Confirma tus Datos</h3></div><BookingForm selectedDate={selectedDate} selectedClinic={selectedClinic} selectedColoniaName={selectedColonia?.name} selectedTime={selectedTime} patientType={patientType} isDoubleSlot={isDoubleSlot} onBookingSuccess={() => { setAvailabilityCache({}); fetchAvailabilityByMonth(selectedClinicId!, currentMonth); }} announcements={announcements} requireColonia={true} /></div></div>)}
+                                          {selectedTime && (<div className="pt-10 animate-in fade-in zoom-in-95 duration-500 border-t border-dashed mt-10"><div className="bg-primary/5 p-8 rounded-[2rem] border border-primary/10"><div className="flex items-center gap-3 mb-8"><div className="bg-primary text-white h-8 w-8 rounded-full flex items-center justify-center font-black">6</div><h3 className="text-xl font-black uppercase text-primary tracking-widest">Confirma tus Datos</h3></div><BookingForm selectedDate={selectedDate} selectedClinic={selectedClinic} selectedColoniaName={selectedColonia?.name} selectedTime={selectedTime} patientType={patientType} isDoubleSlot={isDoubleSlot} onBookingSuccess={() => { setAvailabilityCache({}); setAvailability([]); handleClinicSelect(selectedClinicId!); }} announcements={announcements} requireColonia={true} /></div></div>)}
                                       </div>
                                   )}
                               </CardContent>
@@ -463,4 +489,3 @@ export default function PageContent({
     </div>
   );
 }
-
