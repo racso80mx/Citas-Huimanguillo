@@ -149,11 +149,11 @@ export async function updateAppointmentStatus(id: string, status: string, type: 
     revalidatePath('/', 'layout');
     return res;
 }
-export async function deleteAppointment(id: string) { await data.deleteAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
-export async function deleteLabAppointment(id: string) { await data.deleteLabAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
-export async function deleteXRayAppointment(id: string) { await data.deleteXRayAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
-export async function deleteUltrasoundAppointment(id: string) { await deleteUltrasoundAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
-export async function deleteVaccineAppointment(id: string) { await deleteVaccineAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
+export async function deleteAppointment(id: string) { return data.deleteAppointment(id); }
+export async function deleteLabAppointment(id: string) { return data.deleteLabAppointment(id); }
+export async function deleteXRayAppointment(id: string) { return data.deleteXRayAppointment(id); }
+export async function deleteUltrasoundAppointment(id: string) { return data.deleteUltrasoundAppointment(id); }
+export async function deleteVaccineAppointment(id: string) { return data.deleteVaccineAppointment(id); }
 
 export async function rescheduleAppointment(id: string, date: string, type: string, time: string) {
     const res = await data.rescheduleAppointment(id, date, type, time);

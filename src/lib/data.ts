@@ -358,6 +358,76 @@ export async function deleteXRayAppointment(id: string) { await deleteDoc(doc(ad
 export async function deleteUltrasoundAppointment(id: string) { await deleteDoc(doc(adminDb, 'ultrasoundAppointments', id)); return { success: true }; }
 export async function deleteVaccineAppointment(id: string) { await deleteDoc(doc(adminDb, 'vaccineAppointments', id)); return { success: true }; }
 
+export async function saveNewAppointment(appointment: any, patient: any, isDoubleSlot: boolean, coloniaName?: string) {
+    const patientRef = doc(adminDb, 'patients', patient.curp);
+    const appointmentId = uuidv4();
+    const appointmentNumber = `FOL-${uuidv4().split('-')[0].toUpperCase()}`;
+    
+    const batch = writeBatch(adminDb);
+    batch.set(patientRef, { ...patient, id: patient.curp, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
+    
+    const appData = {
+        ...appointment,
+        id: appointmentId,
+        patientId: patient.curp,
+        appointmentNumber,
+        coloniaName,
+        createdAt: new Date().toISOString()
+    };
+    
+    batch.set(doc(adminDb, 'appointments', appointmentId), appData);
+    await batch.commit();
+    
+    const clinicData = (await getDoc(doc(adminDb, 'clinics', appointment.clinicId))).data();
+    return { success: true, data: { appointment: appData, clinic: clinicData } };
+}
+
+export async function saveNewLabAppointment(appointment: any, patient: any) {
+    const patientRef = doc(adminDb, 'patients', patient.curp);
+    const appointmentId = uuidv4();
+    const batch = writeBatch(adminDb);
+    batch.set(patientRef, { ...patient, id: patient.curp, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
+    const appData = { ...appointment, id: appointmentId, patientId: patient.curp, createdAt: new Date().toISOString() };
+    batch.set(doc(adminDb, 'labAppointments', appointmentId), appData);
+    await batch.commit();
+    return { success: true, data: appData };
+}
+
+export async function saveNewXRayAppointment(appointment: any, patient: any) {
+    const patientRef = doc(adminDb, 'patients', patient.curp);
+    const appointmentId = uuidv4();
+    const batch = writeBatch(adminDb);
+    batch.set(patientRef, { ...patient, id: patient.curp, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
+    const appData = { ...appointment, id: appointmentId, patientId: patient.curp, createdAt: new Date().toISOString() };
+    batch.set(doc(adminDb, 'xrayAppointments', appointmentId), appData);
+    await batch.commit();
+    const studyData = (await getDoc(doc(adminDb, 'xRayStudies', appointment.studyId))).data();
+    return { success: true, data: { appointment: appData, study: studyData } };
+}
+
+export async function saveNewUltrasoundAppointment(appointment: any, patient: any) {
+    const patientRef = doc(adminDb, 'patients', patient.curp);
+    const appointmentId = uuidv4();
+    const batch = writeBatch(adminDb);
+    batch.set(patientRef, { ...patient, id: patient.curp, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
+    const appData = { ...appointment, id: appointmentId, patientId: patient.curp, createdAt: new Date().toISOString() };
+    batch.set(doc(adminDb, 'ultrasoundAppointments', appointmentId), appData);
+    await batch.commit();
+    const studyData = (await getDoc(doc(adminDb, 'ultrasoundStudies', appointment.studyId))).data();
+    return { success: true, data: { appointment: appData, study: studyData } };
+}
+
+export async function saveNewVaccineAppointment(appointment: any, patient: any) {
+    const patientRef = doc(adminDb, 'patients', patient.curp);
+    const appointmentId = uuidv4();
+    const batch = writeBatch(adminDb);
+    batch.set(patientRef, { ...patient, id: patient.curp, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
+    const appData = { ...appointment, id: appointmentId, patientId: patient.curp, createdAt: new Date().toISOString() };
+    batch.set(doc(adminDb, 'vaccineAppointments', appointmentId), appData);
+    await batch.commit();
+    return { success: true, data: appData };
+}
+
 export async function updateAppointmentStatus(id: string, status: string, type: string) {
     const colMap: Record<string, string> = {
         'medical': 'appointments', 'lab': 'labAppointments', 'xray': 'xrayAppointments',

@@ -165,9 +165,11 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
       };
       const patientsData = await getPatients(searchOptions);
       setPatients(patientsData);
-      setCurrentPage(1);
       
-      // PERSISTENCIA: No borramos selectedPatientIds al recargar para permitir marcados sucesivos (Senior Requirement)
+      // PERSISTENCIA: No borramos selectedPatientIds al recargar (Requerimiento Senior)
+      if (!manualSearch) {
+          setCurrentPage(1);
+      }
     } catch (e) {
       toast({ title: 'Error de Red', variant: 'destructive' });
     } finally {
@@ -179,7 +181,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, [statusFilter, activeTab, loadData]);
 
-  // AUTO-MARK LOGIC: En "Baja Temporal", buscar un expediente lo selecciona automáticamente sin filtrar la lista.
+  // MARCADO AUTOMÁTICO EN BAJA TEMPORAL: Al buscar un expediente se selecciona sin ocultar otros (Requerimiento Senior)
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = searchExpediente.trim();
@@ -187,7 +189,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         if (exactMatch && !selectedPatientIds.includes(exactMatch.id)) {
             setSelectedPatientIds(prev => [...prev, exactMatch.id]);
             toast({ title: "Marcado automático", description: `${exactMatch.name} seleccionado.` });
-            setSearchExpediente(''); // Limpiar para el siguiente escaneo
+            setSearchExpediente(''); 
         }
     }
   }, [searchExpediente, patients, statusFilter, selectedPatientIds, toast]);
@@ -198,15 +200,14 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     const sExp = searchExpediente.trim();
 
     return patients.filter(p => {
-        // PERMANENCIA: Si el paciente ya está seleccionado, lo mantenemos siempre visible (Senior Requirement)
+        // PERSISTENCIA: Pacientes seleccionados permanecen visibles SIEMPRE
         if (selectedPatientIds.includes(p.id)) return true;
 
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
         
-        // SENIOR REQ: En Baja Temporal, el buscador de expediente NO filtra (para no borrar lo ya seleccionado),
-        // solo marca automáticamente mediante el useEffect superior.
+        // En Baja Temporal, expediente NO filtra (para no borrar lo ya marcado)
         if (statusFilter === PatientStatusEnum.Baja) {
             return nameMatch && curpMatch;
         }
@@ -222,7 +223,6 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
   const handleStatusCardClick = (status: 'Total' | PatientStatusEnum) => {
       if (status !== statusFilter) {
-          // No borramos la seleccion al cambiar de pestaña de estatus para permitir depuracion cruzada si se requiere
           setStatusFilter(status);
           setCurrentPage(1);
       }
