@@ -1,5 +1,6 @@
+
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useTransition, useCallback, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { logoBase64 } from '@/lib/logo-data';
 import { LabBookingForm } from '@/components/laboratorio/lab-booking-form';
@@ -59,6 +60,7 @@ export default function LabPageContent({
   const [selectedTime, setSelectedTime] = React.useState<string | undefined>();
   const [patientType, setPatientType] = React.useState<PatientType>(PatientType.General);
 
+  const [availabilityCache, setAvailabilityCache] = useState<Record<string, DailyAvailability[]>>({});
   const [availability, setAvailability] = React.useState<DailyAvailability[]>([]);
   const [settings] = React.useState<LabSettings>(initialSettings);
   const [announcements] = React.useState<string[]>(initialAnnouncements);
@@ -67,13 +69,19 @@ export default function LabPageContent({
   const [isPending, startTransition] = React.useTransition();
   const { toast } = useToast();
 
-  const fetchAvailability = React.useCallback(
-    async (year: number, month: number) => {
-      const startDate = startOfMonth(new Date(year, month));
-      const endDate = endOfMonth(new Date(year, month));
+  const fetchAvailability = useCallback(
+    async (monthDate: Date) => {
+      const monthKey = format(monthDate, 'yyyy-MM');
+      if (availabilityCache[monthKey]) {
+          setAvailability(availabilityCache[monthKey]);
+          return;
+      }
+
+      const startDate = startOfMonth(monthDate);
+      const endDate = endOfMonth(monthDate);
 
       const [allAppointments, freshHolidays] = await Promise.all([
-        getLabAppointments(),
+        getLabAppointments({ startDate: startDate.toISOString(), endDate: endDate.toISOString() }),
         getHolidays()
       ]);
 
@@ -81,7 +89,7 @@ export default function LabPageContent({
       const daysInMonth = eachDayOfInterval({ start: startDate, end: endDate });
 
       for (const day of daysInMonth) {
-        const dateString = day.toISOString().split('T')[0];
+        const dateString = format(day, 'yyyy-MM-dd');
         const appointmentsOnDate = allAppointments.filter(
           (app) => app.date.split('T')[0] === dateString
         );
@@ -107,31 +115,18 @@ export default function LabPageContent({
         });
       }
       setAvailability(availabilityResult);
+      setAvailabilityCache(prev => ({ ...prev, [monthKey]: availabilityResult }));
     },
-    [settings]
+    [settings, availabilityCache]
   );
 
   React.useEffect(() => {
     if (isAuthenticated) {
-        async function fetchInitialData() {
-            startTransition(async () => {
-                const today = new Date();
-                try {
-                await fetchAvailability(today.getFullYear(), today.getMonth());
-                } catch (error) {
-                console.error('Failed to fetch initial lab data:', error);
-                toast({
-                    title: 'Error de Carga',
-                    description:
-                    'No se pudieron cargar los datos de disponibilidad. Por favor, recarga la página.',
-                    variant: 'destructive',
-                });
-                }
-            });
-        }
-        fetchInitialData();
+        startTransition(() => {
+            fetchAvailability(currentMonth);
+        });
     }
-  }, [fetchAvailability, toast, isAuthenticated]);
+  }, [currentMonth, isAuthenticated, fetchAvailability]);
 
   const selectedDayAvailability = React.useMemo(() => {
     if (!selectedDate) return null;
@@ -161,48 +156,25 @@ export default function LabPageContent({
 
   const handleMonthChange = (month: Date) => {
     setCurrentMonth(month);
-    startTransition(async () => {
-      await fetchAvailability(month.getFullYear(), month.getMonth());
-    });
   };
 
   const refreshData = (reset = true) => {
-    startTransition(async () => {
-      try {
-        await fetchAvailability(
-          currentMonth.getFullYear(),
-          currentMonth.getMonth()
-        );
+    setAvailabilityCache({});
+    startTransition(() => {
+        fetchAvailability(currentMonth);
         if (reset) {
             setSelectedDate(undefined);
             setSelectedStudies([]);
             setSelectedTime(undefined);
             setPatientType(PatientType.General);
-        } else {
-            setSelectedTime(undefined);
         }
-        toast({ title: 'Agenda Sincronizada', description: 'Se han actualizado los horarios disponibles.' });
-      } catch (error) {
-        console.error('Failed to refresh data:', error);
-        toast({
-          title: 'Error al Refrescar',
-          description: 'No se pudieron actualizar los datos.',
-          variant: 'destructive',
-        });
-      }
     });
   };
 
   const handleDateSelect = (date: Date | undefined) => {
-    if (date) {
-      if (date < startOfToday()) {
-        toast({
-          title: 'Fecha no válida',
-          description: 'No puedes seleccionar una fecha en el pasado.',
-          variant: 'destructive',
-        });
+    if (date && date < startOfToday()) {
+        toast({ title: 'Fecha no válida', description: 'No puedes agendar en el pasado.', variant: 'destructive' });
         return;
-      }
     }
     setSelectedDate(date);
     setPatientType(PatientType.General);
@@ -410,3 +382,4 @@ export default function LabPageContent({
     </div>
   );
 }
+

@@ -429,9 +429,11 @@ export async function updateAppointmentStatus(id: string, status: AppointmentSta
     return { success: true };
 }
 
-export async function getLabAppointmentsData() {
-    const start = Timestamp.fromDate(subMonths(new Date(), 3));
-    const q = query(collection(adminDb, 'labAppointments'), where('date', '>=', start), limit(1000));
+export async function getLabAppointmentsData(options?: { startDate?: string, endDate?: string }) {
+    const start = options?.startDate ? Timestamp.fromDate(parseISO(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 3));
+    const end = options?.endDate ? Timestamp.fromDate(parseISO(options.endDate)) : Timestamp.fromDate(addDays(new Date(), 30));
+    
+    const q = query(collection(adminDb, 'labAppointments'), where('date', '>=', start), where('date', '<=', end), limit(1000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
@@ -451,9 +453,11 @@ export async function saveNewLabAppointment(appointment: any, patient: any) {
     return serializeData({ success: true, data: { ...appData, patient: normalized } });
 }
 
-export async function getXRayAppointmentsData() {
-    const start = Timestamp.fromDate(subMonths(new Date(), 3));
-    const q = query(collection(adminDb, 'xrayAppointments'), where('date', '>=', start), limit(1000));
+export async function getXRayAppointmentsData(options?: { startDate?: string, endDate?: string }) {
+    const start = options?.startDate ? Timestamp.fromDate(parseISO(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 3));
+    const end = options?.endDate ? Timestamp.fromDate(parseISO(options.endDate)) : Timestamp.fromDate(addDays(new Date(), 30));
+    
+    const q = query(collection(adminDb, 'xrayAppointments'), where('date', '>=', start), where('date', '<=', end), limit(1000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
@@ -473,9 +477,11 @@ export async function saveNewXRayAppointment(appointment: any, patient: any) {
     return serializeData({ success: true, data: { appointment: { ...appData, patient: normalized }, study: { name: appointment.studyName, indications: '' } } });
 }
 
-export async function getUltrasoundAppointmentsData() {
-    const start = Timestamp.fromDate(subMonths(new Date(), 3));
-    const q = query(collection(adminDb, 'ultrasoundAppointments'), where('date', '>=', start), limit(1000));
+export async function getUltrasoundAppointmentsData(options?: { startDate?: string, endDate?: string }) {
+    const start = options?.startDate ? Timestamp.fromDate(parseISO(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 3));
+    const end = options?.endDate ? Timestamp.fromDate(parseISO(options.endDate)) : Timestamp.fromDate(addDays(new Date(), 30));
+    
+    const q = query(collection(adminDb, 'ultrasoundAppointments'), where('date', '>=', start), where('date', '<=', end), limit(1000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
@@ -495,9 +501,11 @@ export async function saveNewUltrasoundAppointment(appointment: any, patient: an
     return serializeData({ success: true, data: { appointment: { ...appData, patient: normalized }, study: { name: appointment.studyName, indications: '' } } });
 }
 
-export async function getVaccineAppointmentsData() {
-    const start = Timestamp.fromDate(subMonths(new Date(), 3));
-    const q = query(collection(adminDb, 'vaccineAppointments'), where('date', '>=', start), limit(1000));
+export async function getVaccineAppointmentsData(options?: { startDate?: string, endDate?: string }) {
+    const start = options?.startDate ? Timestamp.fromDate(parseISO(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 3));
+    const end = options?.endDate ? Timestamp.fromDate(parseISO(options.endDate)) : Timestamp.fromDate(addDays(new Date(), 30));
+    
+    const q = query(collection(adminDb, 'vaccineAppointments'), where('date', '>=', start), where('date', '<=', end), limit(1000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
@@ -1086,3 +1094,4 @@ export async function updateVaccines(items: Vaccine[]) {
     await b.commit();
     return { success: true };
 }
+

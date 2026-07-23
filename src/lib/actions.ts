@@ -1,7 +1,7 @@
 
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath } from 'revalidate-path';
 import * as data from './data';
 import type { 
     Patient, 
@@ -129,11 +129,11 @@ export async function applyStatusUpdateChunk(e: string[], s: any) { return data.
 export async function scanDuplicates(criteria: 'expediente' | 'curp' | 'name') { return data.scanDuplicates(criteria); }
 
 // --- CITAS ---
-export async function getAppointments() { return data.getAppointmentsData(); }
-export async function getLabAppointments() { return data.getLabAppointmentsData(); }
-export async function getXRayAppointments() { return data.getXRayAppointmentsData(); }
-export async function getUltrasoundAppointments() { return data.getUltrasoundAppointmentsData(); }
-export async function getVaccineAppointments() { return data.getVaccineAppointmentsData(); }
+export async function getAppointments(options?: { startDate?: string, endDate?: string }) { return data.getAppointmentsData(options); }
+export async function getLabAppointments(options?: { startDate?: string, endDate?: string }) { return data.getLabAppointmentsData(options); }
+export async function getXRayAppointments(options?: { startDate?: string, endDate?: string }) { return data.getXRayAppointmentsData(options); }
+export async function getUltrasoundAppointments(options?: { startDate?: string, endDate?: string }) { return data.getUltrasoundAppointmentsData(options); }
+export async function getVaccineAppointments(options?: { startDate?: string, endDate?: string }) { return data.getVaccineAppointmentsData(options); }
 export async function getAppointmentsForClinic(id: string) { return data.getAppointmentsForClinic(id); }
 
 export async function deleteAppointment(id: string) { return data.deleteAppointment(id); }

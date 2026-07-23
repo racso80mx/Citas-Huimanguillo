@@ -1,5 +1,6 @@
+
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect, useTransition, useMemo } from 'react';
 import Image from 'next/image';
 import { logoBase64 } from '@/lib/logo-data';
 import { XRayBookingForm } from '@/components/rayos-x/x-ray-booking-form';
@@ -15,7 +16,7 @@ import type { DailyAvailability, XRayStudy, XRaySettings, Holiday } from '@/lib/
 import { PatientType } from '@/lib/definitions';
 import { getXRayAppointments, getHolidays, verifyXRayPassword } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
-import { Clock, CalendarDays, Stethoscope, UserCheck, Bell, Info, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Clock, CalendarDays, Stethoscope, UserCheck, Bell, Info, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import {
   format,
   startOfMonth,
@@ -37,6 +38,7 @@ import { timeSlots30Min } from '@/lib/time-slots';
 import { ModuleLoginForm } from '@/components/shared/module-login-form';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 type XRayPageContentProps = {
   initialStudies: XRayStudy[];
@@ -56,6 +58,7 @@ export default function XRayPageContent({
   const [selectedStudy, setSelectedStudy] = React.useState<XRayStudy | undefined>();
   const [patientType, setPatientType] = React.useState<PatientType>(PatientType.General);
 
+  const [availabilityCache, setAvailabilityCache] = useState<Record<string, DailyAvailability[]>>({});
   const [availability, setAvailability] = React.useState<DailyAvailability[]>([]);
   const [settings] = React.useState<XRaySettings>(initialSettings);
   const [announcements] = React.useState<string[]>(initialAnnouncements);
@@ -64,7 +67,7 @@ export default function XRayPageContent({
   const [isPending, startTransition] = React.useTransition();
   const { toast } = useToast();
 
-  const generateTimeSlots = React.useCallback((): string[] => {
+  const generateTimeSlots = useCallback((): string[] => {
     if (!settings || !settings.startTime || !settings.endTime) return [];
     
     const startIndex = timeSlots30Min.findIndex(slot => slot.value === settings.startTime);
@@ -73,8 +76,6 @@ export default function XRayPageContent({
     if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) return [];
 
     const slotsInRange = timeSlots30Min.slice(startIndex, endIndex).map(slot => slot.value);
-    
-    // Filter out break time
     const filteredSlots = slotsInRange.filter(slot => slot !== settings.breakTime);
     
     const regularSlots = filteredSlots.slice(0, settings.dailySlots);
@@ -83,15 +84,21 @@ export default function XRayPageContent({
     return [...regularSlots, ...waitlistSlots];
   }, [settings]);
   
-  const allTimeSlots = React.useMemo(generateTimeSlots, [generateTimeSlots]);
+  const allTimeSlots = useMemo(generateTimeSlots, [generateTimeSlots]);
 
-  const fetchAvailability = React.useCallback(
-    async (year: number, month: number) => {
-      const startDate = startOfMonth(new Date(year, month));
-      const endDate = endOfMonth(new Date(year, month));
+  const fetchAvailability = useCallback(
+    async (monthDate: Date) => {
+      const monthKey = format(monthDate, 'yyyy-MM');
+      if (availabilityCache[monthKey]) {
+          setAvailability(availabilityCache[monthKey]);
+          return;
+      }
+
+      const startDate = startOfMonth(monthDate);
+      const endDate = endOfMonth(monthDate);
 
       const [allAppointments, freshHolidays] = await Promise.all([
-        getXRayAppointments(),
+        getXRayAppointments({ startDate: startDate.toISOString(), endDate: endDate.toISOString() }),
         getHolidays()
       ]);
 
@@ -99,7 +106,7 @@ export default function XRayPageContent({
       const daysInMonth = eachDayOfInterval({ start: startDate, end: endDate });
 
       for (const day of daysInMonth) {
-        const dateString = day.toISOString().split('T')[0];
+        const dateString = format(day, 'yyyy-MM-dd');
         const appointmentsOnDate = allAppointments.filter(
           (app) => app.date.split('T')[0] === dateString
         );
@@ -123,41 +130,28 @@ export default function XRayPageContent({
         });
       }
       setAvailability(availabilityResult);
+      setAvailabilityCache(prev => ({ ...prev, [monthKey]: availabilityResult }));
     },
-    [settings, allTimeSlots]
+    [settings, allTimeSlots, availabilityCache]
   );
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (isAuthenticated) {
-        async function fetchInitialData() {
-            startTransition(async () => {
-                const today = new Date();
-                try {
-                await fetchAvailability(today.getFullYear(), today.getMonth());
-                } catch (error) {
-                console.error('Failed to fetch X-Ray data:', error);
-                toast({
-                    title: 'Error de Carga',
-                    description:
-                    'No se pudieron cargar los datos de disponibilidad. Por favor, recarga la página.',
-                    variant: 'destructive',
-                });
-                }
-            });
-        }
-        fetchInitialData();
+        startTransition(() => {
+            fetchAvailability(currentMonth);
+        });
     }
-  }, [fetchAvailability, toast, isAuthenticated]);
+  }, [currentMonth, isAuthenticated, fetchAvailability]);
 
-  const selectedDayAvailability = React.useMemo(() => {
+  const selectedDayAvailability = useMemo(() => {
     if (!selectedDate) return null;
     const dateString = format(selectedDate, 'yyyy-MM-dd');
     return availability.find((d) => d.date === dateString) || null;
   }, [selectedDate, availability]);
 
-  const availableTimeSlots = React.useMemo(() => {
+  const availableTimeSlots = useMemo(() => {
     if (!selectedDayAvailability || selectedDayAvailability.availableSlots <= 0) return [];
     const takenTimes = selectedDayAvailability.takenTimesByClinic['x-ray'] || [];
     
@@ -167,7 +161,6 @@ export default function XRayPageContent({
 
     return allTimeSlots.filter(slot => {
         if (takenTimes.includes(slot)) return false;
-        // Filter out past time slots for today
         if (isToday && !slot.includes('Espera') && slot < currentTimeStr) return false;
         return true;
     });
@@ -179,43 +172,23 @@ export default function XRayPageContent({
 
   const handleMonthChange = (month: Date) => {
     setCurrentMonth(month);
-    startTransition(async () => {
-      await fetchAvailability(month.getFullYear(), month.getMonth());
-    });
   };
 
   const refreshData = () => {
-    startTransition(async () => {
-      try {
-        await fetchAvailability(
-          currentMonth.getFullYear(),
-          currentMonth.getMonth()
-        );
+    setAvailabilityCache({});
+    startTransition(() => {
+        fetchAvailability(currentMonth);
         setSelectedDate(undefined);
         setSelectedTime(undefined);
         setSelectedStudy(undefined);
         setPatientType(PatientType.General);
-      } catch (error) {
-        console.error('Failed to refresh data:', error);
-        toast({
-          title: 'Error al Refrescar',
-          description: 'No se pudieron actualizar los datos.',
-          variant: 'destructive',
-        });
-      }
     });
   };
 
   const handleDateSelect = (date: Date | undefined) => {
-    if (date) {
-      if (date < startOfToday()) {
-        toast({
-          title: 'Fecha no válida',
-          description: 'No puedes seleccionar una fecha en el pasado.',
-          variant: 'destructive',
-        });
+    if (date && date < startOfToday()) {
+        toast({ title: 'Fecha no válida', description: 'No puedes agendar en el pasado.', variant: 'destructive' });
         return;
-      }
     }
     setSelectedDate(date);
     setSelectedTime(undefined);
@@ -261,9 +234,11 @@ export default function XRayPageContent({
           <div className="grid md:grid-cols-2 gap-8 items-start">
             <div className="flex flex-col gap-8">
               <div>
-                <h3 className="text-2xl font-semibold font-headline text-foreground mb-4 flex items-center gap-2">
-                  <CalendarDays className="h-6 w-6" />
-                  1. Selecciona un día
+                <h3 className="text-2xl font-semibold font-headline text-foreground mb-4 flex items-center justify-between">
+                  <span className="flex items-center gap-2"><CalendarDays className="h-6 w-6" /> 1. Selecciona un día</span>
+                   <Button variant="ghost" size="icon" onClick={refreshData} disabled={isPending}>
+                      <RefreshCw className={cn("h-5 w-5 text-primary", isPending && "animate-spin")} />
+                  </Button>
                 </h3>
                 <AvailabilityCalendar
                   selectedDate={selectedDate}
@@ -447,3 +422,4 @@ export default function XRayPageContent({
     </div>
   );
 }
+
