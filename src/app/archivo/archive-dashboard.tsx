@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -124,7 +125,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const [schedulingPatient, setSchedulingPatient] = useState<Patient | null>(null);
   
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(50);
+  const [rowsPerPage, setRowsPerPage] = useState(50); // Paginación cliente razonable
   
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
   const [clinics, setClinics] = useState<Clinic[]>([]);
@@ -157,15 +158,16 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
           setAllAppointments(apps);
       }
 
+      // OPTIMIZACIÓN: Solo pedir los registros necesarios para la vista actual
       const searchOptions: any = { 
           status: statusFilter === 'Total' ? undefined : statusFilter,
-          limitNum: 10000 
+          limitNum: 100 // Límite de seguridad para evitar cobros excesivos
       };
       
       if (manualSearch) {
           if (searchName) searchOptions.searchName = searchName;
           if (searchCurp) searchOptions.searchCurp = searchCurp;
-          if (searchExpediente && statusFilter !== PatientStatusEnum.Baja) searchOptions.searchExpediente = searchExpediente;
+          if (searchExpediente) searchOptions.searchExpediente = searchExpediente;
       }
 
       const patientsData = await getPatients(searchOptions);
@@ -215,11 +217,10 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
-        if (statusFilter === PatientStatusEnum.Baja) return nameMatch && curpMatch;
         const expMatch = !sExp || String(p.expediente || '').includes(sExp);
         return nameMatch && curpMatch && expMatch;
     });
-  }, [patients, statusFilter, searchName, searchCurp, searchExpediente, selectedPatientIds]);
+  }, [patients, searchName, searchCurp, searchExpediente, selectedPatientIds]);
 
   const handleClearSearch = () => {
       setSearchName(''); setSearchCurp(''); setSearchExpediente('');
@@ -259,18 +260,15 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
   const handleDeleteAppointment = (appId: string) => {
     if (isReadOnly) return;
-    
-    // OPTIMISTIC UI: Eliminar de la vista inmediatamente
     setAllAppointments(prev => prev.filter(a => a.id !== appId));
-    
     startSubmitTransition(async () => {
       const res = await deleteAppointment(appId);
       if (res.success) {
           toast({ title: "Cita Eliminada" });
-          loadData(true); // Refrescar para asegurar sincronía con DB
+          loadData(true);
       } else {
           toast({ title: "Error al eliminar", description: res.message, variant: "destructive" });
-          loadData(true); // Rollback en caso de error real
+          loadData(true);
       }
     });
   };
@@ -316,7 +314,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   
   const handleSavePatient = (patientData: Omit<Patient, 'id'>, id?: string) => {
     if (isReadOnly) return;
-    startTransition(async () => {
+    startSubmitTransition(async () => {
       const result = id ? await updatePatient(id, patientData) : await savePatient(patientData);
        if(result.success) {
         toast({ title: "Información Guardada" });

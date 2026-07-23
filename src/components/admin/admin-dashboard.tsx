@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useTransition, useEffect, useCallback } from 'react';
 import {
@@ -149,6 +150,7 @@ function AppointmentsViewer() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
+            // OPTIMIZACIÓN: Estas funciones ahora tienen límites y filtros de fecha por defecto en el servidor
             const [apps, lab, xr, us, vac, clinics, services] = await Promise.all([
                 getAppointments(), getLabAppointments(), getXRayAppointments(), getUltrasoundAppointments(), getVaccineAppointments(), getClinics(), getServiceTypes()
             ]);
@@ -161,7 +163,6 @@ function AppointmentsViewer() {
     useEffect(() => { fetchData(); }, [fetchData]);
 
     const handlePatientDelete = async (id: string, type: string) => {
-        // OPTIMISTIC UI SENIOR: Eliminación instantánea de la vista
         setData((prev: any) => {
             const keyMap: any = { medical: 'apps', lab: 'lab', xr: 'xr', us: 'us', vac: 'vac' };
             const k = keyMap[type];
@@ -177,7 +178,7 @@ function AppointmentsViewer() {
         
         if (!res?.success) {
             toast({ title: 'Error al eliminar', variant: 'destructive' });
-            fetchData(); // Rollback en caso de fallo real
+            fetchData();
         }
     };
 
