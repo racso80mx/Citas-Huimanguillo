@@ -172,7 +172,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       const patientsData = await getPatients(searchOptions);
       
-      // PERSISTENCIA SENIOR: Combinamos los datos nuevos con los ya seleccionados para no perder la marca
+      // PERSISTENCIA SENIOR: Combinamos los datos nuevos con los ya seleccionados para no perder la marca del lote
       setPatients(prev => {
           const currentlySelected = prev.filter(p => selectedPatientIds.includes(p.id));
           const newBatch = [...patientsData];
@@ -197,14 +197,14 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, [statusFilter, activeTab, loadData]);
 
-  // SMART SEARCH: Marcado automático en Baja Temporal sin filtrar la lista
+  // SMART SEARCH: Marcado automático en Baja Temporal al encontrar expediente exacto
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = String(searchExpediente).trim();
         const found = patients.find(p => String(p.expediente || '').trim() === term);
         if (found && !selectedPatientIds.includes(found.id)) {
             setSelectedPatientIds(prev => [...prev, found.id]);
-            toast({ title: "Marcado automático", description: `Paciente ${found.name} seleccionado.`, duration: 1000 });
+            toast({ title: "Expediente Marcado", description: `${found.name} agregado al lote.`, duration: 1000 });
             setSearchExpediente(''); 
         }
     }
@@ -216,14 +216,14 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     const sExp = searchExpediente.trim();
 
     return patients.filter(p => {
-        // Los pacientes seleccionados siempre deben ser visibles para no perder el acumulado
+        // Los pacientes seleccionados SIEMPRE deben ser visibles para no perder el acumulado del trabajo
         if (selectedPatientIds.includes(p.id)) return true;
 
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
         
-        // Si estamos en modo Baja Temporal, el campo expediente se usa para Marcado Automático, no para filtrar
+        // En Baja Temporal el campo expediente es para Marcado Rápido, no filtra la lista
         if (statusFilter === PatientStatusEnum.Baja) return nameMatch && curpMatch;
 
         const expMatch = !sExp || String(p.expediente || '').includes(sExp);
@@ -270,7 +270,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
               await updatePatientStatus(id, PatientStatusEnum.BajaDefinitiva);
           }
           setSelectedPatientIds([]);
-          toast({ title: "Baja Definitiva Masiva", description: `${ids.length} registros movidos.` });
+          toast({ title: "Proceso Masivo Finalizado", description: `${ids.length} registros movidos a Baja Definitiva.` });
           loadData(true);
       });
   };
@@ -283,7 +283,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     startSubmitTransition(async () => {
         const result = await deletePatients(ids);
         if (result.success) {
-            toast({ title: "Base de Datos Depurada Físicamente" });
+            toast({ title: "Depuración Física Completada" });
             loadData(true);
         }
     });
@@ -293,7 +293,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     if (isReadOnly) return;
     startSubmitTransition(async () => {
       await updatePatientStatus(patientId, newStatus);
-      toast({ title: "Estado Actualizado" });
+      toast({ title: "Estatus Actualizado" });
       loadData(true);
     });
   }
@@ -303,7 +303,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     startTransition(async () => {
       const result = id ? await updatePatient(id, patientData) : await savePatient(patientData);
        if(result.success) {
-        toast({ title: "Registro Guardado" });
+        toast({ title: "Registro Maestro Guardado" });
         setIsEditOpen(false); setEditingPatient(null); loadData(true);
       } else {
           toast({ title: 'Error al guardar', description: result.message, variant: 'destructive' });
@@ -351,12 +351,12 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
           <div className="flex items-center gap-3">
             {isReadOnly ? <Eye className="h-8 w-8 text-blue-600" /> : <Users className="h-8 w-8 text-primary" />}
             <div>
-                <h1 className="text-3xl font-bold font-headline uppercase">{isReadOnly ? 'Consulta de Recursos' : 'Control de Archivo'}</h1>
-                <p className="text-muted-foreground">{isReadOnly ? 'Revisión (Solo Lectura).' : 'Gestión integral de pacientes y citas.'}</p>
+                <h1 className="text-3xl font-bold font-headline uppercase">{isReadOnly ? 'Consulta de Padrón' : 'Gestión de Archivo'}</h1>
+                <p className="text-muted-foreground">{isReadOnly ? 'Revisión técnica de registros (Lectura).' : 'Mantenimiento preventivo y correctivo del padrón.'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => loadData(true)} disabled={isDataLoading}><RefreshCw className={cn("mr-2 h-4 w-4", isDataLoading && "animate-spin")} /> Refrescar</Button>
+            <Button variant="outline" onClick={() => loadData(true)} disabled={isDataLoading}><RefreshCw className={cn("mr-2 h-4 w-4", isDataLoading && "animate-spin")} /> Sincronizar</Button>
             <Button variant="outline" onClick={onLogout}>Salir</Button>
           </div>
         </div>
@@ -364,7 +364,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
-          { label: 'Pacientes Vigentes', count: counts.vigente, status: PatientStatusEnum.Vigente, icon: UserCheck, color: 'text-green-600' },
+          { label: 'Vigentes', count: counts.vigente, status: PatientStatusEnum.Vigente, icon: UserCheck, color: 'text-green-600' },
           { label: 'Baja Temporal', count: counts.bajaTemporal, status: PatientStatusEnum.Baja, icon: Clock, color: 'text-yellow-600' },
           { label: 'Baja Definitiva', count: counts.bajaDefinitiva, status: PatientStatusEnum.BajaDefinitiva, icon: UserX, color: 'text-red-600' },
           { label: 'Total Padrón', count: counts.total, status: 'Total' as const, icon: Users, color: 'text-primary' }
@@ -379,59 +379,59 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2 bg-muted/20 p-1">
-          <TabsTrigger value="patients" className="font-bold">Padrón de Pacientes</TabsTrigger>
-          <TabsTrigger value="appointments" className="font-bold">Agenda del Hospital</TabsTrigger>
+          <TabsTrigger value="patients" className="font-bold">Listado de Pacientes</TabsTrigger>
+          <TabsTrigger value="appointments" className="font-bold">Agenda de Citas</TabsTrigger>
         </TabsList>
 
         <TabsContent value="patients" className="space-y-4 pt-4">
-          <Card className="relative overflow-hidden shadow-md">
+          <Card className="relative overflow-hidden shadow-md border-primary/10">
             <CardHeader className="pb-4 bg-muted/5">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">Nombre o Apellidos</Label><Input placeholder="Buscar por nombre..." value={searchName} onChange={e => setSearchName(e.target.value.toUpperCase())} className="h-11 border-primary/20" /></div>
-                    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">CURP</Label><Input placeholder="CURP (18 carac)..." value={searchCurp} onChange={e => setSearchCurp(e.target.value.toUpperCase())} className="h-11 border-primary/20" maxLength={18} /></div>
+                    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">Nombre o Apellidos</Label><Input placeholder="FILTRAR POR NOMBRE..." value={searchName} onChange={e => setSearchName(e.target.value.toUpperCase())} className="h-11 border-primary/20" /></div>
+                    <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">CURP</Label><Input placeholder="CURP (18 CARAC)..." value={searchCurp} onChange={e => setSearchCurp(e.target.value.toUpperCase())} className="h-11 border-primary/20" maxLength={18} /></div>
                     <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">No. Expediente {statusFilter === PatientStatusEnum.Baja && "(Auto-Mark)"}</Label>
-                        <Input placeholder="Escribe para marcar..." value={searchExpediente} onChange={e => setSearchExpediente(e.target.value)} className="h-11 border-primary/20" />
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">Expediente {statusFilter === PatientStatusEnum.Baja && "(Auto-Mark)"}</Label>
+                        <Input placeholder={statusFilter === PatientStatusEnum.Baja ? "ESCRIBE PARA MARCAR..." : "FILTRAR POR EXP..."} value={searchExpediente} onChange={e => setSearchExpediente(e.target.value)} className="h-11 border-primary/20" />
                     </div>
                     <div className="flex gap-2 items-end">
                         <Button onClick={() => loadData(true)} className="h-11 flex-1 font-black bg-primary hover:bg-primary/90" disabled={isDataLoading}>{isDataLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />} FILTRAR</Button>
                         <Button variant="outline" onClick={handleClearSearch} className="h-11"><X className="h-4 w-4" /></Button>
                     </div>
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-dashed">
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-dashed mt-2">
                     <div className="flex flex-wrap items-center gap-2">
-                        {!isReadOnly && <><Button onClick={handleAddNew} size="sm" className="font-bold"><PlusCircle className="mr-2 h-4 w-4" /> Nuevo Paciente</Button><Button onClick={() => setIsUploadOpen(true)} variant="secondary" size="sm" className="font-bold"><Upload className="mr-2 h-4 w-4" /> Cargar Excel</Button></>}
-                        <Button onClick={() => downloadExcel(visiblePatients, `padron_${statusFilter}`)} variant="outline" size="sm" className="font-bold"><Download className="mr-2 h-4 w-4" /> Exportar ({visiblePatients.length})</Button>
+                        {!isReadOnly && <><Button onClick={handleAddNew} size="sm" className="font-bold"><PlusCircle className="mr-2 h-4 w-4" /> Nuevo</Button><Button onClick={() => setIsUploadOpen(true)} variant="secondary" size="sm" className="font-bold"><Upload className="mr-2 h-4 w-4" /> Carga Masiva</Button></>}
+                        <Button onClick={() => downloadExcel(visiblePatients, `padron_${statusFilter}`)} variant="outline" size="sm" className="font-bold"><Download className="mr-2 h-4 w-4" /> Excel ({visiblePatients.length})</Button>
                     </div>
                     <div className="flex items-center gap-2">
                         {statusFilter === PatientStatusEnum.BajaDefinitiva && !isReadOnly && patients.length > 0 && (
                              <AlertDialog>
                                 <AlertDialogTrigger asChild>
-                                    <Button variant="destructive" size="sm" className="font-black bg-red-700"><DatabaseZap className="mr-2 h-4 w-4" /> VACIAR BASE DE DATOS (FÍSICO)</Button>
+                                    <Button variant="destructive" size="sm" className="font-black bg-red-700"><DatabaseZap className="mr-2 h-4 w-4" /> VACIAR BAJA DEFINITIVA</Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
-                                    <AlertDialogHeader><AlertDialogTitle className="text-red-700 flex items-center gap-2"><AlertTriangle /> ACCIÓN IRREVERSIBLE</AlertDialogTitle><AlertDialogDescription>Eliminarás físicamente <span className="font-bold">{patients.length}</span> registros de Baja Definitiva. ¿Continuar?</AlertDialogDescription></AlertDialogHeader>
-                                    <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handlePhysicalDeleteAll} className="bg-red-700 hover:bg-red-800 font-bold">SÍ, BORRAR DE LA BD</AlertDialogAction></AlertDialogFooter>
+                                    <AlertDialogHeader><AlertDialogTitle className="text-red-700 flex items-center gap-2"><AlertTriangle /> ACCIÓN IRREVERSIBLE</AlertDialogTitle><AlertDialogDescription>Se eliminarán <span className="font-bold">{patients.length}</span> registros de forma física de la base de datos. ¿Deseas continuar?</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handlePhysicalDeleteAll} className="bg-red-700 hover:bg-red-800 font-bold">SÍ, BORRAR DEFINITIVAMENTE</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                              </AlertDialog>
                         )}
                         {selectedPatientIds.length > 0 && !isReadOnly && (
                             <Button variant="destructive" size="sm" className="font-black animate-in fade-in zoom-in" onClick={handleBulkToDefinitive}>
-                                <UserX className="mr-2 h-4 w-4" /> MOVER A BAJA DEFINITIVA ({selectedPatientIds.length})
+                                <UserX className="mr-2 h-4 w-4" /> BAJA DEFINITIVA ({selectedPatientIds.length})
                             </Button>
                         )}
                     </div>
                 </div>
             </CardHeader>
             <CardContent className="relative min-h-[400px] pt-4">
-              {isDataLoading && <div className="absolute inset-0 z-50 bg-background/70 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-lg"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="text-xs font-black uppercase tracking-widest mt-4 animate-pulse">Sincronizando...</p></div>}
+              {isDataLoading && <div className="absolute inset-0 z-50 bg-background/70 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-lg"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="text-xs font-black uppercase tracking-widest mt-4 animate-pulse">Sincronizando Base de Datos...</p></div>}
               {visiblePatients.length === 0 && !isDataLoading ? (
-                  <div className="text-center py-32 opacity-60"><UserX className="h-20 w-20 mx-auto mb-4" /><p className="text-xl font-bold uppercase">Sin registros en este estatus</p></div>
+                  <div className="text-center py-32 opacity-40"><UserX className="h-20 w-20 mx-auto mb-4" /><p className="text-xl font-bold uppercase">Sin registros en este estatus</p></div>
               ) : (
                 <div className={cn(isDataLoading && "opacity-40 blur-[1px]")}>
                   <PatientList patients={paginatedPatients} onEdit={handleEdit} onDelete={handleDeleteLogical} onStatusChange={handleStatusChange} onSchedule={handleSchedule} isSubmitting={isSubmitting} isReadOnly={isReadOnly} selectedIds={selectedPatientIds} onSelectionChange={setSelectedPatientIds} />
                   <div className="flex items-center justify-between border-t mt-6 pt-4">
-                      <div className="flex items-center gap-2"><span className="text-xs font-bold text-muted-foreground">Mostrando {paginatedPatients.length} de {visiblePatients.length} filtrados</span></div>
+                      <div className="flex items-center gap-2"><span className="text-xs font-bold text-muted-foreground">Mostrando {paginatedPatients.length} de {visiblePatients.length} resultados</span></div>
                       <div className="flex items-center gap-2">
                         <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>Anterior</Button>
                         <Badge className="h-8 px-4 font-black">Pág {currentPage} de {totalPages || 1}</Badge>
@@ -445,7 +445,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         </TabsContent>
 
         <TabsContent value="appointments" className="space-y-4 pt-4">
-           <Card>
+           <Card className="shadow-md border-primary/10">
                 <CardHeader className="pb-4 bg-muted/5">
                     <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
                         <CardTitle className="flex items-center gap-2 font-bold"><CalendarIcon className="h-5 w-5 text-primary" /> Agenda del Hospital</CardTitle>
@@ -457,15 +457,15 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                             </div>
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button variant="outline" size="sm" className="h-9 min-w-[160px]"><CalendarIcon className="mr-2 h-4 w-4" /> {dateRange?.from ? (dateRange.to ? `${format(dateRange.from, 'dd/MM')} - ${format(dateRange.to, 'dd/MM')}` : format(dateRange.from, 'dd/MM')) : "Selector de Rango"}</Button>
+                                    <Button variant="outline" size="sm" className="h-9 min-w-[160px] border-primary/20"><CalendarIcon className="mr-2 h-4 w-4" /> {dateRange?.from ? (dateRange.to ? `${format(dateRange.from, 'dd/MM')} - ${format(dateRange.to, 'dd/MM')}` : format(dateRange.from, 'dd/MM')) : "Selector de Rango"}</Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-auto p-0" align="end"><Calendar mode="range" selected={dateRange} onSelect={r => { setDateRange(r); setDateFilter('range'); }} numberOfMonths={2} locale={es} /></PopoverContent>
                             </Popover>
                         </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-4 mt-6">
+                    <div className="flex flex-wrap items-center gap-4 mt-6 border-t pt-4">
                         <Select value={selectedClinicType} onValueChange={v => { setSelectedClinicType(v); setSelectedClinics([]); }}>
-                            <SelectTrigger className="h-10 w-[200px] bg-background"><SelectValue placeholder="Todas las categorías" /></SelectTrigger>
+                            <SelectTrigger className="h-10 w-[200px] bg-background"><SelectValue placeholder="Categoría" /></SelectTrigger>
                             <SelectContent><SelectItem value="all">Todas las Categorías</SelectItem>{serviceTypes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                         </Select>
                         <Popover>
@@ -493,11 +493,11 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                         </Popover>
                         <div className="relative flex-1 min-w-[250px]">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input placeholder="Buscar por Nombre, CURP o Folio..." className="pl-9 h-10 border-primary/20 bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                            <Input placeholder="Buscar por Nombre, Folio o CURP..." className="pl-9 h-10 border-primary/20 bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                         </div>
                         <div className="flex gap-2">
-                             <Button variant="outline" size="icon" onClick={() => loadData(true)} className="h-10 w-10"><RefreshCw className={cn("h-4 w-4", isDataLoading && "animate-spin")} /></Button>
-                             <Button variant="outline" size="sm" onClick={() => generateArchiveListPDF(appointmentsToDisplay, 'Agenda del Hospital', `Filtro: ${dateFilter}`)} className="font-bold h-10 px-4 text-red-700 border-red-200"><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                             <Button variant="outline" size="icon" onClick={() => loadData(true)} className="h-10 w-10 bg-background"><RefreshCw className={cn("h-4 w-4", isDataLoading && "animate-spin")} /></Button>
+                             <Button variant="outline" size="sm" onClick={() => generateArchiveListPDF(appointmentsToDisplay, 'Agenda de Citas', `Filtro: ${dateFilter}`)} className="font-bold h-10 px-4 text-red-700 border-red-200"><FileText className="mr-2 h-4 w-4" /> PDF</Button>
                         </div>
                     </div>
                 </CardHeader>

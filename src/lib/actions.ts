@@ -33,7 +33,7 @@ import type {
 export async function logActivity(a: string, d: string) { return data.logActivity(a, d); }
 export async function getLogs() { return data.getLogsData(); }
 
-// --- SECURITY & MODULES ---
+// --- SEGURIDAD Y MÓDULOS ---
 export async function getModuleSettings() { return data.getModuleSettings(); }
 export async function updateModuleSettings(s: ModuleSettings) { 
     const res = await data.updateModuleSettings(s);
@@ -54,7 +54,7 @@ export async function updateBISettings(s: BISettings) { return data.updateBISett
 // --- BI DATA ---
 export async function getBIData() { return data.getBIData(); }
 
-// --- ANNOUNCEMENTS ---
+// --- ANUNCIOS ---
 export async function getAnnouncements() { return data.getAnnouncementsData(); }
 export async function updateAnnouncements(m: string[]) {
     const res = await data.updateAnnouncementsData(m);
@@ -62,7 +62,7 @@ export async function updateAnnouncements(m: string[]) {
     return res;
 }
 
-// --- PASSWORD VERIFICATIONS ---
+// --- VERIFICACIONES DE CONTRASEÑA ---
 export async function verifyAdminPassword(p: string) { 
     const s = await data.getAdminSettingsData();
     return s.password === p ? { success: true } : { success: false };
@@ -106,7 +106,7 @@ export async function verifyVaccinePassword(p: string) {
     return s.password === p ? { success: true } : { success: false };
 }
 
-// --- PATIENTS ---
+// --- PACIENTES ---
 export async function getPatients(o?: any) { return data.getPatientsData(o); }
 export async function getPatientCounts() { return data.getPatientCounts(); }
 export async function savePatient(p: Omit<Patient, 'id'>, id?: string) { 
@@ -138,7 +138,7 @@ export async function bulkInsertPatients(p: any[]) {
 export async function applyStatusUpdateChunk(e: string[], s: any) { return data.applyStatusUpdateChunk(e, s); }
 export async function scanDuplicates(criteria: 'expediente' | 'curp' | 'name') { return data.scanDuplicates(criteria); }
 
-// --- APPOINTMENTS ---
+// --- CITAS ---
 export async function getAppointments() { return data.getAppointmentsData(); }
 export async function getLabAppointments() { return data.getLabAppointmentsData(); }
 export async function getXRayAppointments() { return data.getXRayAppointmentsData(); }
@@ -157,31 +157,6 @@ export async function updateAppointmentStatus(id: string, status: string, type: 
     revalidatePath('/', 'layout');
     return res;
 }
-export async function deleteAppointment(id: string) {
-    await data.deleteDoc(data.doc(data.adminDb, 'appointments', id));
-    revalidatePath('/', 'layout');
-    return { success: true };
-}
-export async function deleteLabAppointment(id: string) {
-    await data.deleteDoc(data.doc(data.adminDb, 'labAppointments', id));
-    revalidatePath('/', 'layout');
-    return { success: true };
-}
-export async function deleteXRayAppointment(id: string) {
-    await data.deleteDoc(data.doc(data.adminDb, 'xrayAppointments', id));
-    revalidatePath('/', 'layout');
-    return { success: true };
-}
-export async function deleteUltrasoundAppointment(id: string) {
-    await data.deleteDoc(data.doc(data.adminDb, 'ultrasoundAppointments', id));
-    revalidatePath('/', 'layout');
-    return { success: true };
-}
-export async function deleteVaccineAppointment(id: string) {
-    await data.deleteDoc(data.doc(data.adminDb, 'vaccineAppointments', id));
-    revalidatePath('/', 'layout');
-    return { success: true };
-}
 
 export async function rescheduleAppointment(id: string, date: string, type: string, time: string) {
     const res = await data.rescheduleAppointment(id, date, type, time);
@@ -196,10 +171,15 @@ export async function cloneAppointment(id: string, date: string, type: string, t
 export async function getAvailableSlotsForDate(id: string, date: string) { return data.getAvailableSlotsForDate(id, date); }
 export async function getAppointmentCountOnDate(id: string, d: string) { return data.getAppointmentCountOnDate(id, d); }
 
-// --- CATALOGS ---
+// --- CATÁLOGOS ---
 export async function getClinics() { return data.getClinicsData(); }
 export async function updateClinics(c: Clinic[]) { 
     const res = await data.updateClinics(c);
+    revalidatePath('/', 'layout');
+    return res;
+}
+export async function deleteClinic(id: string) { 
+    const res = await data.deleteClinic(id);
     revalidatePath('/', 'layout');
     return res;
 }
@@ -223,7 +203,7 @@ export async function updateSpecialActionDays(items: SpecialActionDay[]) { retur
 export async function getDepartments() { return data.getDepartmentsData(); }
 export async function updateDepartments(items: Department[]) { return data.updateDepartments(items); }
 
-// --- CONSULTATIONS & PRESCRIPTIONS ---
+// --- CONSULTAS Y RECETAS ---
 export async function getConsultationsByPatientId(pid: string) { return data.getConsultationsByPatientId(pid); }
 export async function getConsultationByAppointmentId(aid: string) { return data.getConsultationByAppointmentId(aid); }
 export async function saveMedicalConsultation(c: any) { return data.saveMedicalConsultation(c); }
@@ -239,7 +219,7 @@ export async function getPendingPrescriptions(filters: any) { return data.getPen
 export async function getPrescriptionHistory(filters: any) { return data.getPrescriptionHistory(filters); }
 export async function getPatientPrescriptionsCountTodayAction(pid: string) { return data.getPatientPrescriptionsCountTodayAction(pid); }
 
-// --- PHARMACY ---
+// --- FARMACIA ---
 export async function getMedications() { return data.getMedications(); }
 export async function bulkInsertMedications(meds: any[], source: string) { return data.bulkInsertMedications(meds, source); }
 export async function deleteMedicationsBySource(source: any) { return data.deleteMedicationsBySource(source); }
@@ -257,7 +237,7 @@ export async function searchCie10(term: string) { return data.searchCie10(term);
 export async function bulkInsertCie10Catalog(items: any[]) { return data.bulkInsertCie10Catalog(items); }
 export async function deleteAllCie10Catalog() { return data.deleteAllCie10Catalog(); }
 
-// --- MODULE SETTINGS ---
+// --- CONFIGURACIÓN DE MÓDULOS ---
 export async function getLabStudies() { return data.getLabStudies(); }
 export async function getLabSettings() { return data.getLabSettings(); }
 export async function updateLabSettings(s: LabSettings) { return data.updateLabSettings(s); }
@@ -278,7 +258,7 @@ export async function getVaccineSettings() { return data.getVaccineSettings(); }
 export async function updateVaccineSettings(s: VaccineSettings) { return data.updateVaccineSettings(s); }
 export async function updateVaccines(items: Vaccine[]) { return data.updateVaccines(items); }
 
-// --- MAINTENANCE ---
+// --- MANTENIMIENTO ---
 export async function normalizeExpedientesAction() { return data.normalizeExpedientesAction(); }
 export async function rebuildNombreCompletoAction() { return data.rebuildNombreCompletoAction(); }
 export async function cleanupOldRecords() { return data.cleanupOldRecords(); }
