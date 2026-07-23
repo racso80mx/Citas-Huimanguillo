@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import React from 'react';
@@ -62,7 +63,6 @@ export default function PageContent({
   const [isDoubleSlot, setIsDoubleSlot] = React.useState(false);
   const [selectedTime, setSelectedTime] = React.useState<string | undefined>();
   
-  // CACHE SYSTEM: Key is "clinicId-YYYY-MM" or "clinicId-initial"
   const [availabilityCache, setAvailabilityCache] = useState<Record<string, DailyAvailability[]>>({});
   const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
   
@@ -150,15 +150,16 @@ export default function PageContent({
       return availabilityResult;
   }, [generateDynamicTimeSlots, serviceTypes]);
 
-  // CARGA INTELIGENTE: Fetch 45 días desde hoy inicialmente, luego por mes.
   const fetchAvailabilityForRange = React.useCallback(async (targetClinicId: string, startDate: Date, endDate: Date, cacheKey: string) => {
       if (availabilityCache[cacheKey]) {
           setAvailability(prev => {
-              const newAvail = [...prev];
+              const combined = [...prev];
               availabilityCache[cacheKey].forEach(item => {
-                  if (!newAvail.some(n => n.date === item.date)) newAvail.push(item);
+                  const idx = combined.findIndex(c => c.date === item.date);
+                  if (idx >= 0) combined[idx] = item;
+                  else combined.push(item);
               });
-              return newAvail;
+              return combined.sort((a,b) => a.date.localeCompare(b.date));
           });
           return;
       }
@@ -183,7 +184,7 @@ export default function PageContent({
                       if (idx >= 0) combined[idx] = item;
                       else combined.push(item);
                   });
-                  return combined;
+                  return combined.sort((a,b) => a.date.localeCompare(b.date));
               });
               setAvailabilityCache(prev => ({ ...prev, [cacheKey]: targetAvail }));
           }
@@ -192,7 +193,6 @@ export default function PageContent({
       }
   }, [clinics, calculateForClinic, availabilityCache]);
 
-  // Selección inicial o cambio de clínica: Cargar próximos 45 días para cubrir Grid + Calendario
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
         const today = startOfToday();
@@ -201,7 +201,6 @@ export default function PageContent({
     }
   }, [isAuthenticated, selectedClinicId, fetchAvailabilityForRange]);
 
-  // Cambio de mes en calendario: Cargar mes específico
   const handleMonthChange = (monthDate: Date) => {
     setCurrentMonth(monthDate);
     if (selectedClinicId) {
@@ -226,6 +225,7 @@ export default function PageContent({
     setSelectedDate(undefined);
     setSelectedColoniaId(undefined);
     setSelectedTime(undefined);
+    setAvailability([]);
   };
 
   const handleColoniaSelect = (coloniaId: string) => {
@@ -317,7 +317,12 @@ export default function PageContent({
     return range.map(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
         const avail = availability.find(a => a.date === dateStr);
-        return { date, dateStr, slots: avail?.availableSlots ?? 0, isClosed: avail === undefined || avail.availableSlots === 0 };
+        return { 
+            date, 
+            dateStr, 
+            slots: avail?.availableSlots ?? 0, 
+            isClosed: !avail || avail.availableSlots === 0 
+        };
     });
   }, [selectedClinicId, availability]);
 
@@ -398,7 +403,7 @@ export default function PageContent({
                                </div>
                           </CardHeader>
                           <CardContent className="p-8 min-h-[300px] relative">
-                              {(isLoadingAvailability) && (
+                              {(isLoadingAvailability && availability.length === 0) && (
                                   <div className="absolute inset-0 z-50 bg-background/60 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-[2rem] animate-in fade-in">
                                       <Loader2 className="h-12 w-12 animate-spin text-primary" />
                                       <p className="text-xs font-black uppercase tracking-widest mt-4 text-primary animate-pulse">Sincronizando Agenda...</p>
@@ -409,17 +414,23 @@ export default function PageContent({
                                       <button 
                                         key={item.dateStr}
                                         onClick={() => handleDateSelect(item.date)}
-                                        disabled={item.isClosed}
+                                        disabled={item.isClosed && !isLoadingAvailability}
                                         className={cn(
                                             "relative flex flex-col items-center p-3 rounded-2xl border-2 transition-all group",
-                                            isSameDay(selectedDate || new Date(0), item.date) ? "bg-primary border-primary text-white shadow-lg ring-4 ring-primary/10 scale-105 z-10" : item.isClosed ? "bg-muted/30 border-muted opacity-40 cursor-not-allowed grayscale" : "bg-background border-muted hover:border-primary/40 hover:bg-primary/5"
+                                            isSameDay(selectedDate || new Date(0), item.date) ? "bg-primary border-primary text-white shadow-lg ring-4 ring-primary/10 scale-105 z-10" : (item.isClosed && !isLoadingAvailability) ? "bg-muted/30 border-muted opacity-40 cursor-not-allowed grayscale" : "bg-background border-muted hover:border-primary/40 hover:bg-primary/5"
                                         )}
                                       >
                                           <span className={cn("text-[9px] font-black uppercase tracking-tighter mb-1", isSameDay(selectedDate || new Date(0), item.date) ? "text-white/60" : "text-muted-foreground")}>{format(item.date, 'EEEE', { locale: es })}</span>
                                           <span className="text-lg font-black leading-none">{format(item.date, 'dd')}</span>
                                           <span className={cn("text-[9px] font-bold uppercase", isSameDay(selectedDate || new Date(0), item.date) ? "text-white/80" : "text-muted-foreground")}>{format(item.date, 'MMM', { locale: es })}</span>
-                                          {!item.isClosed && (<Badge className={cn("mt-2 text-[9px] font-black w-full justify-center px-1", isSameDay(selectedDate || new Date(0), item.date) ? "bg-white text-primary" : item.slots > 5 ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700")}>{item.slots} LIBRES</Badge>)}
-                                          {item.isClosed && (<Badge variant="ghost" className="mt-2 text-[9px] font-black text-muted-foreground">CERRADO</Badge>)}
+                                          {isLoadingAvailability && !availability.some(a => a.date === item.dateStr) ? (
+                                              <Loader2 className="h-4 w-4 animate-spin mt-2 text-primary opacity-40" />
+                                          ) : (
+                                              <>
+                                                {!item.isClosed && (<Badge className={cn("mt-2 text-[9px] font-black w-full justify-center px-1", isSameDay(selectedDate || new Date(0), item.date) ? "bg-white text-primary" : item.slots > 5 ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700")}>{item.slots} LIBRES</Badge>)}
+                                                {item.isClosed && (<Badge variant="ghost" className="mt-2 text-[9px] font-black text-muted-foreground">CERRADO</Badge>)}
+                                              </>
+                                          )}
                                       </button>
                                   ))}
                               </div>
