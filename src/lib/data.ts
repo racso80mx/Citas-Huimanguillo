@@ -248,7 +248,6 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
     const normalized = normalizePatientData(patient);
     const batch = writeBatch(adminDb);
     
-    // Crucial: Use CURP as document ID to prevent duplication
     const patientRef = doc(adminDb, 'patients', normalized.id);
     batch.set(patientRef, normalized, { merge: true });
     
@@ -263,7 +262,13 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
     
     await batch.commit();
     const clinicDoc = await getDoc(doc(adminDb, 'clinics', appointment.clinicId));
-    return serializeData({ success: true, data: { appointment: appData, clinic: clinicDoc.data() } });
+    return serializeData({ 
+        success: true, 
+        data: { 
+            appointment: { ...appData, patient: normalized }, 
+            clinic: clinicDoc.data() 
+        } 
+    });
 }
 
 export async function saveNewLabAppointment(appointment: any, patient: any) {
@@ -273,7 +278,7 @@ export async function saveNewLabAppointment(appointment: any, patient: any) {
     const appData = { ...appointment, patientId: normalized.id, id: uuidv4(), createdAt: new Date().toISOString() };
     batch.set(doc(adminDb, 'labAppointments', appData.id), appData);
     await batch.commit();
-    return serializeData({ success: true, data: appData });
+    return serializeData({ success: true, data: { ...appData, patient: normalized } });
 }
 
 export async function saveNewXRayAppointment(appointment: any, patient: any) {
@@ -283,7 +288,7 @@ export async function saveNewXRayAppointment(appointment: any, patient: any) {
     const appData = { ...appointment, patientId: normalized.id, id: uuidv4(), createdAt: new Date().toISOString() };
     batch.set(doc(adminDb, 'xrayAppointments', appData.id), appData);
     await batch.commit();
-    return serializeData({ success: true, data: { appointment: appData, study: { name: appointment.studyName, indications: '' } } });
+    return serializeData({ success: true, data: { appointment: { ...appData, patient: normalized }, study: { name: appointment.studyName, indications: '' } } });
 }
 
 export async function saveNewUltrasoundAppointment(appointment: any, patient: any) {
@@ -293,7 +298,7 @@ export async function saveNewUltrasoundAppointment(appointment: any, patient: an
     const appData = { ...appointment, patientId: normalized.id, id: uuidv4(), createdAt: new Date().toISOString() };
     batch.set(doc(adminDb, 'ultrasoundAppointments', appData.id), appData);
     await batch.commit();
-    return serializeData({ success: true, data: { appointment: appData, study: { name: appointment.studyName, indications: '' } } });
+    return serializeData({ success: true, data: { appointment: { ...appData, patient: normalized }, study: { name: appointment.studyName, indications: '' } } });
 }
 
 export async function saveNewVaccineAppointment(appointment: any, patient: any) {
@@ -303,7 +308,7 @@ export async function saveNewVaccineAppointment(appointment: any, patient: any) 
     const appData = { ...appointment, patientId: normalized.id, id: uuidv4(), createdAt: new Date().toISOString() };
     batch.set(doc(adminDb, 'vaccineAppointments', appData.id), appData);
     await batch.commit();
-    return serializeData({ success: true, data: appData });
+    return serializeData({ success: true, data: { ...appData, patient: normalized } });
 }
 
 export async function updateAppointmentStatus(id: string, status: string, type: string) {

@@ -1,3 +1,4 @@
+
 'use client';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -181,10 +182,10 @@ export function LabBookingForm({
           if (settings.laboratorioWhatsAppEnabled) {
               const cleanPhone = data.phoneNumber.replace(/\D/g, '');
               const formattedDateText = format(selectedDate, "eeee dd 'de' MMMM", { locale: es });
-              const studiesList = selectedStudies.map(s => s.name).join(', ');
+              const vaccinesList = selectedStudies.map(s => s.name).join(', ');
               const obs = announcements.length > 0 ? `\n\nAvisos: ${announcements.join(' - ')}` : '';
               
-              const wsMessage = encodeURIComponent(`Hola ${data.name}, le contactamos del Hospital General de Huimanguillo para confirmar su cita de laboratorio con folio ${result.data.appointmentNumber} para el día ${formattedDateText} (${selectedTime}). Estudios: ${studiesList}. Recuerde seguir las indicaciones de ayuno.${obs}`);
+              const wsMessage = encodeURIComponent(`Hola ${data.name}, le contactamos del Hospital General de Huimanguillo para confirmar su cita de laboratorio con folio ${result.data.appointmentNumber} para el día ${formattedDateText} (${selectedTime}). Estudios: ${vaccinesList}. Recuerde seguir las indicaciones de ayuno.${obs}`);
               window.open(`https://wa.me/52${cleanPhone}?text=${wsMessage}`, '_blank');
           }
 
@@ -207,7 +208,8 @@ export function LabBookingForm({
   };
   
   async function generateLabAppointmentPDF(doc: any, appointmentData: LabAppointment, announcements: string[]) {
-    const { patient, date, time, appointmentNumber, studies } = appointmentData;
+    const patient = appointmentData.patient || { name: 'S/N', paternalLastName: '', maternalLastName: '', curp: 'S/C', phoneNumber: 'S/T' };
+    const { date, time, appointmentNumber, studies } = appointmentData;
 
     doc.setFont('Helvetica');
     doc.setFontSize(22);
