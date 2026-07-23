@@ -1,7 +1,6 @@
-
 'use server';
 
-import { revalidatePath } from 'revalidate-path';
+import { revalidatePath } from 'next/cache';
 import * as data from './data';
 import type { 
     Patient, 
@@ -25,7 +24,8 @@ import type {
     Colonia,
     ServiceType,
     Specialty,
-    Department
+    Department,
+    AppointmentStatus
 } from './definitions';
 
 // --- LOGS ---
@@ -148,7 +148,7 @@ export async function saveNewXRayAppointment(a: any, p: any) { return data.saveN
 export async function saveNewUltrasoundAppointment(a: any, p: any) { return data.saveNewUltrasoundAppointment(a, p); }
 export async function saveNewVaccineAppointment(a: any, p: any) { return data.saveNewVaccineAppointment(a, p); }
 
-export async function updateAppointmentStatus(id: string, status: string, type: string) { 
+export async function updateAppointmentStatus(id: string, status: AppointmentStatus, type: string) { 
     const res = await data.updateAppointmentStatus(id, status, type);
     revalidatePath('/', 'layout');
     return res;

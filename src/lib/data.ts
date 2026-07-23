@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -18,7 +17,6 @@ import {
   orderBy,
   getCountFromServer,
   documentId,
-  Firestore,
   startAt,
   endAt
 } from 'firebase/firestore';
@@ -52,8 +50,6 @@ import type {
   Holiday,
   SpecialActionDay,
   Medication,
-  Supply,
-  PrescriptionItem,
   AppointmentStatus
 } from './definitions';
 import { PatientStatus, BookingMode } from './definitions';
@@ -345,9 +341,6 @@ async function hydrateAppointments(appointments: any[]) {
     }));
 }
 
-/**
- * OPTIMIZACIÓN: Rango dinámico para evitar cargar historial masivo.
- */
 export async function getAppointmentsData(options?: { startDate?: string, endDate?: string }) {
     const start = options?.startDate ? Timestamp.fromDate(parseISO(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 3));
     const end = options?.endDate ? Timestamp.fromDate(parseISO(options.endDate)) : Timestamp.fromDate(addDays(new Date(), 30));
@@ -366,7 +359,7 @@ export async function getAppointmentsForClinic(id: string) {
     const start = Timestamp.fromDate(subMonths(new Date(), 1));
     const q = query(
         collection(adminDb, 'appointments'), 
-        where('clinicId', '==', id),
+        where('clinicId', '==', id), 
         where('date', '>=', start),
         limit(1000)
     );
@@ -385,6 +378,7 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
     const start = Timestamp.fromDate(startOfDay(dateObj));
     const end = Timestamp.fromDate(endOfDay(dateObj));
     
+    // VALIDACIÓN DE DUPLICIDAD ATÓMICA
     const qDuplicate = query(
         collection(adminDb, 'appointments'),
         where('patientId', '==', normalized.id),
@@ -945,8 +939,10 @@ export async function getAvailableSlotsForDate(clinicId: string, date: string) {
     }
 }
 
-export async function getAppointmentCountOnDate(clinicId: string, date: string) {
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId), where('date', '>=', Timestamp.fromDate(startOfDay(parseISO(date)))), where('date', '<=', Timestamp.fromDate(endOfDay(parseISO(date)))));
+export async function getAppointmentCountOnDate(id: string, dateStr: string) {
+    const start = Timestamp.fromDate(startOfDay(parseISO(dateStr)));
+    const end = Timestamp.fromDate(endOfDay(parseISO(dateStr)));
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', id), where('date', '>=', start), where('date', '<=', end));
     const s = await getCountFromServer(q);
     return s.data().count;
 }
@@ -1094,4 +1090,3 @@ export async function updateVaccines(items: Vaccine[]) {
     await b.commit();
     return { success: true };
 }
-
