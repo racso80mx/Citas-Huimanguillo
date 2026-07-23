@@ -172,26 +172,22 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       const patientsData = await getPatients(searchOptions);
       
-      // PERSISTENCIA: Mergear los nuevos resultados con los pacientes ya seleccionados 
-      // para que no desaparezcan de la vista al cambiar de búsqueda (Senior Requirement)
+      // PERSISTENCIA: Unimos los pacientes seleccionados con los nuevos datos para que no desaparezcan
       setPatients(prev => {
           const alreadySelected = prev.filter(p => selectedPatientIds.includes(p.id));
-          const resultPool = [...patientsData];
+          const merged = [...patientsData];
           
           alreadySelected.forEach(sel => {
-              if (!resultPool.some(res => res.id === sel.id)) {
-                  resultPool.push(sel);
+              if (!merged.some(m => m.id === sel.id)) {
+                  merged.push(sel);
               }
           });
-          
-          return resultPool;
+          return merged;
       });
       
-      if (!manualSearch) {
-          setCurrentPage(1);
-      }
+      if (!manualSearch) setCurrentPage(1);
     } catch (e) {
-      toast({ title: 'Error de Red', variant: 'destructive' });
+      toast({ title: 'Error al conectar con el servidor', variant: 'destructive' });
     } finally {
       setIsDataLoading(false);
     }
@@ -201,14 +197,14 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, [statusFilter, activeTab, loadData]);
 
-  // MARCADO AUTOMÁTICO EN BAJA TEMPORAL: Al buscar un expediente se selecciona sin ocultar otros (Requerimiento Senior)
+  // MARCADO AUTOMÁTICO EN BAJA TEMPORAL
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = searchExpediente.trim();
-        const exactMatch = patients.find(p => String(p.expediente || '').trim() === term);
-        if (exactMatch && !selectedPatientIds.includes(exactMatch.id)) {
-            setSelectedPatientIds(prev => [...prev, exactMatch.id]);
-            toast({ title: "Marcado automático", description: `${exactMatch.name} seleccionado.` });
+        const found = patients.find(p => String(p.expediente || '').trim() === term);
+        if (found && !selectedPatientIds.includes(found.id)) {
+            setSelectedPatientIds(prev => [...prev, found.id]);
+            toast({ title: "Paciente Seleccionado", description: `Expediente ${term} marcado.` });
             setSearchExpediente(''); 
         }
     }
@@ -220,17 +216,15 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     const sExp = searchExpediente.trim();
 
     return patients.filter(p => {
-        // PERSISTENCIA: Pacientes seleccionados permanecen visibles SIEMPRE
+        // Los pacientes seleccionados siempre deben ser visibles para no perder el contexto
         if (selectedPatientIds.includes(p.id)) return true;
 
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
         
-        // En Baja Temporal, expediente NO filtra (para no borrar lo ya marcado)
-        if (statusFilter === PatientStatusEnum.Baja) {
-            return nameMatch && curpMatch;
-        }
+        // En modo Baja Temporal no filtramos por expediente para permitir el marcado sucesivo
+        if (statusFilter === PatientStatusEnum.Baja) return nameMatch && curpMatch;
 
         const expMatch = !sExp || String(p.expediente || '').includes(sExp);
         return nameMatch && curpMatch && expMatch;
@@ -261,30 +255,21 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   
   const handleDeleteLogical = (patientId: string) => {
     if (isReadOnly) return;
-    setPatients(prev => prev.filter(p => p.id !== patientId));
-    
     startSubmitTransition(async () => {
       await updatePatientStatus(patientId, PatientStatusEnum.BajaDefinitiva);
       toast({ title: "Movido a Baja Definitiva" });
-      const newCounts = await getPatientCounts();
-      setCounts(newCounts);
+      loadData(true);
     });
   }
 
   const handleBulkToDefinitive = () => {
       if (selectedPatientIds.length === 0 || isReadOnly) return;
-      const idsToChange = [...selectedPatientIds];
-      
-      setPatients(prev => prev.filter(p => !idsToChange.includes(p.id)));
-      setSelectedPatientIds([]);
-      
+      const ids = [...selectedPatientIds];
       startSubmitTransition(async () => {
-          for (const id of idsToChange) { 
-              await updatePatientStatus(id, PatientStatusEnum.BajaDefinitiva); 
-          }
-          toast({ title: "Baja Definitiva Masiva", description: `${idsToChange.length} registros movidos.` });
-          const newCounts = await getPatientCounts();
-          setCounts(newCounts);
+          for (const id of ids) await updatePatientStatus(id, PatientStatusEnum.BajaDefinitiva);
+          setSelectedPatientIds([]);
+          toast({ title: "Baja Definitiva Masiva", description: `${ids.length} registros movidos.` });
+          loadData(true);
       });
   };
 
@@ -294,15 +279,11 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     if (ids.length === 0) return;
     
     startSubmitTransition(async () => {
-        setIsDataLoading(true);
         const result = await deletePatients(ids);
         if (result.success) {
-            toast({ title: "Padrón Depurado", description: `Eliminados físicamente ${ids.length} registros.` });
-            setPatients([]);
-            const newCounts = await getPatientCounts();
-            setCounts(newCounts);
+            toast({ title: "Base de Datos Depurada Físicamente" });
+            loadData(true);
         }
-        setIsDataLoading(false);
     });
   }
 
@@ -311,7 +292,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     startSubmitTransition(async () => {
       await updatePatientStatus(patientId, newStatus);
       toast({ title: "Estado Actualizado" });
-      setPatients(prev => prev.filter(p => p.id !== patientId));
+      loadData(true);
     });
   }
   
@@ -320,10 +301,10 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     startTransition(async () => {
       const result = id ? await updatePatient(id, patientData) : await savePatient(patientData);
        if(result.success) {
-        toast({ title: "Paciente Guardado" });
+        toast({ title: "Registro Guardado" });
         setIsEditOpen(false); setEditingPatient(null); loadData(true);
       } else {
-          toast({ title: 'Error al guardar', description: result.message, variant: 'destructive' });
+          toast({ title: 'Error', description: result.message, variant: 'destructive' });
       }
     });
   }
@@ -407,11 +388,11 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">Nombre o Apellidos</Label><Input placeholder="Buscar por nombre..." value={searchName} onChange={e => setSearchName(e.target.value.toUpperCase())} className="h-11 border-primary/20" /></div>
                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">CURP</Label><Input placeholder="CURP (18 carac)..." value={searchCurp} onChange={e => setSearchCurp(e.target.value.toUpperCase())} className="h-11 border-primary/20" maxLength={18} /></div>
                     <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">No. Expediente {statusFilter === PatientStatusEnum.Baja && "(Auto-Marcar)"}</Label>
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">No. Expediente {statusFilter === PatientStatusEnum.Baja && "(Auto-Marcado)"}</Label>
                         <Input placeholder="Expediente..." value={searchExpediente} onChange={e => setSearchExpediente(e.target.value)} className="h-11 border-primary/20" />
                     </div>
                     <div className="flex gap-2 items-end">
-                        <Button onClick={() => loadData(true)} className="h-11 flex-1 font-black bg-primary hover:bg-primary/90" disabled={isDataLoading}>{isDataLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />} FILTRAR LISTA</Button>
+                        <Button onClick={() => loadData(true)} className="h-11 flex-1 font-black bg-primary hover:bg-primary/90" disabled={isDataLoading}>{isDataLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />} FILTRAR</Button>
                         <Button variant="outline" onClick={handleClearSearch} className="h-11"><X className="h-4 w-4" /></Button>
                     </div>
                 </div>
@@ -427,7 +408,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                                     <Button variant="destructive" size="sm" className="font-black bg-red-700"><DatabaseZap className="mr-2 h-4 w-4" /> VACIAR BASE DE DATOS (FÍSICO)</Button>
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
-                                    <AlertDialogHeader><AlertDialogTitle className="text-red-700 flex items-center gap-2"><AlertTriangle /> ACCIÓN IRREVERSIBLE</AlertDialogTitle><AlertDialogDescription>Estás a punto de eliminar físicamente a <span className="font-bold">{patients.length}</span> registros de Baja Definitiva. Esta acción no se puede deshacer. ¿Continuar?</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogHeader><AlertDialogTitle className="text-red-700 flex items-center gap-2"><AlertTriangle /> ACCIÓN IRREVERSIBLE</AlertDialogTitle><AlertDialogDescription>Eliminarás físicamente <span className="font-bold">{patients.length}</span> registros de Baja Definitiva. ¿Continuar?</AlertDialogDescription></AlertDialogHeader>
                                     <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={handlePhysicalDeleteAll} className="bg-red-700 hover:bg-red-800 font-bold">SÍ, BORRAR DE LA BD</AlertDialogAction></AlertDialogFooter>
                                 </AlertDialogContent>
                              </AlertDialog>
@@ -441,7 +422,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                 </div>
             </CardHeader>
             <CardContent className="relative min-h-[400px] pt-4">
-              {isDataLoading && <div className="absolute inset-0 z-50 bg-background/70 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-lg"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="text-xs font-black uppercase tracking-widest mt-4 animate-pulse">Consultando Padrón...</p></div>}
+              {isDataLoading && <div className="absolute inset-0 z-50 bg-background/70 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-lg"><Loader2 className="h-12 w-12 animate-spin text-primary" /><p className="text-xs font-black uppercase tracking-widest mt-4 animate-pulse">Sincronizando...</p></div>}
               {visiblePatients.length === 0 && !isDataLoading ? (
                   <div className="text-center py-32 opacity-60"><UserX className="h-20 w-20 mx-auto mb-4" /><p className="text-xl font-bold uppercase">Sin registros en este estatus</p></div>
               ) : (
@@ -465,7 +446,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
            <Card>
                 <CardHeader className="pb-4 bg-muted/5">
                     <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-                        <CardTitle className="flex items-center gap-2 font-bold"><CalendarIcon className="h-5 w-5 text-primary" /> Filtros de Agenda</CardTitle>
+                        <CardTitle className="flex items-center gap-2 font-bold"><CalendarIcon className="h-5 w-5 text-primary" /> Agenda del Hospital</CardTitle>
                         <div className="flex flex-wrap items-center gap-4">
                             <div className="flex items-center gap-1 bg-background p-1 border rounded-lg shadow-sm">
                                 {['today', 'tomorrow', 'week', 'month'].map((f) => (
@@ -474,7 +455,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                             </div>
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button variant="outline" size="sm" className="h-9 min-w-[160px]"><CalendarIcon className="mr-2 h-4 w-4" /> {dateRange?.from ? (dateRange.to ? `${format(dateRange.from, 'dd/MM')} - ${format(dateRange.to, 'dd/MM')}` : format(dateRange.from, 'dd/MM')) : "Rango"}</Button>
+                                    <Button variant="outline" size="sm" className="h-9 min-w-[160px]"><CalendarIcon className="mr-2 h-4 w-4" /> {dateRange?.from ? (dateRange.to ? `${format(dateRange.from, 'dd/MM')} - ${format(dateRange.to, 'dd/MM')}` : format(dateRange.from, 'dd/MM')) : "Selector de Rango"}</Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-auto p-0" align="end"><Calendar mode="range" selected={dateRange} onSelect={r => { setDateRange(r); setDateFilter('range'); }} numberOfMonths={2} locale={es} /></PopoverContent>
                             </Popover>
@@ -514,7 +495,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                         </div>
                         <div className="flex gap-2">
                              <Button variant="outline" size="icon" onClick={() => loadData(true)} className="h-10 w-10"><RefreshCw className={cn("h-4 w-4", isDataLoading && "animate-spin")} /></Button>
-                             <Button variant="outline" size="sm" onClick={() => generateArchiveListPDF(appointmentsToDisplay, 'Agenda del Hospital', `Filtro: ${dateFilter} - ${appointmentsToDisplay.length} pacientes`)} className="font-bold h-10 px-4 text-red-700 border-red-200"><FileText className="mr-2 h-4 w-4" /> PDF</Button>
+                             <Button variant="outline" size="sm" onClick={() => generateArchiveListPDF(appointmentsToDisplay, 'Agenda del Hospital', `Filtro: ${dateFilter}`)} className="font-bold h-10 px-4 text-red-700 border-red-200"><FileText className="mr-2 h-4 w-4" /> PDF</Button>
                         </div>
                     </div>
                 </CardHeader>
