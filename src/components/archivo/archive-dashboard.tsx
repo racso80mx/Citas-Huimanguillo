@@ -169,6 +169,9 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       const patientsData = await getPatients(searchOptions);
       
+      // BLINDAJE SENIOR: PERSISTENCIA DE SELECCIÓN
+      // Al refrescar los datos, nos aseguramos de que los pacientes ya seleccionados 
+      // permanezcan en la lista si no estaban en los nuevos resultados.
       setPatients(prev => {
           const currentlySelected = prev.filter(p => selectedPatientIds.includes(p.id));
           const newResults = [...patientsData];
@@ -192,6 +195,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, [statusFilter, activeTab, loadData]);
 
+  // SMART MARK SENIOR: Detectar coincidencia exacta de expediente y marcar automáticamente
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = String(searchExpediente).trim();
@@ -210,11 +214,15 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     const sExp = searchExpediente.trim();
 
     return patients.filter(p => {
+        // Los ya seleccionados siempre son visibles para construir el lote
         if (selectedPatientIds.includes(p.id)) return true;
+        
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
+        
         if (statusFilter === PatientStatusEnum.Baja) return nameMatch && curpMatch;
+        
         const expMatch = !sExp || String(p.expediente || '').includes(sExp);
         return nameMatch && curpMatch && expMatch;
     });
@@ -244,6 +252,8 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   
   const handleDeleteLogical = (patientId: string) => {
     if (isReadOnly) return;
+    
+    // OPTIMISTIC UI SENIOR: Quitar de la vista inmediatamente
     setPatients(prev => prev.filter(p => p.id !== patientId));
     
     startSubmitTransition(async () => {
@@ -252,14 +262,16 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
           toast({ title: "Movido a Baja Definitiva" });
           loadData(true);
       } else {
-          loadData(true);
+          loadData(true); // Rollback visual si falla
       }
     });
   }
 
   const handleBulkToDefinitive = () => {
       if (selectedPatientIds.length === 0 || isReadOnly) return;
+      
       const ids = [...selectedPatientIds];
+      // Optimistic
       setPatients(prev => prev.filter(p => !ids.includes(p.id)));
       setSelectedPatientIds([]);
 
@@ -504,8 +516,9 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                 </CardHeader>
                 <CardContent className="pt-6">
                     <AppointmentList appointments={appointmentsToDisplay} clinics={clinics} isAdmin={!isReadOnly} onDelete={(appId) => {
-                        const app = allAppointments.find(a => a.id === appId);
-                        if (app) handleDeleteLogical(app.patientId);
+                        // OPTIMISTIC DELETE EN AGENDA
+                        setAllAppointments(prev => prev.filter(a => a.id !== appId));
+                        deleteAppointment(appId);
                     }} onEditSuccess={() => loadData(true)} />
                 </CardContent>
            </Card>

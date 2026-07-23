@@ -402,7 +402,7 @@ export async function deleteVaccineAppointment(id: string) {
 export async function saveNewAppointment(appointment: any, patient: any, isDoubleSlot: boolean, coloniaName?: string) {
     const normalized = normalizePatientData(patient);
     
-    // VALIDACIÓN DE DUPLICIDAD ATÓMICA
+    // BLINDAJE SENIOR: VALIDACIÓN DE DUPLICIDAD ATÓMICA (MISMO DÍA, MISMO PACIENTE, MISMO NÚCLEO)
     const dateObj = parseISO(appointment.date);
     const start = startOfDay(dateObj).toISOString();
     const end = endOfDay(dateObj).toISOString();

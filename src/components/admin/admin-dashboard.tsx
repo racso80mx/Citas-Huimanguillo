@@ -161,7 +161,7 @@ function AppointmentsViewer() {
     useEffect(() => { fetchData(); }, [fetchData]);
 
     const handlePatientDelete = async (id: string, type: string) => {
-        // Optimistic UI: remove from local data instantly
+        // OPTIMISTIC UI SENIOR: Eliminación instantánea de la vista
         setData((prev: any) => {
             const keyMap: any = { medical: 'apps', lab: 'lab', xr: 'xr', us: 'us', vac: 'vac' };
             const k = keyMap[type];
@@ -177,7 +177,7 @@ function AppointmentsViewer() {
         
         if (!res?.success) {
             toast({ title: 'Error al eliminar', variant: 'destructive' });
-            fetchData(); // Rollback
+            fetchData(); // Rollback en caso de fallo real
         }
     };
 
