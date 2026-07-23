@@ -160,7 +160,7 @@ export function BookingForm({
     if (initialPatientData) return;
     const curpValue = form.getValues('curp');
     if (!curpValue || isNewborn) return;
-    const upperCurp = curpValue.toUpperCase();
+    const upperCurp = curpValue.toUpperCase().trim();
 
     if (curpRegex.test(upperCurp)) {
       startTransition(async () => {
@@ -185,8 +185,8 @@ export function BookingForm({
   };
 
   useEffect(() => {
-    if (!isNewborn && curp && curp.length === 18 && curpRegex.test(curp.toUpperCase())) {
-      const data = parseCURP(curp.toUpperCase());
+    if (!isNewborn && curp && curp.length === 18 && curpRegex.test(curp.toUpperCase().trim())) {
+      const data = parseCURP(curp.toUpperCase().trim());
       if (data) {
         form.setValue('sex', data.sex as 'Hombre' | 'Mujer');
         form.setValue('birthState', data.estadoNacimiento || 'NACIDO EN EL EXTRANJERO');
@@ -219,10 +219,10 @@ export function BookingForm({
     startTransition(async () => {
       const settings = await getModuleSettings();
       const patientToSave: Omit<Patient, 'id'> = {
-          curp: (data.curp || `RN-${uuidv4()}`).toUpperCase(),
-          name: data.name.toUpperCase(),
-          paternalLastName: data.paternalLastName.toUpperCase(),
-          maternalLastName: data.maternalLastName.toUpperCase(),
+          curp: (data.curp || `RN-${uuidv4()}`).toUpperCase().trim(),
+          name: data.name.toUpperCase().trim(),
+          paternalLastName: data.paternalLastName.toUpperCase().trim(),
+          maternalLastName: data.maternalLastName.toUpperCase().trim(),
           sex: data.sex,
           age: data.age || 0,
           birthDate: data.birthDate,
@@ -230,12 +230,12 @@ export function BookingForm({
           phoneNumber: data.phoneNumber,
           coloniaName: selectedColoniaName,
           status: initialPatientData?.status || PatientStatus.Vigente,
-          fatherName: data.fatherName?.toUpperCase() || null,
-          motherName: data.motherName?.toUpperCase() || null,
+          fatherName: data.fatherName?.toUpperCase().trim() || null,
+          motherName: data.motherName?.toUpperCase().trim() || null,
           fatherAge: data.fatherAge || null,
           motherAge: data.motherAge || null,
           registrationDate: initialPatientData?.registrationDate || formatDate(new Date(), 'yyyy-MM-dd'),
-          derechoAbiencia: data.derechoAbiencia?.toUpperCase() || null,
+          derechoAbiencia: data.derechoAbiencia?.toUpperCase().trim() || null,
           expediente: initialPatientData?.expediente || null
       };
 
@@ -319,7 +319,7 @@ export function BookingForm({
                         placeholder="Tu CURP de 18 caracteres"
                         {...field}
                         disabled={!!initialPatientData}
-                        onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                        onChange={(e) => field.onChange(e.target.value.toUpperCase().trim())}
                         onBlur={(e) => {
                           field.onBlur();
                           handleCurpBlur();
@@ -340,7 +340,7 @@ export function BookingForm({
                     <FormItem>
                       <FormLabel>Nombre(s)</FormLabel>
                       <FormControl>
-                        <Input placeholder="Tu(s) nombre(s)" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} />
+                        <Input placeholder="Tu(s) nombre(s)" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase().trim())} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -353,7 +353,7 @@ export function BookingForm({
                     <FormItem>
                       <FormLabel>Apellido Paterno</FormLabel>
                       <FormControl>
-                        <Input placeholder="Tu apellido paterno" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} />
+                        <Input placeholder="Tu apellido paterno" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase().trim())} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -367,7 +367,7 @@ export function BookingForm({
                 <FormItem>
                   <FormLabel>Apellido Materno</FormLabel>
                   <FormControl>
-                    <Input placeholder="Tu apellido materno" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} />
+                    <Input placeholder="Tu apellido materno" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase().trim())} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -442,7 +442,7 @@ export function BookingForm({
                         <Combobox 
                           options={estados.map(e => ({ value: e.nombre, label: e.nombre }))}
                           value={field.value || ''}
-                          onChange={(value) => field.onChange(value.toUpperCase())}
+                          onChange={(value) => field.onChange(value.toUpperCase().trim())}
                           placeholder='Selecciona un estado'
                           searchPlaceholder='Buscar estado...'
                           noResultsText='No se encontró el estado.'
@@ -466,7 +466,7 @@ export function BookingForm({
                   <FormField control={form.control} name="fatherName" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Nombre del Padre</FormLabel>
-                      <FormControl><Input placeholder="Nombre completo" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} /></FormControl>
+                      <FormControl><Input placeholder="Nombre completo" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase().trim())} /></FormControl>
                     </FormItem>
                   )} />
                   <FormField control={form.control} name="fatherAge" render={({ field }) => (
@@ -480,7 +480,7 @@ export function BookingForm({
                   <FormField control={form.control} name="motherName" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Nombre de la Madre</FormLabel>
-                      <FormControl><Input placeholder="Nombre completo" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} /></FormControl>
+                      <FormControl><Input placeholder="Nombre completo" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase().trim())} /></FormControl>
                     </FormItem>
                   )} />
                   <FormField control={form.control} name="motherAge" render={({ field }) => (

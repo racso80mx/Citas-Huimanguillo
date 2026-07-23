@@ -81,6 +81,27 @@ export {
 };
 
 /**
+ * Normaliza los datos de un paciente antes de guardarlos para evitar duplicados.
+ * SENIOR FIX: Asegura que el ID sea siempre la CURP sanitizada.
+ */
+function normalizePatientData(p: any) {
+    const cleanCurp = String(p.curp || '').trim().toUpperCase();
+    const n = (p.name || '').trim().toUpperCase();
+    const ap = (p.paternalLastName || '').trim().toUpperCase();
+    const am = (p.maternalLastName || '').trim().toUpperCase();
+    
+    return {
+        ...p,
+        id: cleanCurp,
+        curp: cleanCurp,
+        name: n,
+        paternalLastName: ap,
+        maternalLastName: am,
+        nombreCompleto: `${n} ${ap} ${am}`.replace(/\s+/g, ' ').trim()
+    };
+}
+
+/**
  * Serializes Firestore data to plain objects for safe transmission via Server Actions.
  */
 export function serializeData(data: any): any {
@@ -97,13 +118,6 @@ export function serializeData(data: any): any {
     return o;
   }
   return data;
-}
-
-function generateNombreCompleto(p: any) {
-    const n = (p.name || '').trim();
-    const ap = (p.paternalLastName || '').trim();
-    const am = (p.maternalLastName || '').trim();
-    return `${n} ${ap} ${am}`.replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
 /**
@@ -260,17 +274,18 @@ export async function getPatientCounts(): Promise<ArchiveCounts> {
 }
 
 export async function saveNewAppointment(appointment: any, patient: any, isDoubleSlot: boolean, coloniaName?: string) {
-    const patientRef = doc(adminDb, 'patients', patient.curp);
+    const normalized = normalizePatientData(patient);
+    const patientRef = doc(adminDb, 'patients', normalized.id);
     const appointmentId = uuidv4();
     const appointmentNumber = `FOL-${uuidv4().split('-')[0].toUpperCase()}`;
     
     const batch = writeBatch(adminDb);
-    batch.set(patientRef, { ...patient, id: patient.curp, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
+    batch.set(patientRef, normalized, { merge: true });
     
     const appData = {
         ...appointment,
         id: appointmentId,
-        patientId: patient.curp,
+        patientId: normalized.id,
         appointmentNumber,
         coloniaName,
         createdAt: new Date().toISOString()
@@ -284,44 +299,48 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
 }
 
 export async function saveNewLabAppointment(appointment: any, patient: any) {
-    const patientRef = doc(adminDb, 'patients', patient.curp);
+    const normalized = normalizePatientData(patient);
+    const patientRef = doc(adminDb, 'patients', normalized.id);
     const appointmentId = uuidv4();
     const batch = writeBatch(adminDb);
-    batch.set(patientRef, { ...patient, id: patient.curp, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
-    const appData = { ...appointment, id: appointmentId, patientId: patient.curp, createdAt: new Date().toISOString() };
+    batch.set(patientRef, normalized, { merge: true });
+    const appData = { ...appointment, id: appointmentId, patientId: normalized.id, createdAt: new Date().toISOString() };
     batch.set(doc(adminDb, 'labAppointments', appointmentId), appData);
     await batch.commit();
     return { success: true, data: appData };
 }
 
 export async function saveNewXRayAppointment(appointment: any, patient: any) {
-    const patientRef = doc(adminDb, 'patients', patient.curp);
+    const normalized = normalizePatientData(patient);
+    const patientRef = doc(adminDb, 'patients', normalized.id);
     const appointmentId = uuidv4();
     const batch = writeBatch(adminDb);
-    batch.set(patientRef, { ...patient, id: patient.curp, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
-    const appData = { ...appointment, id: appointmentId, patientId: patient.curp, createdAt: new Date().toISOString() };
+    batch.set(patientRef, normalized, { merge: true });
+    const appData = { ...appointment, id: appointmentId, patientId: normalized.id, createdAt: new Date().toISOString() };
     batch.set(doc(adminDb, 'xrayAppointments', appointmentId), appData);
     await batch.commit();
     return { success: true, data: { appointment: appData, study: { name: appointment.studyName, indications: '' } } };
 }
 
 export async function saveNewUltrasoundAppointment(appointment: any, patient: any) {
-    const patientRef = doc(adminDb, 'patients', patient.curp);
+    const normalized = normalizePatientData(patient);
+    const patientRef = doc(adminDb, 'patients', normalized.id);
     const appointmentId = uuidv4();
     const batch = writeBatch(adminDb);
-    batch.set(patientRef, { ...patient, id: patient.curp, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
-    const appData = { ...appointment, id: appointmentId, patientId: patient.curp, createdAt: new Date().toISOString() };
+    batch.set(patientRef, normalized, { merge: true });
+    const appData = { ...appointment, id: appointmentId, patientId: normalized.id, createdAt: new Date().toISOString() };
     batch.set(doc(adminDb, 'ultrasoundAppointments', appointmentId), appData);
     await batch.commit();
     return { success: true, data: { appointment: appData, study: { name: appointment.studyName, indications: '' } } };
 }
 
 export async function saveNewVaccineAppointment(appointment: any, patient: any) {
-    const patientRef = doc(adminDb, 'patients', patient.curp);
+    const normalized = normalizePatientData(patient);
+    const patientRef = doc(adminDb, 'patients', normalized.id);
     const appointmentId = uuidv4();
     const batch = writeBatch(adminDb);
-    batch.set(patientRef, { ...patient, id: patient.curp, nombreCompleto: generateNombreCompleto(patient) }, { merge: true });
-    const appData = { ...appointment, id: appointmentId, patientId: patient.curp, createdAt: new Date().toISOString() };
+    batch.set(patientRef, normalized, { merge: true });
+    const appData = { ...appointment, id: appointmentId, patientId: normalized.id, createdAt: new Date().toISOString() };
     batch.set(doc(adminDb, 'vaccineAppointments', appointmentId), appData);
     await batch.commit();
     return { success: true, data: appData };
@@ -575,13 +594,15 @@ export async function updateAnnouncementsData(messages: string[]) {
 }
 
 export async function savePatient(p: Omit<Patient, 'id'>, id?: string) {
-    const patientId = id || p.curp.toUpperCase();
-    await setDoc(doc(adminDb, 'patients', patientId), { ...p, id: patientId, nombreCompleto: generateNombreCompleto(p) }, { merge: true });
+    const normalized = normalizePatientData(p);
+    const patientId = id || normalized.id;
+    await setDoc(doc(adminDb, 'patients', patientId), { ...normalized, id: patientId }, { merge: true });
     return { success: true };
 }
 
 export async function updatePatient(id: string, p: Partial<Patient>) {
-    await updateDoc(doc(adminDb, 'patients', id), { ...p, nombreCompleto: generateNombreCompleto(p) });
+    const normalized = normalizePatientData({ ...p, id });
+    await updateDoc(doc(adminDb, 'patients', id), normalized);
     return { success: true };
 }
 
@@ -609,12 +630,12 @@ export async function bulkInsertPatients(records: any[]) {
         const curp = String(r.CURP || '').toUpperCase().trim();
         if (!curp) continue;
         const pRef = doc(adminDb, 'patients', curp);
-        const pData = {
+        const pData = normalizePatientData({
             id: curp, curp,
             expediente: String(r['No.Expediente'] || ''),
-            name: String(r.Nombre || '').toUpperCase(),
-            paternalLastName: String(r.Apaterno || '').toUpperCase(),
-            maternalLastName: String(r.Amaterno || '').toUpperCase(),
+            name: String(r.Nombre || ''),
+            paternalLastName: String(r.Apaterno || ''),
+            maternalLastName: String(r.Amaterno || ''),
             sex: r.Sexo === 'H' ? 'Hombre' : 'Mujer',
             age: parseInt(r.Edad) || 0,
             birthDate: String(r.FNacimiento || ''),
@@ -623,9 +644,8 @@ export async function bulkInsertPatients(records: any[]) {
             coloniaName: String(r.Colonia || '').toUpperCase(),
             status: r.Estatus || PatientStatus.Vigente,
             registrationDate: String(r.FechaApertura || ''),
-            derechoAbiencia: String(r.DerechoAbiencia || '').toUpperCase(),
-            nombreCompleto: `${r.Nombre} ${r.Apaterno} ${r.Amaterno}`.toUpperCase()
-        };
+            derechoAbiencia: String(r.DerechoAbiencia || '').toUpperCase()
+        });
         b.set(pRef, pData, { merge: true });
         added++;
     }
@@ -994,7 +1014,10 @@ export async function rebuildNombreCompletoAction() {
     let count = 0;
     snap.forEach(d => {
         const data = d.data();
-        const nc = generateNombreCompleto(data);
+        const n = (data.name || '').trim();
+        const ap = (data.paternalLastName || '').trim();
+        const am = (data.maternalLastName || '').trim();
+        const nc = `${n} ${ap} ${am}`.replace(/\s+/g, ' ').trim().toUpperCase();
         b.update(d.ref, { nombreCompleto: nc });
         count++;
     });

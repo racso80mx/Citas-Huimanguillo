@@ -172,7 +172,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       const patientsData = await getPatients(searchOptions);
       
-      // PERSISTENCIA: Unimos los pacientes seleccionados con los nuevos datos para que no desaparezcan
+      // SENIOR PERSISTENCIA: Mantener la selección acumulativa
       setPatients(prev => {
           const alreadySelected = prev.filter(p => selectedPatientIds.includes(p.id));
           const merged = [...patientsData];
@@ -197,14 +197,14 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, [statusFilter, activeTab, loadData]);
 
-  // MARCADO AUTOMÁTICO EN BAJA TEMPORAL
+  // SMART SEARCH: Marcado automático en Baja Temporal
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = searchExpediente.trim();
         const found = patients.find(p => String(p.expediente || '').trim() === term);
         if (found && !selectedPatientIds.includes(found.id)) {
             setSelectedPatientIds(prev => [...prev, found.id]);
-            toast({ title: "Paciente Seleccionado", description: `Expediente ${term} marcado.` });
+            toast({ title: "Marcado automático", description: `Expediente ${term} seleccionado.`, duration: 1500 });
             setSearchExpediente(''); 
         }
     }
@@ -216,7 +216,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     const sExp = searchExpediente.trim();
 
     return patients.filter(p => {
-        // Los pacientes seleccionados siempre deben ser visibles para no perder el contexto
+        // Los pacientes seleccionados siempre deben ser visibles para no perder el acumulado
         if (selectedPatientIds.includes(p.id)) return true;
 
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
@@ -388,7 +388,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">Nombre o Apellidos</Label><Input placeholder="Buscar por nombre..." value={searchName} onChange={e => setSearchName(e.target.value.toUpperCase())} className="h-11 border-primary/20" /></div>
                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">CURP</Label><Input placeholder="CURP (18 carac)..." value={searchCurp} onChange={e => setSearchCurp(e.target.value.toUpperCase())} className="h-11 border-primary/20" maxLength={18} /></div>
                     <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">No. Expediente {statusFilter === PatientStatusEnum.Baja && "(Auto-Marcado)"}</Label>
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">No. Expediente {statusFilter === PatientStatusEnum.Baja && "(Smart-Select)"}</Label>
                         <Input placeholder="Expediente..." value={searchExpediente} onChange={e => setSearchExpediente(e.target.value)} className="h-11 border-primary/20" />
                     </div>
                     <div className="flex gap-2 items-end">
