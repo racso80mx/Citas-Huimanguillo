@@ -17,7 +17,8 @@ import {
   limit,
   orderBy,
   getCountFromServer,
-  documentId
+  documentId,
+  Firestore
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -56,7 +57,7 @@ import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
 import { startOfDay, endOfDay, parseISO, startOfMonth, addDays } from 'date-fns';
 
-// Re-export needed for internal server use and to comply with NextJS 15 rules (no objects in actions.ts)
+// Re-export needed for internal server use and to comply with NextJS 15 rules
 export { adminDb, doc, collection, deleteDoc, getDoc, getDocs, query, where, limit, orderBy, writeBatch, setDoc, updateDoc, addDoc };
 
 /**
@@ -164,9 +165,6 @@ export async function getPatientsData(options?: any): Promise<Patient[]> {
     return serializeData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 
-/**
- * Hydrates appointments with full patient and clinic information.
- */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     
@@ -343,6 +341,30 @@ export async function updateClinics(clinics: Clinic[]) {
     return { success: true };
 }
 
+export async function bulkInsertDoctors(items: any[]) {
+    const b = writeBatch(adminDb);
+    items.forEach(item => {
+        const id = uuidv4();
+        b.set(doc(adminDb, 'clinics', id), {
+            id,
+            name: String(item.Unidad || '').toUpperCase(),
+            doctorName: String(item.Médico || '').toUpperCase(),
+            doctorCurp: String(item.CURP || '').toUpperCase(),
+            professionalLicense: String(item.Cédula || '').toUpperCase(),
+            serviceTypeId: String(item.Categoría || '').toUpperCase(),
+            password: 'hospital_default',
+            dailySlots: 10,
+            startTime: '08:00',
+            endTime: '13:00',
+            bookingMode: 'time',
+            consultationDuration: 30,
+            weekendBookingEnabled: false
+        });
+    });
+    await b.commit();
+    return { success: true, processedCount: items.length };
+}
+
 export async function getColoniasData() {
     const snap = await getDocs(collection(adminDb, 'colonias'));
     return serializeData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
@@ -446,6 +468,11 @@ export async function deletePatients(ids: string[]) {
     return { success: true };
 }
 
+export async function getPatientByCURP(c: string) {
+    const snap = await getDoc(doc(adminDb, 'patients', c.toUpperCase().trim()));
+    return snap.exists() ? serializeData({ success: true, data: { ...snap.data(), id: snap.id } }) : { success: false };
+}
+
 export async function bulkInsertPatients(records: any[]) {
     const b = writeBatch(adminDb);
     records.forEach(r => {
@@ -472,6 +499,26 @@ export async function applyStatusUpdateChunk(expedientes: string[], status: any)
     snap.forEach(d => batch.update(d.ref, { status }));
     await batch.commit();
     return { success: true, count: snap.size };
+}
+
+export async function scanDuplicates(criteria: 'expediente' | 'curp' | 'name'): Promise<Patient[][]> {
+    const snap = await getDocs(collection(adminDb, 'patients'));
+    const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
+    const groups: Record<string, Patient[]> = {};
+    
+    all.forEach(p => {
+        let key = '';
+        if (criteria === 'expediente') key = p.expediente || 'S/E';
+        else if (criteria === 'curp') key = p.curp;
+        else key = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
+        
+        if (key && key !== 'S/E') {
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(p);
+        }
+    });
+    
+    return Object.values(groups).filter(g => g.length > 1);
 }
 
 // --- CONSULTATIONS & PRESCRIPTIONS ---
@@ -586,6 +633,14 @@ export async function deleteMedicationsBySource(source: string) {
     return { success: true, deletedCount: snap.size };
 }
 
+export async function deleteAllMedications() {
+    const snap = await getDocs(collection(adminDb, 'medications'));
+    const b = writeBatch(adminDb);
+    snap.forEach(d => b.delete(d.ref));
+    await b.commit();
+    return { success: true };
+}
+
 export async function getSupplies() {
     const snap = await getDocs(query(collection(adminDb, 'supplies'), limit(10000)));
     return serializeData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
@@ -606,6 +661,14 @@ export async function bulkInsertSupplies(items: any[]) {
     });
     await b.commit();
     return { success: true, processedCount: items.length };
+}
+
+export async function deleteAllSupplies() {
+    const snap = await getDocs(collection(adminDb, 'supplies'));
+    const b = writeBatch(adminDb);
+    snap.forEach(d => b.delete(d.ref));
+    await b.commit();
+    return { success: true };
 }
 
 export async function createPharmacyVoucher(v: any) {
@@ -809,7 +872,6 @@ export async function updateVaccines(items: any[]) {
 }
 
 export async function getAvailableSlotsForDate(clinicId: string, dateStr: string) {
-    // Basic slots helper for UI
     return { timeSlots: ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00"], tokens: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] };
 }
 

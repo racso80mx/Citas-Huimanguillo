@@ -136,6 +136,7 @@ export async function bulkInsertPatients(p: any[]) {
     return res;
 }
 export async function applyStatusUpdateChunk(e: string[], s: any) { return data.applyStatusUpdateChunk(e, s); }
+export async function scanDuplicates(criteria: 'expediente' | 'curp' | 'name') { return data.scanDuplicates(criteria); }
 
 // --- APPOINTMENTS ---
 export async function getAppointments() { return data.getAppointmentsData(); }

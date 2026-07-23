@@ -65,6 +65,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandShortcut,
 } from '@/components/ui/command';
 import {
   Popover,
@@ -171,8 +172,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       const patientsData = await getPatients(searchOptions);
       
-      // PERSISTENCIA SENIOR: Mantener selección acumulativa
-      // No borramos pacientes seleccionados de la lista local
+      // PERSISTENCIA SENIOR: Combinamos los datos nuevos con los ya seleccionados para no perder la marca
       setPatients(prev => {
           const currentlySelected = prev.filter(p => selectedPatientIds.includes(p.id));
           const newBatch = [...patientsData];
@@ -197,15 +197,15 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, [statusFilter, activeTab, loadData]);
 
-  // SMART SEARCH: Marcado automático en Baja Temporal
+  // SMART SEARCH: Marcado automático en Baja Temporal sin filtrar la lista
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
-        const term = searchExpediente.trim();
+        const term = String(searchExpediente).trim();
         const found = patients.find(p => String(p.expediente || '').trim() === term);
         if (found && !selectedPatientIds.includes(found.id)) {
             setSelectedPatientIds(prev => [...prev, found.id]);
             toast({ title: "Marcado automático", description: `Paciente ${found.name} seleccionado.`, duration: 1000 });
-            setSearchExpediente(''); // Limpiar para el siguiente escaneo
+            setSearchExpediente(''); 
         }
     }
   }, [searchExpediente, patients, statusFilter, selectedPatientIds, toast]);
@@ -223,7 +223,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
         
-        // En modo Baja Temporal no filtramos por expediente, solo permitimos el marcado automático
+        // Si estamos en modo Baja Temporal, el campo expediente se usa para Marcado Automático, no para filtrar
         if (statusFilter === PatientStatusEnum.Baja) return nameMatch && curpMatch;
 
         const expMatch = !sExp || String(p.expediente || '').includes(sExp);
