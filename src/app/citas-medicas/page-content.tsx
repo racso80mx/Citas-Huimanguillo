@@ -84,6 +84,10 @@ export default function PageContent({
     try {
         const start = new Date(`1970-01-01T${startHour}:00`);
         const end = new Date(`1970-01-01T${endHour}:00`);
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+            // Fallback robusto
+            return ["08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30"];
+        }
         let current = start;
         while (current < end) {
             slots.push(current.toTimeString().substring(0, 5));
@@ -97,7 +101,9 @@ export default function PageContent({
 
   const calculateForClinic = useCallback((clinic: Clinic, startDate: Date, endDate: Date, allAppointments: any[], holidaySet: Set<string>, freshSpecialActionDays: SpecialActionDay[]): DailyAvailability[] => {
       const dayClinicMap = new Map<string, Map<string, any[]>>();
+      
       allAppointments.forEach(app => {
+          if (!app.date || !app.clinicId) return;
           const d = app.date.split('T')[0];
           if (!dayClinicMap.has(d)) dayClinicMap.set(d, new Map());
           const clinicMap = dayClinicMap.get(d)!;
@@ -111,24 +117,26 @@ export default function PageContent({
 
       for (const day of daysInInterval) {
         const dateString = format(day, 'yyyy-MM-dd'); 
-        const dayBooked = dayClinicMap.get(dateString)?.get(clinic.id) || [];
+        const dayMap = dayClinicMap.get(dateString);
+        const dayBooked = dayMap ? (dayMap.get(clinic.id) || []) : [];
         const dayName = dayNames[day.getDay()];
         
         const isHoliday = holidaySet.has(dateString);
         const isWeekend = isSaturday(day) || isSunday(day);
         
+        const clinicTypeName = serviceTypes.find(t => t.id === clinic.serviceTypeId)?.name || String(clinic.serviceTypeId);
+        
         const isSpecialActionDay = freshSpecialActionDays.some(sad => 
             sad.date === dateString && 
-            (sad.clinicType === clinic.serviceTypeId || 
+            (String(sad.clinicType).toUpperCase() === String(clinic.serviceTypeId).toUpperCase() || 
              sad.clinicType === "Consulta Externa" ||
-             serviceTypes.find(t => t.id === clinic.serviceTypeId)?.name === sad.clinicType)
+             String(clinicTypeName).toUpperCase() === String(sad.clinicType).toUpperCase())
         );
 
         const isDateBlocked = clinic.unavailableDates?.includes(dateString);
         const isWeekendBlocked = isWeekend && !clinic.weekendBookingEnabled;
         
-        // Permisividad: Si no hay días de acción configurados, atiende de Lunes a Viernes
-        const effectiveDaysOfAction = clinic.daysOfAction && clinic.daysOfAction.length > 0 
+        const effectiveDaysOfAction = (clinic.daysOfAction && clinic.daysOfAction.length > 0)
             ? clinic.daysOfAction 
             : ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
             
@@ -283,13 +291,14 @@ export default function PageContent({
     return range.map(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
         const avail = availability.find(a => a.date === dateStr);
+        const isDataMissing = !avail && isLoadingAvailability;
+        
         return { 
             date, 
             dateStr, 
             slots: avail?.availableSlots ?? 0, 
-            // isClosed solo si existe el registro de disponibilidad y es 0
             isClosed: avail ? avail.availableSlots === 0 : false,
-            isLoading: !avail && isLoadingAvailability
+            isLoading: isDataMissing
         };
     });
   }, [selectedClinicId, availability, isLoadingAvailability]);
@@ -422,7 +431,7 @@ export default function PageContent({
                                </div>
                           </CardHeader>
                           <CardContent className="p-8 min-h-[300px] relative">
-                              {(isLoadingAvailability && availability.length === 0) && (
+                              {isLoadingAvailability && (
                                   <div className="absolute inset-0 z-50 bg-background/60 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-[2rem] animate-in fade-in">
                                       <Loader2 className="h-12 w-12 animate-spin text-primary" />
                                       <p className="text-xs font-black uppercase tracking-widest mt-4 text-primary animate-pulse">Sincronizando Agenda...</p>
