@@ -53,6 +53,9 @@ export async function updateWarehouseSettings(s: WarehouseSettings) { return dat
 export async function getBISettings() { return data.getBISettings(); }
 export async function updateBISettings(s: BISettings) { return data.updateBISettings(s); }
 
+// --- BI DATA ---
+export async function getBIData() { return data.getBIData(); }
+
 // --- ANNOUNCEMENTS ---
 export async function getAnnouncements() { return data.getAnnouncementsData(); }
 export async function updateAnnouncements(m: string[]) {
@@ -85,6 +88,22 @@ export async function verifyBIPassword(p: string) {
 }
 export async function verifyClinicPassword(id: string, p: string) {
     const s = await data.getDoc(data.doc(data.adminDb, 'clinics', id));
+    return s.exists() && s.data()?.password === p ? { success: true } : { success: false };
+}
+export async function verifyLabPassword(p: string) {
+    const s = await data.getDoc(data.doc(data.adminDb, 'settings', 'labSettings'));
+    return s.exists() && s.data()?.password === p ? { success: true } : { success: false };
+}
+export async function verifyXRayPassword(p: string) {
+    const s = await data.getDoc(data.doc(data.adminDb, 'settings', 'xraySettings'));
+    return s.exists() && s.data()?.password === p ? { success: true } : { success: false };
+}
+export async function verifyUltrasoundPassword(p: string) {
+    const s = await data.getDoc(data.doc(data.adminDb, 'settings', 'ultrasoundSettings'));
+    return s.exists() && s.data()?.password === p ? { success: true } : { success: false };
+}
+export async function verifyVaccinePassword(p: string) {
+    const s = await data.getDoc(data.doc(data.adminDb, 'settings', 'vaccineSettings'));
     return s.exists() && s.data()?.password === p ? { success: true } : { success: false };
 }
 

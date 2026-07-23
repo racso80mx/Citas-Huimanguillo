@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -163,10 +162,30 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
           status: statusFilter === 'Total' ? undefined : statusFilter,
           limitNum: 10000 
       };
-      const patientsData = await getPatients(searchOptions);
-      setPatients(patientsData);
       
-      // PERSISTENCIA: No borramos selectedPatientIds al recargar (Requerimiento Senior)
+      if (manualSearch) {
+          if (searchName) searchOptions.searchName = searchName;
+          if (searchCurp) searchOptions.searchCurp = searchCurp;
+          if (searchExpediente) searchOptions.searchExpediente = searchExpediente;
+      }
+
+      const patientsData = await getPatients(searchOptions);
+      
+      // PERSISTENCIA: Mergear los nuevos resultados con los pacientes ya seleccionados 
+      // para que no desaparezcan de la vista al cambiar de búsqueda (Senior Requirement)
+      setPatients(prev => {
+          const alreadySelected = prev.filter(p => selectedPatientIds.includes(p.id));
+          const resultPool = [...patientsData];
+          
+          alreadySelected.forEach(sel => {
+              if (!resultPool.some(res => res.id === sel.id)) {
+                  resultPool.push(sel);
+              }
+          });
+          
+          return resultPool;
+      });
+      
       if (!manualSearch) {
           setCurrentPage(1);
       }
@@ -175,7 +194,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     } finally {
       setIsDataLoading(false);
     }
-  }, [statusFilter, activeTab, toast]);
+  }, [statusFilter, activeTab, toast, searchName, searchCurp, searchExpediente, selectedPatientIds]);
   
   useEffect(() => {
     loadData(false);

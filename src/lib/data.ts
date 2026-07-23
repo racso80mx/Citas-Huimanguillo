@@ -204,6 +204,28 @@ export async function updateModuleSettings(settings: ModuleSettings) {
     return { success: true };
 }
 
+// --- BI DATA ---
+export async function getBIData() {
+    const [apps, lab, xr, us, vac, clinics, colonias] = await Promise.all([
+        getAppointmentsData(),
+        getLabAppointmentsData(),
+        getXRayAppointmentsData(),
+        getUltrasoundAppointmentsData(),
+        getVaccineAppointmentsData(),
+        getClinicsData(),
+        getColoniasData()
+    ]);
+    return {
+        appointments: apps,
+        labAppointments: lab,
+        xRayAppointments: xr,
+        ultrasoundAppointments: us,
+        vaccineAppointments: vac,
+        clinics,
+        colonias
+    };
+}
+
 // --- ANNOUNCEMENTS ---
 export async function getAnnouncementsData() {
     const s = await getDoc(doc(adminDb, 'settings', 'announcements'));
