@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useTransition, useCallback, useMemo } from 'react';
@@ -41,7 +42,8 @@ import {
   getServiceTypes,
   getColonias,
   getAnnouncements,
-  getModuleSettings
+  getModuleSettings,
+  deleteAppointment
 } from '@/lib/actions';
 import type { Patient, Appointment, Clinic, ArchiveCounts, ServiceType, Colonia } from '@/lib/definitions';
 import { PatientStatus as PatientStatusEnum } from '@/lib/definitions';
@@ -136,12 +138,15 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   const [searchTerm, setSearchTerm] = useState('');
 
   const [isDataLoading, setIsDataLoading] = useState(false);
+  const [isAgendaLoading, setIsAgendaLoading] = useState(false);
   const [isSubmitting, startSubmitTransition] = useTransition();
 
   const { toast } = useToast();
 
   const loadData = useCallback(async (manualSearch = false) => {
-    setIsDataLoading(true);
+    setIsDataLoading(manualSearch || activeTab === 'patients');
+    if (activeTab === 'appointments') setIsAgendaLoading(true);
+
     try {
       const [countsData, clinicsData, serviceTypesData, coloniasData] = await Promise.all([
         getPatientCounts(), getClinics(), getServiceTypes(), getColonias()
@@ -164,14 +169,12 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
       if (manualSearch) {
           if (searchName) searchOptions.searchName = searchName;
           if (searchCurp) searchOptions.searchCurp = searchCurp;
-          if (searchExpediente && statusFilter !== PatientStatusEnum.Baja) searchOptions.searchExpediente = searchExpediente;
+          if (searchExpediente) searchOptions.searchExpediente = searchExpediente;
       }
 
       const patientsData = await getPatients(searchOptions);
       
-      // BLINDAJE SENIOR: PERSISTENCIA DE SELECCIÓN
-      // Al refrescar los datos, nos aseguramos de que los pacientes ya seleccionados 
-      // permanezcan en la lista si no estaban en los nuevos resultados.
+      // PERSISTENCIA DE SELECCIÓN ACUMULATIVA: Mantener registros marcados aunque no estén en la búsqueda actual
       setPatients(prev => {
           const currentlySelected = prev.filter(p => selectedPatientIds.includes(p.id));
           const newResults = [...patientsData];
@@ -188,6 +191,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
       toast({ title: 'Error al conectar con el servidor', variant: 'destructive' });
     } finally {
       setIsDataLoading(false);
+      setIsAgendaLoading(false);
     }
   }, [statusFilter, activeTab, toast, searchName, searchCurp, searchExpediente, selectedPatientIds]);
   
@@ -195,7 +199,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     loadData(false);
   }, [statusFilter, activeTab, loadData]);
 
-  // SMART MARK SENIOR: Detectar coincidencia exacta de expediente y marcar automáticamente
+  // SMART MARK POR EXPEDIENTE: Marca automáticamente sin filtrar (para Baja Temporal)
   useEffect(() => {
     if (statusFilter === PatientStatusEnum.Baja && searchExpediente.trim().length >= 1) {
         const term = String(searchExpediente).trim();
@@ -214,16 +218,21 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     const sExp = searchExpediente.trim();
 
     return patients.filter(p => {
-        // Los ya seleccionados siempre son visibles para construir el lote
+        // Validación estricta de estatus local para la grid
+        const isVigente = !p.status || p.status === PatientStatusEnum.Vigente;
+        const matchesStatus = statusFilter === 'Total' || 
+                             (statusFilter === PatientStatusEnum.Vigente && isVigente) ||
+                             (p.status === statusFilter);
+
+        // Si está seleccionado, siempre es visible
         if (selectedPatientIds.includes(p.id)) return true;
-        
+        if (!matchesStatus) return false;
+
         const fullName = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
-        
-        if (statusFilter === PatientStatusEnum.Baja) return nameMatch && curpMatch;
-        
         const expMatch = !sExp || String(p.expediente || '').includes(sExp);
+        
         return nameMatch && curpMatch && expMatch;
     });
   }, [patients, statusFilter, searchName, searchCurp, searchExpediente, selectedPatientIds]);
@@ -252,29 +261,40 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   
   const handleDeleteLogical = (patientId: string) => {
     if (isReadOnly) return;
-    
-    // OPTIMISTIC UI SENIOR: Quitar de la vista inmediatamente
+    // OPTIMISTIC UI: Eliminar de la vista inmediatamente
     setPatients(prev => prev.filter(p => p.id !== patientId));
-    
     startSubmitTransition(async () => {
       const res = await updatePatientStatus(patientId, PatientStatusEnum.BajaDefinitiva);
       if (res.success) {
           toast({ title: "Movido a Baja Definitiva" });
           loadData(true);
       } else {
-          loadData(true); // Rollback visual si falla
+          loadData(true);
       }
     });
   }
 
+  const handleDeleteAppointment = (appId: string) => {
+    if (isReadOnly) return;
+    // OPTIMISTIC UI: Eliminar de la vista inmediatamente
+    setAllAppointments(prev => prev.filter(a => a.id !== appId));
+    startSubmitTransition(async () => {
+      const res = await deleteAppointment(appId);
+      if (res.success) {
+          toast({ title: "Cita Eliminada" });
+          loadData(true);
+      } else {
+          toast({ title: "Error al eliminar", description: res.message, variant: "destructive" });
+          loadData(true);
+      }
+    });
+  };
+
   const handleBulkToDefinitive = () => {
       if (selectedPatientIds.length === 0 || isReadOnly) return;
-      
       const ids = [...selectedPatientIds];
-      // Optimistic
       setPatients(prev => prev.filter(p => !ids.includes(p.id)));
       setSelectedPatientIds([]);
-
       startSubmitTransition(async () => {
           for (const id of ids) {
               await updatePatientStatus(id, PatientStatusEnum.BajaDefinitiva);
@@ -288,9 +308,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
     if (isReadOnly || statusFilter !== PatientStatusEnum.BajaDefinitiva) return;
     const ids = patients.map(p => p.id);
     if (ids.length === 0) return;
-    
     setPatients([]);
-    
     startSubmitTransition(async () => {
         const result = await deletePatients(ids);
         if (result.success) {
@@ -313,7 +331,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
   
   const handleSavePatient = (patientData: Omit<Patient, 'id'>, id?: string) => {
     if (isReadOnly) return;
-    startTransition(async () => {
+    startSubmitTransition(async () => {
       const result = id ? await updatePatient(id, patientData) : await savePatient(patientData);
        if(result.success) {
         toast({ title: "Información Guardada" });
@@ -369,7 +387,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => loadData(true)} disabled={isDataLoading}><RefreshCw className={cn("mr-2 h-4 w-4", isDataLoading && "animate-spin")} /> Sincronizar</Button>
+            <Button variant="outline" onClick={() => loadData(true)} disabled={isDataLoading || isAgendaLoading}><RefreshCw className={cn("mr-2 h-4 w-4", (isDataLoading || isAgendaLoading) && "animate-spin")} /> Sincronizar</Button>
             <Button variant="outline" onClick={onLogout}>Salir</Button>
           </div>
         </div>
@@ -458,7 +476,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         </TabsContent>
 
         <TabsContent value="appointments" className="space-y-4 pt-4">
-           <Card className="shadow-md border-primary/10">
+           <Card className="relative overflow-hidden shadow-md border-primary/10">
                 <CardHeader className="pb-4 bg-muted/5">
                     <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
                         <CardTitle className="flex items-center gap-2 font-bold"><CalendarIcon className="h-5 w-5 text-primary" /> Agenda del Hospital</CardTitle>
@@ -509,17 +527,25 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                             <Input placeholder="Buscar por Nombre, Folio o CURP..." className="pl-9 h-10 border-primary/20 bg-background" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                         </div>
                         <div className="flex gap-2">
-                             <Button variant="outline" size="icon" onClick={() => loadData(true)} className="h-10 w-10 bg-background"><RefreshCw className={cn("h-4 w-4", isDataLoading && "animate-spin")} /></Button>
+                             <Button variant="outline" size="icon" onClick={() => loadData(true)} className="h-10 w-10 bg-background"><RefreshCw className={cn("h-4 w-4", (isDataLoading || isAgendaLoading) && "animate-spin")} /></Button>
                              <Button variant="outline" size="sm" onClick={() => generateArchiveListPDF(appointmentsToDisplay, 'Agenda de Citas', `Filtro: ${dateFilter}`)} className="font-bold h-10 px-4 text-red-700 border-red-200"><FileText className="mr-2 h-4 w-4" /> PDF</Button>
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent className="pt-6">
-                    <AppointmentList appointments={appointmentsToDisplay} clinics={clinics} isAdmin={!isReadOnly} onDelete={(appId) => {
-                        // OPTIMISTIC DELETE EN AGENDA
-                        setAllAppointments(prev => prev.filter(a => a.id !== appId));
-                        deleteAppointment(appId);
-                    }} onEditSuccess={() => loadData(true)} />
+                <CardContent className="relative pt-6 min-h-[400px]">
+                    {(isAgendaLoading || isDataLoading) && (
+                        <div className="absolute inset-0 z-50 bg-background/70 backdrop-blur-[1px] flex flex-col items-center justify-center rounded-lg">
+                            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                            <p className="text-xs font-black uppercase tracking-widest mt-4 animate-pulse">Sincronizando Agenda...</p>
+                        </div>
+                    )}
+                    <AppointmentList 
+                      appointments={appointmentsToDisplay} 
+                      clinics={clinics} 
+                      isAdmin={!isReadOnly} 
+                      onDelete={handleDeleteAppointment} 
+                      onEditSuccess={() => loadData(true)} 
+                    />
                 </CardContent>
            </Card>
         </TabsContent>
