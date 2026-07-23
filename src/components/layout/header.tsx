@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -26,7 +27,6 @@ export function SiteHeader({ moduleSettings }: { moduleSettings: ModuleSettings 
     if (pathname === '/archivo') return 'Archivo';
     if (pathname === '/archivo-consulta') return 'Consulta de Recursos';
     if (pathname === '/farmacia') return 'Farmacia';
-    if (pathname === '/bi') return 'BI';
     if (pathname === '/reports') return 'Reportes';
     if (pathname === '/admin') return 'Administración';
     return '';

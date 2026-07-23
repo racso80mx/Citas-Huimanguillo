@@ -21,7 +21,6 @@ import type {
     ArchiveSettings,
     PharmacySettings,
     WarehouseSettings,
-    BISettings,
     Clinic,
     Colonia,
     ServiceType,
@@ -48,11 +47,6 @@ export async function getPharmacySettings() { return data.getPharmacySettings();
 export async function updatePharmacySettings(s: PharmacySettings) { return data.updatePharmacySettings(s); }
 export async function getWarehouseSettings() { return data.getWarehouseSettings(); }
 export async function updateWarehouseSettings(s: WarehouseSettings) { return data.updateWarehouseSettings(s); }
-export async function getBISettings() { return data.getBISettings(); }
-export async function updateBISettings(s: BISettings) { return data.updateBISettings(s); }
-
-// --- BI DATA ---
-export async function getBIData() { return data.getBIData(); }
 
 // --- ANUNCIOS ---
 export async function getAnnouncements() { return data.getAnnouncementsData(); }
@@ -78,10 +72,6 @@ export async function verifyPharmacyPassword(p: string) {
 }
 export async function verifyWarehousePassword(p: string) {
     const s = await data.getWarehouseSettings();
-    return s.password === p ? { success: true } : { success: false };
-}
-export async function verifyBIPassword(p: string) {
-    const s = await data.getBISettings();
     return s.password === p ? { success: true } : { success: false };
 }
 export async function verifyClinicPassword(id: string, p: string) {

@@ -47,7 +47,6 @@ import type {
   ArchiveSettings,
   PharmacySettings,
   WarehouseSettings,
-  BISettings,
   Holiday,
   SpecialActionDay,
   Medication,
@@ -185,16 +184,6 @@ export async function getWarehouseSettings(): Promise<WarehouseSettings> {
 
 export async function updateWarehouseSettings(s: WarehouseSettings) {
     await setDoc(doc(adminDb, 'settings', 'warehouseSettings'), s);
-    return { success: true };
-}
-
-export async function getBISettings(): Promise<BISettings> {
-    const s = await getDoc(doc(adminDb, 'settings', 'biSettings'));
-    return s.exists() ? serializeData(s.data()) : { password: '123' };
-}
-
-export async function updateBISettings(s: BISettings) {
-    await setDoc(doc(adminDb, 'settings', 'biSettings'), s);
     return { success: true };
 }
 
@@ -497,29 +486,6 @@ export async function saveNewVaccineAppointment(appointment: any, patient: any) 
     batch.set(doc(adminDb, 'vaccineAppointments', appData.id), appData);
     await batch.commit();
     return serializeData({ success: true, data: { ...appData, patient: normalized } });
-}
-
-// --- BI DATA ---
-
-export async function getBIData(): Promise<any> {
-    const [apps, lab, xr, us, vac, clinics, colonias] = await Promise.all([
-        getDocs(collection(adminDb, 'appointments')),
-        getDocs(collection(adminDb, 'labAppointments')),
-        getDocs(collection(adminDb, 'xrayAppointments')),
-        getDocs(collection(adminDb, 'ultrasoundAppointments')),
-        getDocs(collection(adminDb, 'vaccineAppointments')),
-        getDocs(collection(adminDb, 'clinics')),
-        getDocs(collection(adminDb, 'colonias'))
-    ]);
-    return serializeData({
-        appointments: apps.docs.map(d => ({ ...d.data(), id: d.id })),
-        labAppointments: lab.docs.map(d => ({ ...d.data(), id: d.id })),
-        xRayAppointments: xr.docs.map(d => ({ ...d.data(), id: d.id })),
-        ultrasoundAppointments: us.docs.map(d => ({ ...d.data(), id: d.id })),
-        vaccineAppointments: vac.docs.map(d => ({ ...d.data(), id: d.id })),
-        clinics: clinics.docs.map(d => ({ ...d.data(), id: d.id })),
-        colonias: colonias.docs.map(d => ({ ...d.data(), id: d.id }))
-    });
 }
 
 // --- CATALOGOS ---

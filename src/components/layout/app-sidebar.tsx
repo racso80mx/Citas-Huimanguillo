@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -13,7 +14,6 @@ import {
   Search,
   Pill,
   Package,
-  BarChart3,
   LayoutGrid,
   ClipboardList,
   UserRound,
@@ -92,12 +92,6 @@ export function AppSidebar({ moduleSettings, ...props }: React.ComponentProps<ty
       url: '/almacen',
       icon: Package,
       enabled: moduleSettings.almacenEnabled,
-    },
-    {
-      title: 'Business Intelligence',
-      url: '/bi',
-      icon: BarChart3,
-      enabled: true,
     },
     {
       title: 'Reportes Médicos',

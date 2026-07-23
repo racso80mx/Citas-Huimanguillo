@@ -290,7 +290,6 @@ export type ModuleSettings = {
 export type ArchiveSettings = { password?: string; }
 export type PharmacySettings = { password?: string; }
 export type WarehouseSettings = { password?: string; }
-export type BISettings = { password?: string; }
 export type AdminSettings = { password?: string; }
 
 export type ArchiveCounts = {

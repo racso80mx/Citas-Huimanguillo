@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useEffect, useTransition } from 'react';
 import {
@@ -16,7 +17,6 @@ import {
     updateArchiveSettings, getArchiveSettings,
     updatePharmacySettings, getPharmacySettings,
     updateWarehouseSettings, getWarehouseSettings,
-    updateBISettings, getBISettings,
     updateLabSettings, getLabSettings,
     updateXRaySettings, getXRaySettings,
     updateUltrasoundSettings, getUltrasoundSettings,
@@ -44,8 +44,8 @@ export function ModuleSecurityManager() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [modules, archive, pharmacy, warehouse, bi, lab, xray, us, vaccine] = await Promise.all([
-        getModuleSettings(), getArchiveSettings(), getPharmacySettings(), getWarehouseSettings(), getBISettings(),
+      const [modules, archive, pharmacy, warehouse, lab, xray, us, vaccine] = await Promise.all([
+        getModuleSettings(), getArchiveSettings(), getPharmacySettings(), getWarehouseSettings(),
         getLabSettings(), getXRaySettings(), getUltrasoundSettings(), getVaccineSettings()
       ]);
       
@@ -55,7 +55,6 @@ export function ModuleSecurityManager() {
         archiveInquiry: modules.archivoConsultaPassword || '',
         pharmacy: pharmacy.password || '',
         warehouse: warehouse.password || '',
-        bi: bi.password || '',
         lab: lab.password || '',
         xray: xray.password || '',
         us: us.password || '',
@@ -88,7 +87,6 @@ export function ModuleSecurityManager() {
             case 'archive': result = await updateArchiveSettings({ password }); break;
             case 'pharmacy': result = await updatePharmacySettings({ password }); break;
             case 'warehouse': result = await updateWarehouseSettings({ password }); break;
-            case 'bi': result = await updateBISettings({ password }); break;
             case 'lab': 
                 const labSet = await getLabSettings();
                 result = await updateLabSettings({ ...labSet, password });
@@ -128,7 +126,6 @@ export function ModuleSecurityManager() {
     { id: 'archiveInquiry', title: 'Consulta de Recursos', description: 'Acceso de solo lectura al archivo e inventario.', password: passwords.archiveInquiry || '', onSave: (p) => handleSave('archiveInquiry', p, 'Consulta Recursos') },
     { id: 'pharmacy', title: 'Gestión de Farmacia', description: 'Acceso al inventario y carga masiva.', password: passwords.pharmacy || '', onSave: (p) => handleSave('pharmacy', p, 'Farmacia') },
     { id: 'warehouse', title: 'Gestión de Almacén', description: 'Acceso al inventario de insumos generales.', password: passwords.warehouse || '', onSave: (p) => handleSave('warehouse', p, 'Almacén') },
-    { id: 'bi', title: 'Módulo BI', description: 'Acceso a Business Intelligence y estadísticas.', password: passwords.bi || '', onSave: (p) => handleSave('bi', p, 'BI') },
   ];
 
   if (isLoading) return <div className="p-12 flex justify-center"><Loader2 className="animate-spin h-12 w-12 text-primary" /></div>;
