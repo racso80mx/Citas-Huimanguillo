@@ -25,7 +25,6 @@ import {
   Eye,
   Calendar as CalendarIcon,
   FileText,
-  Filter,
   RefreshCw,
   AlertTriangle,
   DatabaseZap
@@ -45,7 +44,7 @@ import {
   getAnnouncements,
   getModuleSettings
 } from '@/lib/actions';
-import type { Patient, Appointment, Clinic, ArchiveCounts, ServiceType, Colonia, ModuleSettings } from '@/lib/definitions';
+import type { Patient, Appointment, Clinic, ArchiveCounts, ServiceType, Colonia } from '@/lib/definitions';
 import { PatientStatus as PatientStatusEnum } from '@/lib/definitions';
 import { PatientList } from './patient-list';
 import { MassUploadDialog } from './mass-upload-dialog';
@@ -172,17 +171,18 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
 
       const patientsData = await getPatients(searchOptions);
       
-      // SENIOR PERSISTENCIA: Mantener la selección acumulativa
+      // PERSISTENCIA SENIOR: Mantener selección acumulativa
+      // No borramos pacientes seleccionados de la lista local
       setPatients(prev => {
-          const alreadySelected = prev.filter(p => selectedPatientIds.includes(p.id));
-          const merged = [...patientsData];
+          const currentlySelected = prev.filter(p => selectedPatientIds.includes(p.id));
+          const newBatch = [...patientsData];
           
-          alreadySelected.forEach(sel => {
-              if (!merged.some(m => m.id === sel.id)) {
-                  merged.push(sel);
+          currentlySelected.forEach(sel => {
+              if (!newBatch.some(n => n.id === sel.id)) {
+                  newBatch.push(sel);
               }
           });
-          return merged;
+          return newBatch;
       });
       
       if (!manualSearch) setCurrentPage(1);
@@ -204,8 +204,8 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         const found = patients.find(p => String(p.expediente || '').trim() === term);
         if (found && !selectedPatientIds.includes(found.id)) {
             setSelectedPatientIds(prev => [...prev, found.id]);
-            toast({ title: "Marcado automático", description: `Expediente ${term} seleccionado.`, duration: 1500 });
-            setSearchExpediente(''); 
+            toast({ title: "Marcado automático", description: `Paciente ${found.name} seleccionado.`, duration: 1000 });
+            setSearchExpediente(''); // Limpiar para el siguiente escaneo
         }
     }
   }, [searchExpediente, patients, statusFilter, selectedPatientIds, toast]);
@@ -223,7 +223,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         const nameMatch = !sName || fullName.includes(sName);
         const curpMatch = !sCurp || p.curp.toUpperCase().includes(sCurp);
         
-        // En modo Baja Temporal no filtramos por expediente para permitir el marcado sucesivo
+        // En modo Baja Temporal no filtramos por expediente, solo permitimos el marcado automático
         if (statusFilter === PatientStatusEnum.Baja) return nameMatch && curpMatch;
 
         const expMatch = !sExp || String(p.expediente || '').includes(sExp);
@@ -266,7 +266,9 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
       if (selectedPatientIds.length === 0 || isReadOnly) return;
       const ids = [...selectedPatientIds];
       startSubmitTransition(async () => {
-          for (const id of ids) await updatePatientStatus(id, PatientStatusEnum.BajaDefinitiva);
+          for (const id of ids) {
+              await updatePatientStatus(id, PatientStatusEnum.BajaDefinitiva);
+          }
           setSelectedPatientIds([]);
           toast({ title: "Baja Definitiva Masiva", description: `${ids.length} registros movidos.` });
           loadData(true);
@@ -304,7 +306,7 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
         toast({ title: "Registro Guardado" });
         setIsEditOpen(false); setEditingPatient(null); loadData(true);
       } else {
-          toast({ title: 'Error', description: result.message, variant: 'destructive' });
+          toast({ title: 'Error al guardar', description: result.message, variant: 'destructive' });
       }
     });
   }
@@ -388,8 +390,8 @@ export function ArchiveDashboard({ onLogout, isReadOnly = false }: { onLogout: (
                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">Nombre o Apellidos</Label><Input placeholder="Buscar por nombre..." value={searchName} onChange={e => setSearchName(e.target.value.toUpperCase())} className="h-11 border-primary/20" /></div>
                     <div className="space-y-1.5"><Label className="text-[10px] font-black uppercase text-primary tracking-widest">CURP</Label><Input placeholder="CURP (18 carac)..." value={searchCurp} onChange={e => setSearchCurp(e.target.value.toUpperCase())} className="h-11 border-primary/20" maxLength={18} /></div>
                     <div className="space-y-1.5">
-                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">No. Expediente {statusFilter === PatientStatusEnum.Baja && "(Smart-Select)"}</Label>
-                        <Input placeholder="Expediente..." value={searchExpediente} onChange={e => setSearchExpediente(e.target.value)} className="h-11 border-primary/20" />
+                        <Label className="text-[10px] font-black uppercase text-primary tracking-widest">No. Expediente {statusFilter === PatientStatusEnum.Baja && "(Auto-Mark)"}</Label>
+                        <Input placeholder="Escribe para marcar..." value={searchExpediente} onChange={e => setSearchExpediente(e.target.value)} className="h-11 border-primary/20" />
                     </div>
                     <div className="flex gap-2 items-end">
                         <Button onClick={() => loadData(true)} className="h-11 flex-1 font-black bg-primary hover:bg-primary/90" disabled={isDataLoading}>{isDataLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Search className="h-4 w-4 mr-2" />} FILTRAR</Button>

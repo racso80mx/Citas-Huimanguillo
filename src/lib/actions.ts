@@ -26,8 +26,6 @@ import type {
     Colonia,
     ServiceType,
     Specialty,
-    Prescription,
-    PharmacyVoucher,
     Department
 } from './definitions';
 
@@ -126,11 +124,6 @@ export async function updatePatientStatus(id: string, s: string) {
     revalidatePath('/', 'layout');
     return res;
 }
-export async function deletePatient(id: string) { 
-    const res = await data.deletePatient(id);
-    revalidatePath('/', 'layout');
-    return res;
-}
 export async function deletePatients(ids: string[]) { 
     const res = await data.deletePatients(ids);
     revalidatePath('/', 'layout');
@@ -165,22 +158,27 @@ export async function updateAppointmentStatus(id: string, status: string, type: 
 }
 export async function deleteAppointment(id: string) {
     await data.deleteDoc(data.doc(data.adminDb, 'appointments', id));
+    revalidatePath('/', 'layout');
     return { success: true };
 }
 export async function deleteLabAppointment(id: string) {
     await data.deleteDoc(data.doc(data.adminDb, 'labAppointments', id));
+    revalidatePath('/', 'layout');
     return { success: true };
 }
 export async function deleteXRayAppointment(id: string) {
     await data.deleteDoc(data.doc(data.adminDb, 'xrayAppointments', id));
+    revalidatePath('/', 'layout');
     return { success: true };
 }
 export async function deleteUltrasoundAppointment(id: string) {
     await data.deleteDoc(data.doc(data.adminDb, 'ultrasoundAppointments', id));
+    revalidatePath('/', 'layout');
     return { success: true };
 }
 export async function deleteVaccineAppointment(id: string) {
     await data.deleteDoc(data.doc(data.adminDb, 'vaccineAppointments', id));
+    revalidatePath('/', 'layout');
     return { success: true };
 }
 
@@ -204,7 +202,6 @@ export async function updateClinics(c: Clinic[]) {
     revalidatePath('/', 'layout');
     return res;
 }
-export async function deleteClinic(id: string) { return data.deleteClinic(id); }
 export async function bulkInsertDoctors(items: any[]) { return data.bulkInsertDoctors(items); }
 
 export async function getColonias() { return data.getColoniasData(); }
@@ -252,6 +249,7 @@ export async function bulkInsertSupplies(items: any[]) { return data.bulkInsertS
 export async function deleteAllSupplies() { return data.deleteAllSupplies(); }
 
 export async function createPharmacyVoucher(v: any) { return data.createPharmacyVoucher(v); }
+export async function getPharmacyVouchers() { return data.getPharmacyVouchers(); }
 
 // --- CIE-10 ---
 export async function searchCie10(term: string) { return data.searchCie10(term); }
