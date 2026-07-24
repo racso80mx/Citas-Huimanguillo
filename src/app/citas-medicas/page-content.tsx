@@ -75,10 +75,15 @@ export default function PageContent({
   const [currentMonth, setCurrentMonth] = React.useState(new Date());
   const { toast } = useToast();
 
-  const normalize = (str: any) => {
+  // NORMALIZADOR BLINDADO
+  const normalize = useCallback((str: any) => {
     if (!str || typeof str !== 'string') return "";
-    return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-  };
+    try {
+        return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+    } catch (e) {
+        return String(str).toUpperCase().trim();
+    }
+  }, []);
 
   const generateDynamicTimeSlots = React.useCallback((startTimeStr: string, endTimeStr: string, duration: number): string[] => {
     const startHour = startTimeStr || "08:00";
@@ -166,7 +171,7 @@ export default function PageContent({
         });
       }
       return availabilityResult;
-  }, [generateDynamicTimeSlots, serviceTypes]);
+  }, [generateDynamicTimeSlots, serviceTypes, normalize]);
 
   const fetchAvailabilityForRange = React.useCallback(async (targetClinicId: string, startDate: Date, endDate: Date, cacheKey: string) => {
       setIsLoadingAvailability(true);
@@ -202,22 +207,17 @@ export default function PageContent({
 
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
-        const today = startOfToday();
-        const end = addDays(today, 60); 
-        fetchAvailabilityForRange(selectedClinicId, today, end, `${selectedClinicId}-initial`);
-    }
-  }, [isAuthenticated, selectedClinicId, fetchAvailabilityForRange]);
-
-  const handleMonthChange = (monthDate: Date) => {
-    setCurrentMonth(monthDate);
-    if (selectedClinicId) {
-        const start = startOfMonth(monthDate);
-        const end = endOfMonth(monthDate);
-        const cacheKey = `${selectedClinicId}-${format(monthDate, 'yyyy-MM')}`;
+        const start = startOfMonth(currentMonth);
+        const end = endOfMonth(addDays(start, 35)); 
+        const cacheKey = `${selectedClinicId}-${format(start, 'yyyy-MM')}`;
         if (!availabilityCache[cacheKey]) {
             fetchAvailabilityForRange(selectedClinicId, start, end, cacheKey);
         }
     }
+  }, [isAuthenticated, selectedClinicId, fetchAvailabilityForRange, currentMonth, availabilityCache]);
+
+  const handleMonthChange = (monthDate: Date) => {
+    setCurrentMonth(monthDate);
   };
 
   const handleDateSelect = (date: Date | undefined) => {
