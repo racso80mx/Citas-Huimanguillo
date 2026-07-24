@@ -25,7 +25,8 @@ import type {
     ServiceType,
     Specialty,
     Department,
-    AppointmentStatus
+    AppointmentStatus,
+    BISettings
 } from './definitions';
 
 // --- LOGS ---
@@ -47,6 +48,8 @@ export async function getPharmacySettings() { return data.getPharmacySettings();
 export async function updatePharmacySettings(s: PharmacySettings) { return data.updatePharmacySettings(s); }
 export async function getWarehouseSettings() { return data.getWarehouseSettings(); }
 export async function updateWarehouseSettings(s: WarehouseSettings) { return data.updateWarehouseSettings(s); }
+export async function getBISettings() { return data.getBISettings(); }
+export async function updateBISettings(s: BISettings) { return data.updateBISettings(s); }
 
 // --- ANUNCIOS ---
 export async function getAnnouncements() { return data.getAnnouncementsData(); }
@@ -93,6 +96,10 @@ export async function verifyUltrasoundPassword(p: string) {
 }
 export async function verifyVaccinePassword(p: string) {
     const s = await data.getVaccineSettings();
+    return s.password === p ? { success: true } : { success: false };
+}
+export async function verifyBIPassword(p: string) {
+    const s = await data.getBISettings();
     return s.password === p ? { success: true } : { success: false };
 }
 
@@ -169,9 +176,9 @@ export async function updateAppointmentStatus(id: string, status: AppointmentSta
 }
 
 export async function rescheduleAppointment(id: string, date: string, type: string, time: string) {
-    await data.rescheduleAppointment(id, date, type, time);
+    const res = await data.rescheduleAppointment(id, date, type, time);
     revalidatePath('/', 'layout');
-    return { success: true, message: 'Cita reprogramada exitosamente.' };
+    return res;
 }
 
 export async function cloneAppointment(id: string, date: string, type: string, time: string) {
@@ -241,8 +248,10 @@ export async function getConsultationsByPatientId(pid: string) { return data.get
 export async function getPrescriptionsByPatientId(pid: string) { return data.getPrescriptionsByPatientId(pid); }
 export async function getAttendedPatientsForClinic(cid: string) { return data.getAttendedPatientsForClinic(cid); }
 export async function getPatientPrescriptionsCountTodayAction(pid: string) { return data.getPatientPrescriptionsCountTodayAction(pid); }
+export async function deleteMedicalConsultation(id: string) { return data.deleteMedicalConsultation(id); }
 
 // --- MANTENIMIENTO Y BI ---
+export async function getBIData() { return data.getBIData(); }
 export async function getAppointmentCountOnDate(cid: string, d: string) { return data.getAppointmentCountOnDate(cid, d); }
 export async function applyStatusUpdateChunk(exps: string[], s: any) { return data.applyStatusUpdateChunk(exps, s); }
 export async function scanDuplicates(criteria: any) { return data.scanDuplicates(criteria); }
