@@ -75,6 +75,8 @@ export default function PageContent({
   const [currentMonth, setCurrentMonth] = React.useState(new Date());
   const { toast } = useToast();
 
+  const normalize = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+
   const generateDynamicTimeSlots = React.useCallback((startTimeStr: string, endTimeStr: string, duration: number): string[] => {
     const startHour = startTimeStr || "08:00";
     const endHour = endTimeStr || "14:00";
@@ -112,29 +114,27 @@ export default function PageContent({
         const dateString = format(day, 'yyyy-MM-dd'); 
         const dayMap = dayClinicMap.get(dateString);
         const dayBooked = dayMap ? (dayMap.get(clinic.id) || []) : [];
-        const dayName = dayNames[day.getDay()];
+        const dayName = normalize(dayNames[day.getDay()]);
         
         const isHoliday = holidaySet.has(dateString);
         const isWeekend = isSaturday(day) || isSunday(day);
-        
-        const clinicTypeName = serviceTypes.find(t => t.id === clinic.serviceTypeId)?.name || String(clinic.serviceTypeId);
+        const clinicTypeName = normalize(serviceTypes.find(t => t.id === clinic.serviceTypeId)?.name || String(clinic.serviceTypeId));
         
         const isSpecialActionDay = freshSpecialActionDays.some(sad => 
             sad.date === dateString && 
-            (String(sad.clinicType).toUpperCase() === String(clinic.serviceTypeId).toUpperCase() || 
-             sad.clinicType === "Consulta Externa" ||
-             String(clinicTypeName).toUpperCase() === String(sad.clinicType).toUpperCase())
+            (normalize(sad.clinicType) === normalize(clinic.serviceTypeId) || 
+             normalize(sad.clinicType) === "CONSULTA EXTERNA" ||
+             clinicTypeName === normalize(sad.clinicType))
         );
 
         const isDateBlocked = clinic.unavailableDates?.includes(dateString);
         const isWeekendBlocked = isWeekend && !clinic.weekendBookingEnabled;
         
         const effectiveDaysOfAction = (clinic.daysOfAction && clinic.daysOfAction.length > 0)
-            ? clinic.daysOfAction 
-            : ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
+            ? clinic.daysOfAction.map(normalize)
+            : ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"];
             
-        const isActionDay = !effectiveDaysOfAction.some(d => d.toUpperCase() === dayName.toUpperCase());
-
+        const isActionDay = !effectiveDaysOfAction.includes(dayName);
         const isBlocked = isDateBlocked || isHoliday || isWeekendBlocked || isSpecialActionDay || isActionDay;
 
         let availableSlotsForClinic = 0;

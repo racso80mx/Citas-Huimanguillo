@@ -273,15 +273,13 @@ export async function bulkInsertPatients(items: any[]) {
     return { success: true, addedCount: added, processedCount: added };
 }
 
-// --- CITAS (AGENDA) - FILTRADO HÍBRIDO ---
+// --- CITAS ---
 export async function getAppointmentsData(options?: { startDate?: string, endDate?: string }) {
     const start = options?.startDate ? Timestamp.fromDate(startOfDay(parseISO(options.startDate))) : Timestamp.fromDate(subMonths(new Date(), 1));
     const end = options?.endDate ? Timestamp.fromDate(endOfDay(parseISO(options.endDate))) : Timestamp.fromDate(addDays(new Date(), 60));
-    
     const q = query(collection(adminDb, 'appointments'), where('date', '>=', start), where('date', '<=', end), limit(5000));
     const snap = await getDocs(q);
     const results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-    
     return await hydrateAppointments(results);
 }
 
@@ -336,16 +334,8 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
     const curp = String(patient.curp).toUpperCase().trim();
     const batch = writeBatch(adminDb);
     batch.set(doc(adminDb, 'patients', curp), { ...patient, curp, nombreCompleto: `${patient.name} ${patient.paternalLastName} ${patient.maternalLastName}`.toUpperCase() }, { merge: true });
-    
     const id = uuidv4();
-    const appData = { 
-        ...appointment, 
-        patientId: curp, 
-        id, 
-        coloniaName, 
-        date: Timestamp.fromDate(parseISO(appointment.date)), 
-        createdAt: Timestamp.now() 
-    };
+    const appData = { ...appointment, patientId: curp, id, coloniaName, date: Timestamp.fromDate(parseISO(appointment.date)), createdAt: Timestamp.now() };
     batch.set(doc(adminDb, 'appointments', id), appData);
     await batch.commit();
     return { success: true, data: { ...appData, id } };
@@ -397,10 +387,7 @@ export async function updateAppointmentStatus(id: string, status: AppointmentSta
 export async function rescheduleAppointment(id: string, date: string, type: string, time: string) {
     const colls: any = { medical: 'appointments', lab: 'labAppointments', xray: 'xrayAppointments', ultrasound: 'ultrasoundAppointments', vaccine: 'vaccineAppointments' };
     const coll = colls[type] || 'appointments';
-    await updateDoc(doc(adminDb, coll, id), {
-        date: Timestamp.fromDate(parseISO(date)),
-        time: time
-    });
+    await updateDoc(doc(adminDb, coll, id), { date: Timestamp.fromDate(parseISO(date)), time });
     return { success: true };
 }
 
@@ -411,15 +398,7 @@ export async function cloneAppointment(id: string, date: string, type: string, t
     if (!snap.exists()) return { success: false, message: 'Cita no encontrada' };
     const original = snap.data();
     const newId = uuidv4();
-    const newData = {
-        ...original,
-        id: newId,
-        appointmentNumber: `${original.appointmentNumber}-CL`,
-        date: Timestamp.fromDate(parseISO(date)),
-        time: time,
-        createdAt: Timestamp.now(),
-        status: 'Agendada'
-    };
+    const newData = { ...original, id: newId, appointmentNumber: `${original.appointmentNumber}-CL`, date: Timestamp.fromDate(parseISO(date)), time, createdAt: Timestamp.now(), status: 'Agendada' };
     await setDoc(doc(adminDb, coll, newId), newData);
     return { success: true, message: 'Nueva cita clonada correctamente' };
 }
@@ -540,7 +519,7 @@ export async function updateDepartments(items: Department[]) {
     return { success: true };
 }
 
-// --- OTROS MÓDULOS (LAB, RX, US, VAC) ---
+// --- OTROS MÓDULOS ---
 export async function getLabSettings() {
     const s = await getDoc(doc(adminDb, 'settings', 'labSettings'));
     return s.exists() ? serializeData(s.data()) : { dailySlots: 10, waitlistSlots: 0, weekendBookingEnabled: false, password: '123' };
@@ -587,16 +566,7 @@ export async function bulkInsertMedications(items: any[], source: string = 'IMSS
     let processed = 0;
     for (const item of items) {
         const id = uuidv4();
-        const data = {
-            id,
-            claveCuadroBasico: String(item.Clave || item.claveCuadroBasico || '').toUpperCase(),
-            descripcion: String(item.Denominación || item.descripcion || '').toUpperCase(),
-            existencia: parseInt(item.Existencia || item.existencia) || 0,
-            lote: String(item.Lote || item.lote || 'N/A').toUpperCase(),
-            fechaCaducidad: String(item.Caducidad || item.fechaCaducidad || 'S/F'),
-            fuenteFinanciamiento: source,
-            fuenteEtiqueta: source
-        };
+        const data = { id, claveCuadroBasico: String(item.Clave || item.claveCuadroBasico || '').toUpperCase(), descripcion: String(item.Denominación || item.descripcion || '').toUpperCase(), existencia: parseInt(item.Existencia || item.existencia) || 0, lote: String(item.Lote || item.lote || 'N/A').toUpperCase(), fechaCaducidad: String(item.Caducidad || item.fechaCaducidad || 'S/F'), fuenteEtiqueta: source };
         b.set(doc(adminDb, 'medications', id), data);
         processed++;
     }
@@ -627,10 +597,7 @@ export async function createPharmacyVoucher(v: any) {
     const folio = `VAL-${uuidv4().split('-')[0].toUpperCase()}`;
     const batch = writeBatch(adminDb);
     batch.set(doc(adminDb, 'pharmacyVouchers', id), { ...v, id, folio, createdAt: Timestamp.now() });
-    
-    for (const item of v.items) {
-        batch.update(doc(adminDb, 'medications', item.medicationId), { existencia: increment(-item.quantity) });
-    }
+    for (const item of v.items) { batch.update(doc(adminDb, 'medications', item.medicationId), { existencia: increment(-item.quantity) }); }
     await batch.commit();
     return { success: true, folio };
 }
@@ -655,9 +622,7 @@ export async function updatePrescription(id: string, data: any) {
 export async function dispensePrescription(id: string, items: { medicationId: string, quantity: number }[]) {
     const batch = writeBatch(adminDb);
     batch.update(doc(adminDb, 'prescriptions', id), { status: 'surtida', dispensedAt: Timestamp.now() });
-    for (const item of items) {
-        batch.update(doc(adminDb, 'medications', item.medicationId), { existencia: increment(-item.quantity) });
-    }
+    for (const item of items) { batch.update(doc(adminDb, 'medications', item.medicationId), { existencia: increment(-item.quantity) }); }
     await batch.commit();
     return { success: true };
 }
@@ -679,9 +644,7 @@ export async function deletePrescription(id: string) { await deleteDoc(doc(admin
 export async function saveMedicalConsultation(c: any) {
     const id = c.id || uuidv4();
     await setDoc(doc(adminDb, 'medicalConsultations', id), { ...c, id, createdAt: Timestamp.now() }, { merge: true });
-    if (c.isFinal) {
-        await updateDoc(doc(adminDb, 'appointments', c.appointmentId), { status: 'Atendido' });
-    }
+    if (c.isFinal) { await updateDoc(doc(adminDb, 'appointments', c.appointmentId), { status: 'Atendido' }); }
     return { success: true, id };
 }
 export async function getConsultationByAppointmentId(aid: string) {
@@ -721,24 +684,9 @@ export async function getPrescriptionsByPatientId(pid: string) {
 // --- BI ---
 export async function getBIData() {
   const [apps, lab, xr, us, vac, clinics, colonias] = await Promise.all([
-    getAppointmentsData(),
-    getLabAppointmentsData(),
-    getXRayAppointmentsData(),
-    getUltrasoundAppointmentsData(),
-    getVaccineAppointmentsData(),
-    getClinicsData(),
-    getColoniasData(),
+    getAppointmentsData(), getLabAppointmentsData(), getXRayAppointmentsData(), getUltrasoundAppointmentsData(), getVaccineAppointmentsData(), getClinicsData(), getColoniasData(),
   ]);
-
-  return {
-    appointments: apps,
-    labAppointments: lab,
-    xRayAppointments: xr,
-    ultrasoundAppointments: us,
-    vaccineAppointments: vac,
-    clinics,
-    colonias,
-  };
+  return { appointments: apps, labAppointments: lab, xRayAppointments: xr, ultrasoundAppointments: us, vaccineAppointments: vac, clinics, colonias };
 }
 
 // --- ANUNCIOS ---
@@ -797,13 +745,9 @@ export async function scanDuplicates(criteria: 'expediente' | 'curp' | 'name') {
         if (criteria === 'expediente') key = p.expediente || '';
         else if (criteria === 'curp') key = p.curp;
         else key = `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase();
-        if (key && key.length > 2) {
-            if (!map.has(key)) map.set(key, []);
-            map.get(key)!.push(p);
-        }
+        if (key && key.length > 2) { if (!map.has(key)) map.set(key, []); map.get(key)!.push(p); }
     });
-    const dupes = Array.from(map.values()).filter(g => g.length > 1);
-    return serializeData(dupes);
+    return serializeData(Array.from(map.values()).filter(g => g.length > 1));
 }
 
 export async function normalizeExpedientesAction() {
@@ -812,13 +756,9 @@ export async function normalizeExpedientesAction() {
     let count = 0;
     snap.forEach(d => {
         const exp = String(d.data().expediente || '');
-        if (exp && exp.length > 0 && exp.length < 5) {
-            b.update(d.ref, { expediente: exp.padStart(5, '0') });
-            count++;
-        }
+        if (exp && exp.length > 0 && exp.length < 5) { b.update(d.ref, { expediente: exp.padStart(5, '0') }); count++; }
     });
-    await b.commit();
-    return { success: true, count };
+    await b.commit(); return { success: true, count };
 }
 
 export async function rebuildNombreCompletoAction() {
@@ -831,8 +771,7 @@ export async function rebuildNombreCompletoAction() {
         b.update(d.ref, { nombreCompleto: nc });
         count++;
     });
-    await b.commit();
-    return { success: true, count };
+    await b.commit(); return { success: true, count };
 }
 
 export async function cleanupOldRecords() {
@@ -845,13 +784,9 @@ export async function cleanupOldRecords() {
         let batchCount = 0;
         snap.forEach(d => {
             const date = d.data().date;
-            if (date && date < limitDate) {
-                b.delete(d.ref);
-                batchCount++;
-            }
+            if (date && date < limitDate) { b.delete(d.ref); batchCount++; }
         });
-        await b.commit();
-        total += batchCount;
+        await b.commit(); total += batchCount;
     }
     return { success: true, deletedCount: total };
 }
@@ -859,10 +794,7 @@ export async function cleanupOldRecords() {
 export async function downloadBackupAction() {
     const collections = ['patients', 'appointments', 'labAppointments', 'xrayAppointments', 'ultrasoundAppointments', 'vaccineAppointments', 'clinics'];
     const result: any = {};
-    for (const c of collections) {
-        const snap = await getDocs(collection(adminDb, c));
-        result[c] = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-    }
+    for (const c of collections) { const snap = await getDocs(collection(adminDb, c)); result[c] = snap.docs.map(d => ({ ...d.data(), id: d.id })); }
     return { success: true, data: serializeData(result) };
 }
 
@@ -872,11 +804,9 @@ export async function getAvailableSlotsForDate(clinicId: string, dateIso: string
     const q = query(collection(adminDb, 'appointments'), where('date', '>=', start), where('date', '<=', end));
     const snap = await getDocs(q);
     const booked = snap.docs.map(d => d.data()).filter((a: any) => a.clinicId === clinicId);
-    
     const clinicSnap = await getDoc(doc(adminDb, 'clinics', clinicId));
     if (!clinicSnap.exists()) return { timeSlots: [], tokens: [] };
     const clinic = clinicSnap.data() as Clinic;
-    
     if (clinic.bookingMode === BookingMode.Time) {
         const slots: string[] = [];
         let curr = new Date(`1970-01-01T${clinic.startTime || '08:00'}:00`);
@@ -890,9 +820,7 @@ export async function getAvailableSlotsForDate(clinicId: string, dateIso: string
     } else {
         const total = (clinic.dailySlots || 15) + (clinic.waitlistSlots || 0);
         const free: number[] = [];
-        for (let i = 1; i <= total; i++) {
-            if (!booked.some((a: any) => a.time === `Ficha ${i}`)) free.push(i);
-        }
+        for (let i = 1; i <= total; i++) { if (!booked.some((a: any) => a.time === `Ficha ${i}`)) free.push(i); }
         return { tokens: free };
     }
 }
