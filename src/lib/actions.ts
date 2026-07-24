@@ -143,11 +143,31 @@ export async function deleteXRayAppointment(id: string) { return data.deleteXRay
 export async function deleteUltrasoundAppointment(id: string) { return data.deleteUltrasoundAppointment(id); }
 export async function deleteVaccineAppointment(id: string) { return data.deleteVaccineAppointment(id); }
 
-export async function saveNewAppointment(a: any, p: any, d: boolean, c?: string) { return data.saveNewAppointment(a, p, d, c); }
-export async function saveNewLabAppointment(a: any, p: any) { return data.saveNewLabAppointment(a, p); }
-export async function saveNewXRayAppointment(a: any, p: any) { return data.saveNewXRayAppointment(a, p); }
-export async function saveNewUltrasoundAppointment(a: any, p: any) { return data.saveNewUltrasoundAppointment(a, p); }
-export async function saveNewVaccineAppointment(a: any, p: any) { return data.saveNewVaccineAppointment(a, p); }
+export async function saveNewAppointment(a: any, p: any, d: boolean, c?: string) { 
+    const res = await data.saveNewAppointment(a, p, d, c);
+    revalidatePath('/', 'layout');
+    return res;
+}
+export async function saveNewLabAppointment(a: any, p: any) { 
+    const res = await data.saveNewLabAppointment(a, p);
+    revalidatePath('/', 'layout');
+    return res;
+}
+export async function saveNewXRayAppointment(a: any, p: any) { 
+    const res = await data.saveNewXRayAppointment(a, p);
+    revalidatePath('/', 'layout');
+    return res;
+}
+export async function saveNewUltrasoundAppointment(a: any, p: any) { 
+    const res = await data.saveNewUltrasoundAppointment(a, p);
+    revalidatePath('/', 'layout');
+    return res;
+}
+export async function saveNewVaccineAppointment(a: any, p: any) { 
+    const res = await data.saveNewVaccineAppointment(a, p);
+    revalidatePath('/', 'layout');
+    return res;
+}
 
 export async function updateAppointmentStatus(id: string, status: AppointmentStatus, type: string) { 
     const res = await data.updateAppointmentStatus(id, status, type);
@@ -203,21 +223,26 @@ export async function updateDepartments(items: Department[]) { return data.updat
 // --- CONSULTAS Y RECETAS ---
 export async function getConsultationsByPatientId(pid: string) { return data.getConsultationsByPatientId(pid); }
 export async function getConsultationByAppointmentId(aid: string) { return data.getConsultationByAppointmentId(aid); }
-export async function saveMedicalConsultation(c: any) { return data.saveMedicalConsultation(c); }
+export async function saveMedicalConsultation(c: any) { 
+    const res = await data.saveMedicalConsultation(c);
+    revalidatePath('/', 'layout');
+    return res;
+}
 export async function deleteMedicalConsultation(id: string) { return data.deleteMedicalConsultation(id); }
 export async function getAttendedPatientsForClinic(id: string) { return data.getAttendedPatientsForClinic(id); }
 
 export async function createPrescription(p: any) { return data.createPrescription(p); }
 export async function updatePrescription(id: string, d: any) { return data.updatePrescription(id, d); }
 export async function deletePrescription(id: string) { return data.deletePrescription(id); }
-export async function dispensePrescription(id: string, items: any[]) { return data.dispensePrescription(id, items); }
+export async function dispensePrescription(id: string, items: any[]) { 
+    const res = await data.dispensePrescription(id, items);
+    revalidatePath('/', 'layout');
+    return res;
+}
 export async function getPrescriptionsByPatientId(pid: string) { return data.getPrescriptionsByPatientId(pid); }
 export async function getPendingPrescriptions(filters: any) { return data.getPendingPrescriptions(filters); }
 export async function getPrescriptionHistory(filters: any) { return data.getPrescriptionHistory(filters); }
 export async function getPatientPrescriptionsCountTodayAction(pid: string) { return data.getPatientPrescriptionsCountTodayAction(pid); }
-
-// --- BI (ELIMINADO) ---
-export async function getBIData() { return data.getBIData(); }
 
 // --- FARMACIA ---
 export async function getMedications() { return data.getMedications(); }

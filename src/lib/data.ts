@@ -358,12 +358,16 @@ export async function getAppointmentsForClinic(id: string) {
     const start = Timestamp.fromDate(subMonths(new Date(), 1));
     const q = query(
         collection(adminDb, 'appointments'), 
-        where('clinicId', '==', id), 
         where('date', '>=', start),
-        limit(2000)
+        limit(5000)
     );
     const snap = await getDocs(q);
-    return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+    // Filtrado manual por clinicId para evitar requerir índice compuesto
+    const results = snap.docs
+        .map(d => ({ ...d.data(), id: d.id }))
+        .filter((app: any) => app.clinicId === id);
+        
+    return await hydrateAppointments(results);
 }
 
 export async function deleteAppointment(id: string) {
@@ -377,16 +381,20 @@ export async function saveNewAppointment(appointment: any, patient: any, isDoubl
     const start = Timestamp.fromDate(startOfDay(dateObj));
     const end = Timestamp.fromDate(endOfDay(dateObj));
     
-    const qDuplicate = query(
+    // Validación de duplicados usando filtrado híbrido para evitar error de índices
+    const qDay = query(
         collection(adminDb, 'appointments'),
-        where('patientId', '==', normalized.id),
-        where('clinicId', '==', appointment.clinicId),
         where('date', '>=', start),
         where('date', '<=', end)
     );
     
-    const duplicateSnap = await getDocs(qDuplicate);
-    if (!duplicateSnap.empty) {
+    const daySnap = await getDocs(qDay);
+    const isDuplicate = daySnap.docs.some(d => {
+        const data = d.data();
+        return data.patientId === normalized.id && data.clinicId === appointment.clinicId;
+    });
+
+    if (isDuplicate) {
         return { success: false, error: 'Este paciente ya cuenta con una cita agendada hoy en este núcleo.' };
     }
 
@@ -655,12 +663,16 @@ export async function getAttendedPatientsForClinic(id: string) {
     const q = query(
         collection(adminDb, 'appointments'), 
         where('clinicId', '==', id), 
-        where('status', '==', 'Atendido'),
-        where('date', '>=', start),
-        limit(500)
+        limit(1000)
     );
     const snap = await getDocs(q);
-    const pIds = Array.from(new Set(snap.docs.map(d => d.data().patientId)));
+    const pIds = Array.from(new Set(
+        snap.docs
+            .map(d => d.data())
+            .filter(d => d.status === 'Atendido' && d.date.toDate() >= start.toDate())
+            .map(d => d.patientId)
+    ));
+    
     if (pIds.length === 0) return [];
     
     const CHUNK_SIZE = 30;
@@ -912,9 +924,20 @@ export async function getAvailableSlotsForDate(clinicId: string, date: string) {
     if (!clinicDoc.exists()) return {};
     const clinic = clinicDoc.data() as Clinic;
     
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId), where('date', '>=', Timestamp.fromDate(startOfDay(parseISO(dateStr)))), where('date', '<=', Timestamp.fromDate(endOfDay(parseISO(dateStr)))));
+    // Fix: Fetch by date range and filter by clinic in memory to avoid index requirement
+    const start = Timestamp.fromDate(startOfDay(parseISO(dateStr)));
+    const end = Timestamp.fromDate(endOfDay(parseISO(dateStr)));
+    
+    const q = query(
+        collection(adminDb, 'appointments'), 
+        where('date', '>=', start), 
+        where('date', '<=', end)
+    );
     const snap = await getDocs(q);
-    const booked = snap.docs.map(d => d.data().time);
+    const booked = snap.docs
+        .map(d => d.data())
+        .filter(d => d.clinicId === clinicId)
+        .map(d => d.time);
     
     if (clinic.bookingMode === BookingMode.Token) {
         const total = (clinic.dailySlots || 15) + (clinic.waitlistSlots || 0);
@@ -944,9 +967,12 @@ export async function getAvailableSlotsForDate(clinicId: string, date: string) {
 export async function getAppointmentCountOnDate(id: string, dateStr: string) {
     const start = Timestamp.fromDate(startOfDay(parseISO(dateStr)));
     const end = Timestamp.fromDate(endOfDay(dateStr));
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', id), where('date', '>=', start), where('date', '<=', end));
-    const s = await getCountFromServer(q);
-    return s.data().count;
+    
+    // Filtrado híbrido para evitar requerir índices compuestos
+    const q = query(collection(adminDb, 'appointments'), where('date', '>=', start), where('date', '<=', end));
+    const snap = await getDocs(q);
+    const count = snap.docs.filter(d => d.data().clinicId === id).length;
+    return count;
 }
 
 // --- MANTENIMIENTO ---
@@ -1091,8 +1117,4 @@ export async function updateVaccines(items: Vaccine[]) {
     items.forEach(i => b.set(doc(adminDb, 'vaccines', i.id), i));
     await b.commit();
     return { success: true };
-}
-
-export async function getBIData() {
-    return { appointments: [], labAppointments: [], xRayAppointments: [], ultrasoundAppointments: [], vaccineAppointments: [], clinics: [], colonias: [] };
 }
