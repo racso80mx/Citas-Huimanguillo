@@ -14,9 +14,7 @@ import {
   where,
   limit,
   orderBy,
-  documentId,
-  startAt,
-  endAt
+  documentId
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -204,7 +202,7 @@ export async function bulkInsertPatients(items: any[]) {
 export async function getAppointmentsData(options?: { startDate?: string, endDate?: string }) {
     const start = options?.startDate ? Timestamp.fromDate(startOfDay(parseISO(options.startDate))) : Timestamp.fromDate(subMonths(new Date(), 1));
     const end = options?.endDate ? Timestamp.fromDate(endOfDay(parseISO(options.endDate))) : Timestamp.fromDate(addDays(new Date(), 60));
-    const q = query(collection(adminDb, 'appointments'), where('date', '>=', start), where('date', '<=', end), limit(3000));
+    const q = query(collection(adminDb, 'appointments'), where('date', '>=', start), where('date', '<=', end), limit(5000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
@@ -242,8 +240,8 @@ export async function getVaccineAppointmentsData(options?: { startDate?: string,
 }
 
 export async function getAppointmentsForClinic(id: string) {
-    const start = Timestamp.fromDate(subMonths(new Date(), 2));
-    const q = query(collection(adminDb, 'appointments'), where('date', '>=', start), limit(4000));
+    const start = Timestamp.fromDate(subMonths(new Date(), 6));
+    const q = query(collection(adminDb, 'appointments'), where('date', '>=', start), limit(5000));
     const snap = await getDocs(q);
     const results = snap.docs.map(d => ({ ...d.data(), id: d.id })).filter((a: any) => a.clinicId === id);
     return await hydrateAppointments(results);
@@ -400,7 +398,7 @@ export async function dispensePrescription(id: string, items: any[]) {
     await b.commit(); return { success: true };
 }
 export async function getPendingPrescriptions(f?: any) {
-    let q = query(collection(adminDb, 'prescriptions'), where('status', '==', 'pendiente'), limit(50));
+    let q = query(collection(adminDb, 'prescriptions'), where('status', '==', 'pendiente'), limit(100));
     if (f?.folio) q = query(collection(adminDb, 'prescriptions'), where('folio', '==', f.folio.toUpperCase().trim()));
     const s = await getDocs(q);
     let results = s.docs.map(d => ({ ...d.data(), id: d.id } as Prescription));
@@ -420,7 +418,7 @@ export async function getConsultationByAppointmentId(aid: string) { const s = aw
 export async function deleteMedicalConsultation(id: string) { await deleteDoc(doc(adminDb, 'medicalConsultations', id)); return { success: true }; }
 
 export async function getAttendedPatientsForClinic(cid: string) {
-    const s = await getDocs(query(collection(adminDb, 'medicalConsultations'), where('clinicId', '==', cid), limit(500)));
+    const s = await getDocs(query(collection(adminDb, 'medicalConsultations'), where('clinicId', '==', cid), limit(1000)));
     const ids = Array.from(new Set(s.docs.map(d => d.data().patientId)));
     if (ids.length === 0) return [];
     const pSnap = await getDocs(query(collection(adminDb, 'patients'), where(documentId(), 'in', ids.slice(0, 30))));
@@ -516,7 +514,7 @@ export async function rebuildNombreCompletoAction() {
 }
 
 export async function cleanupOldRecords() {
-    const limit = Timestamp.fromDate(subMonths(new Date(), 2));
+    const limit = Timestamp.fromDate(subMonths(new Date(), 4));
     const colls = ['appointments', 'labAppointments', 'xrayAppointments', 'ultrasoundAppointments', 'vaccineAppointments', 'activityLog'];
     let total = 0;
     for (const c of colls) {

@@ -75,7 +75,7 @@ export default function PageContent({
   const [currentMonth, setCurrentMonth] = React.useState(new Date());
   const { toast } = useToast();
 
-  // NORMALIZADOR BLINDADO
+  // NORMALIZADOR BLINDADO CONTRA TYPEERRORS
   const normalize = useCallback((str: any) => {
     if (!str || typeof str !== 'string') return "";
     try {
@@ -208,7 +208,7 @@ export default function PageContent({
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
         const start = startOfMonth(currentMonth);
-        const end = endOfMonth(addDays(start, 35)); 
+        const end = endOfMonth(addDays(start, 45)); 
         const cacheKey = `${selectedClinicId}-${format(start, 'yyyy-MM')}`;
         if (!availabilityCache[cacheKey]) {
             fetchAvailabilityForRange(selectedClinicId, start, end, cacheKey);
