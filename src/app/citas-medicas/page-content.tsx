@@ -204,7 +204,9 @@ export default function PageContent({
               });
               setAvailabilityCache(prev => ({ ...prev, [cacheKey]: targetAvail }));
           }
-      } catch (e) {} finally {
+      } catch (e) {
+          console.error("Fetch availability error", e);
+      } finally {
           setIsLoadingAvailability(false); 
       }
   }, [clinics, calculateForClinic, availabilityCache]);
