@@ -19,7 +19,7 @@ import { PatientType, BookingMode } from '@/lib/definitions';
 import { getAppointments, getClinics, getHolidays, verifyCitasMedicasPassword, getSpecialActionDays, getServiceTypes } from '@/lib/actions';
 
 import { useToast } from '@/hooks/use-toast';
-import { Bell, MapPin, Hospital, LayoutList, Clock, CalendarDays, CalendarPlus, Check, Loader2, RefreshCw } from 'lucide-react';
+import { Hospital, LayoutList, CalendarDays, CalendarPlus, Check, Loader2, RefreshCw, MapPin, Clock } from 'lucide-react';
 import { format, eachDayOfInterval, isSaturday, isSunday, startOfToday, addDays, isSameDay, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -93,7 +93,6 @@ export default function PageContent({
   }, []);
 
   const calculateForClinic = useCallback((clinic: Clinic, startDate: Date, endDate: Date, allAppointments: any[], holidaySet: Set<string>, freshSpecialActionDays: SpecialActionDay[]): DailyAvailability[] => {
-      // Agrupamos citas por Fecha -> Consultorio para evitar interferencias
       const dayClinicMap = new Map<string, Map<string, any[]>>();
       
       allAppointments.forEach(app => {
@@ -168,7 +167,6 @@ export default function PageContent({
   }, [generateDynamicTimeSlots, serviceTypes]);
 
   const fetchAvailabilityForRange = React.useCallback(async (targetClinicId: string, startDate: Date, endDate: Date, cacheKey: string) => {
-      // Verificamos si los datos del mes solicitado ya están en memoria
       if (availabilityCache[cacheKey]) {
           setAvailability(prev => {
               const combined = [...prev];
@@ -204,7 +202,6 @@ export default function PageContent({
                   });
                   return combined.sort((a,b) => a.date.localeCompare(b.date));
               });
-              // Guardamos en caché para navegación futura gratuita (Ahorro Firebase)
               setAvailabilityCache(prev => ({ ...prev, [cacheKey]: targetAvail }));
           }
       } catch (e) {} finally {
@@ -214,7 +211,6 @@ export default function PageContent({
 
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
-        // Carga inicial extendida para cubrir 7 días rápidos y calendario
         const today = startOfToday();
         const end = addDays(today, 60); 
         fetchAvailabilityForRange(selectedClinicId, today, end, `${selectedClinicId}-initial`);

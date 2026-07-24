@@ -5,7 +5,6 @@ import { revalidatePath } from 'next/cache';
 import * as data from './data';
 import type { 
     Patient, 
-    Appointment, 
     Holiday, 
     SpecialActionDay, 
     LabStudy, 
@@ -121,6 +120,7 @@ export async function deletePatients(ids: string[]) {
     return res;
 }
 export async function getPatientByCURP(c: string) { return data.getPatientByCURP(c); }
+export async function bulkInsertPatients(items: any[]) { return data.bulkInsertPatients(items); }
 
 // --- CITAS ---
 export async function getAppointments(options?: { startDate?: string, endDate?: string }) { return data.getAppointmentsData(options); }
@@ -130,31 +130,11 @@ export async function getUltrasoundAppointments(options?: { startDate?: string, 
 export async function getVaccineAppointments(options?: { startDate?: string, endDate?: string }) { return data.getVaccineAppointmentsData(options); }
 export async function getAppointmentsForClinic(id: string) { return data.getAppointmentsForClinic(id); }
 
-export async function deleteAppointment(id: string) { 
-    const res = await data.deleteAppointment(id);
-    revalidatePath('/', 'layout');
-    return res;
-}
-export async function deleteLabAppointment(id: string) { 
-    const res = await data.deleteLabAppointment(id);
-    revalidatePath('/', 'layout');
-    return res;
-}
-export async function deleteXRayAppointment(id: string) { 
-    const res = await data.deleteXRayAppointment(id);
-    revalidatePath('/', 'layout');
-    return res;
-}
-export async function deleteUltrasoundAppointment(id: string) { 
-    const res = await data.deleteUltrasoundAppointment(id);
-    revalidatePath('/', 'layout');
-    return res;
-}
-export async function deleteVaccineAppointment(id: string) { 
-    const res = await data.deleteVaccineAppointment(id);
-    revalidatePath('/', 'layout');
-    return res;
-}
+export async function deleteAppointment(id: string) { await data.deleteAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
+export async function deleteLabAppointment(id: string) { await data.deleteLabAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
+export async function deleteXRayAppointment(id: string) { await data.deleteXRayAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
+export async function deleteUltrasoundAppointment(id: string) { await data.deleteUltrasoundAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
+export async function deleteVaccineAppointment(id: string) { await data.deleteVaccineAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
 
 export async function saveNewAppointment(a: any, p: any, d: boolean, c?: string) { 
     const res = await data.saveNewAppointment(a, p, d, c);
@@ -188,10 +168,27 @@ export async function updateAppointmentStatus(id: string, status: AppointmentSta
     return res;
 }
 
+export async function rescheduleAppointment(id: string, date: string, type: string, time: string) {
+    await data.rescheduleAppointment(id, date, type, time);
+    revalidatePath('/', 'layout');
+    return { success: true, message: 'Cita reprogramada exitosamente.' };
+}
+
+export async function cloneAppointment(id: string, date: string, type: string, time: string) {
+    const res = await data.cloneAppointment(id, date, type, time);
+    revalidatePath('/', 'layout');
+    return res;
+}
+
 // --- CATALOGOS ---
 export async function getClinics() { return data.getClinicsData(); }
 export async function updateClinics(c: Clinic[]) { 
     const res = await data.updateClinics(c);
+    revalidatePath('/', 'layout');
+    return res;
+}
+export async function bulkInsertDoctors(items: any[]) { 
+    const res = await data.bulkInsertDoctors(items);
     revalidatePath('/', 'layout');
     return res;
 }
@@ -219,9 +216,63 @@ export async function updateSpecialActionDays(items: SpecialActionDay[]) { retur
 export async function getDepartments() { return data.getDepartmentsData(); }
 export async function updateDepartments(items: Department[]) { return data.updateDepartments(items); }
 
-// --- CONSULTAS Y RECETAS ---
+// --- FARMACIA ---
+export async function getMedications() { return data.getMedications(); }
+export async function bulkInsertMedications(items: any[], source: string = 'IMSS-BIENESTAR') { return data.bulkInsertMedications(items, source); }
+export async function deleteMedicationsBySource(source: string) { return data.deleteMedicationsBySource(source); }
+export async function deleteAllMedications() { return data.deleteAllMedications(); }
+export async function getSupplies() { return data.getSupplies(); }
+export async function bulkInsertSupplies(items: any[]) { return data.bulkInsertSupplies(items); }
+export async function deleteAllSupplies() { return data.deleteAllSupplies(); }
+export async function createPharmacyVoucher(v: any) { return data.createPharmacyVoucher(v); }
+export async function getPharmacyVouchers() { return data.getPharmacyVouchers(); }
+
+// --- RECETAS Y CONSULTAS ---
+export async function createPrescription(p: any) { return data.createPrescription(p); }
+export async function updatePrescription(id: string, data: any) { return data.updatePrescription(id, data); }
+export async function dispensePrescription(id: string, items: any[]) { return data.dispensePrescription(id, items); }
+export async function getPendingPrescriptions(filters?: any) { return data.getPendingPrescriptions(filters); }
+export async function getPrescriptionHistory(options?: any) { return data.getPrescriptionHistory(options); }
+export async function deletePrescription(id: string) { return data.deletePrescription(id); }
+
+export async function saveMedicalConsultation(c: any) { return data.saveMedicalConsultation(c); }
+export async function getConsultationByAppointmentId(aid: string) { return data.getConsultationByAppointmentId(aid); }
 export async function getConsultationsByPatientId(pid: string) { return data.getConsultationsByPatientId(pid); }
 export async function getPrescriptionsByPatientId(pid: string) { return data.getPrescriptionsByPatientId(pid); }
-export async function searchCie10(term: string) { return data.searchCie10(term); }
+export async function getAttendedPatientsForClinic(cid: string) { return data.getAttendedPatientsForClinic(cid); }
+export async function getPatientPrescriptionsCountTodayAction(pid: string) { return data.getPatientPrescriptionsCountTodayAction(pid); }
 
-export async function getAvailableSlotsForDate(clinicId: string, date: string) { return data.getAvailableSlotsForDate(clinicId, date); }
+// --- MANTENIMIENTO Y BI ---
+export async function getAppointmentCountOnDate(cid: string, d: string) { return data.getAppointmentCountOnDate(cid, d); }
+export async function applyStatusUpdateChunk(exps: string[], s: any) { return data.applyStatusUpdateChunk(exps, s); }
+export async function scanDuplicates(criteria: any) { return data.scanDuplicates(criteria); }
+export async function normalizeExpedientesAction() { return data.normalizeExpedientesAction(); }
+export async function rebuildNombreCompletoAction() { return data.rebuildNombreCompletoAction(); }
+export async function cleanupOldRecords() { return data.cleanupOldRecords(); }
+export async function downloadBackupAction() { return data.downloadBackupAction(); }
+export async function getAvailableSlotsForDate(cid: string, d: string) { return data.getAvailableSlotsForDate(cid, d); }
+export async function searchCie10(t: string) { return data.searchCie10(t); }
+export async function bulkInsertCie10Glossary(i: any[]) { return data.bulkInsertCie10Glossary(i); }
+export async function bulkInsertCie10Catalog(i: any[]) { return data.bulkInsertCie10Catalog(i); }
+export async function deleteAllCie10Glossary() { return data.deleteAllCie10Glossary(); }
+export async function deleteAllCie10Catalog() { return data.deleteAllCie10Catalog(); }
+
+export async function getLabSettings() { return data.getLabSettings(); }
+export async function updateLabSettings(s: any) { return data.updateLabSettings(s); }
+export async function getLabStudies() { return data.getLabStudies(); }
+export async function updateLabStudies(i: any[]) { return data.updateLabStudies(i); }
+
+export async function getXRaySettings() { return data.getXRaySettings(); }
+export async function updateXRaySettings(s: any) { return data.updateXRaySettings(s); }
+export async function getXRayStudies() { return data.getXRayStudies(); }
+export async function updateXRayStudies(i: any[]) { return data.updateXRayStudies(i); }
+
+export async function getUltrasoundSettings() { return data.getUltrasoundSettings(); }
+export async function updateUltrasoundSettings(s: any) { return data.updateUltrasoundSettings(s); }
+export async function getUltrasoundStudies() { return data.getUltrasoundStudies(); }
+export async function updateUltrasoundStudies(i: any[]) { return data.updateUltrasoundStudies(i); }
+
+export async function getVaccineSettings() { return data.getVaccineSettings(); }
+export async function updateVaccineSettings(s: any) { return data.updateVaccineSettings(s); }
+export async function getVaccines() { return data.getVaccines(); }
+export async function updateVaccines(i: any[]) { return data.updateVaccines(i); }
