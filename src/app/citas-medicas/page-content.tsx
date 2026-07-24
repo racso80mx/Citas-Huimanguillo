@@ -75,7 +75,7 @@ export default function PageContent({
   const [currentMonth, setCurrentMonth] = React.useState(new Date());
   const { toast } = useToast();
 
-  // NORMALIZADOR BLINDADO CONTRA TYPEERRORS
+  // NORMALIZADOR BLINDADO CONTRA TYPEERRORS Y DATOS NULOS
   const normalize = useCallback((str: any) => {
     if (!str || typeof str !== 'string') return "";
     try {
@@ -205,16 +205,19 @@ export default function PageContent({
       }
   }, [clinics, calculateForClinic]);
 
+  // EFECTO DE SINCRONIZACIÓN REACTIVA AL CAMBIO DE MES Y CONSULTORIO
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
         const start = startOfMonth(currentMonth);
         const end = endOfMonth(addDays(start, 45)); 
         const cacheKey = `${selectedClinicId}-${format(start, 'yyyy-MM')}`;
+        
+        // Siempre sincronizamos si no hay cache para el mes visible
         if (!availabilityCache[cacheKey]) {
             fetchAvailabilityForRange(selectedClinicId, start, end, cacheKey);
         }
     }
-  }, [isAuthenticated, selectedClinicId, fetchAvailabilityForRange, currentMonth, availabilityCache]);
+  }, [isAuthenticated, selectedClinicId, currentMonth, availabilityCache, fetchAvailabilityForRange]);
 
   const handleMonthChange = (monthDate: Date) => {
     setCurrentMonth(monthDate);
