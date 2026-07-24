@@ -75,7 +75,10 @@ export default function PageContent({
   const [currentMonth, setCurrentMonth] = React.useState(new Date());
   const { toast } = useToast();
 
-  const normalize = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+  const normalize = (str: any) => {
+    if (!str || typeof str !== 'string') return "";
+    return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+  };
 
   const generateDynamicTimeSlots = React.useCallback((startTimeStr: string, endTimeStr: string, duration: number): string[] => {
     const startHour = startTimeStr || "08:00";
@@ -83,9 +86,10 @@ export default function PageContent({
     const slotDuration = duration || 30;
     const slots: string[] = [];
     try {
-        const start = new Date(`1970-01-01T${startHour}:00`);
-        const end = new Date(`1970-01-01T${endHour}:00`);
-        let current = start;
+        const [sH, sM] = startHour.split(':').map(Number);
+        const [eH, eM] = endHour.split(':').map(Number);
+        let current = new Date(1970, 0, 1, sH, sM);
+        const end = new Date(1970, 0, 1, eH, eM);
         while (current < end) {
             slots.push(current.toTimeString().substring(0, 5));
             current = new Date(current.getTime() + slotDuration * 60000);
@@ -95,30 +99,28 @@ export default function PageContent({
   }, []);
 
   const calculateForClinic = useCallback((clinic: Clinic, startDate: Date, endDate: Date, allAppointments: any[], holidaySet: Set<string>, freshSpecialActionDays: SpecialActionDay[]): DailyAvailability[] => {
-      const dayClinicMap = new Map<string, Map<string, any[]>>();
+      const dayClinicMap = new Map<string, any[]>();
       
       allAppointments.forEach(app => {
-          if (!app.date || !app.clinicId) return;
+          if (!app.date || !app.clinicId || app.clinicId !== clinic.id) return;
           const d = app.date.split('T')[0];
-          if (!dayClinicMap.has(d)) dayClinicMap.set(d, new Map());
-          const clinicMap = dayClinicMap.get(d)!;
-          if (!clinicMap.has(app.clinicId)) clinicMap.set(app.clinicId, []);
-          clinicMap.get(app.clinicId)!.push(app);
+          if (!dayClinicMap.has(d)) dayClinicMap.set(d, []);
+          dayClinicMap.get(d)!.push(app);
       });
 
-      const dayNames = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+      const dayNames = ["DOMINGO", "LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"];
       const availabilityResult: DailyAvailability[] = [];
       const daysInInterval = eachDayOfInterval({ start: startDate, end: endDate });
 
       for (const day of daysInInterval) {
         const dateString = format(day, 'yyyy-MM-dd'); 
-        const dayMap = dayClinicMap.get(dateString);
-        const dayBooked = dayMap ? (dayMap.get(clinic.id) || []) : [];
-        const dayName = normalize(dayNames[day.getDay()]);
+        const dayBooked = dayClinicMap.get(dateString) || [];
+        const dayIndex = day.getDay();
+        const dayName = dayNames[dayIndex];
         
         const isHoliday = holidaySet.has(dateString);
         const isWeekend = isSaturday(day) || isSunday(day);
-        const clinicTypeName = normalize(serviceTypes.find(t => t.id === clinic.serviceTypeId)?.name || String(clinic.serviceTypeId));
+        const clinicTypeName = normalize(serviceTypes.find(t => t.id === clinic.serviceTypeId)?.name || clinic.serviceTypeId);
         
         const isSpecialActionDay = freshSpecialActionDays.some(sad => 
             sad.date === dateString && 
@@ -131,7 +133,7 @@ export default function PageContent({
         const isWeekendBlocked = isWeekend && !clinic.weekendBookingEnabled;
         
         const effectiveDaysOfAction = (clinic.daysOfAction && clinic.daysOfAction.length > 0)
-            ? clinic.daysOfAction.map(normalize)
+            ? clinic.daysOfAction.map(d => normalize(d))
             : ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"];
             
         const isActionDay = !effectiveDaysOfAction.includes(dayName);
@@ -167,19 +169,6 @@ export default function PageContent({
   }, [generateDynamicTimeSlots, serviceTypes]);
 
   const fetchAvailabilityForRange = React.useCallback(async (targetClinicId: string, startDate: Date, endDate: Date, cacheKey: string) => {
-      if (availabilityCache[cacheKey]) {
-          setAvailability(prev => {
-              const combined = [...prev];
-              availabilityCache[cacheKey].forEach(item => {
-                  const idx = combined.findIndex(c => c.date === item.date);
-                  if (idx >= 0) combined[idx] = item;
-                  else combined.push(item);
-              });
-              return combined.sort((a,b) => a.date.localeCompare(b.date));
-          });
-          return;
-      }
-
       setIsLoadingAvailability(true);
       try {
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
@@ -209,7 +198,7 @@ export default function PageContent({
       } finally {
           setIsLoadingAvailability(false); 
       }
-  }, [clinics, calculateForClinic, availabilityCache]);
+  }, [clinics, calculateForClinic]);
 
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
@@ -225,7 +214,9 @@ export default function PageContent({
         const start = startOfMonth(monthDate);
         const end = endOfMonth(monthDate);
         const cacheKey = `${selectedClinicId}-${format(monthDate, 'yyyy-MM')}`;
-        fetchAvailabilityForRange(selectedClinicId, start, end, cacheKey);
+        if (!availabilityCache[cacheKey]) {
+            fetchAvailabilityForRange(selectedClinicId, start, end, cacheKey);
+        }
     }
   };
 
