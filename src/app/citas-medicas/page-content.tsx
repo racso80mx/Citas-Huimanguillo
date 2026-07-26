@@ -20,7 +20,7 @@ import { getAppointments, getClinics, getHolidays, verifyCitasMedicasPassword, g
 
 import { useToast } from '@/hooks/use-toast';
 import { Hospital, LayoutList, CalendarDays, CalendarPlus, Check, Loader2, RefreshCw, MapPin, Clock } from 'lucide-react';
-import { format, eachDayOfInterval, isSaturday, isSunday, startOfToday, addDays, isSameDay, startOfMonth, endOfMonth, parseISO, isValid } from 'date-fns';
+import { format, eachDayOfInterval, isSaturday, isSunday, startOfToday, addDays, isSameDay, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
   Select,
@@ -50,7 +50,6 @@ export default function PageContent({
     initialAnnouncements, 
     initialColonias, 
     initialClinics, 
-    initialHolidays, 
     initialServiceTypes,
 }: PageContentProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -331,6 +330,15 @@ export default function PageContent({
     return colonias.filter(c => c.clinicId === selectedClinicId).sort((a,b) => a.name.localeCompare(b.name));
   }, [colonias, selectedClinicId]);
 
+  // Transforma disponibilidad para el calendario basado en la selección actual
+  const calendarAvailability = useMemo(() => {
+    if (!selectedClinicId) return availability;
+    return availability.map(day => ({
+        ...day,
+        availableSlots: day.availabilityByClinic[selectedClinicId] ?? 0
+    }));
+  }, [availability, selectedClinicId]);
+
   if (!isAuthenticated) return <ModuleLoginForm title="Citas Médicas" onVerify={verifyCitasMedicasPassword} onSuccess={() => setIsAuthenticated(true)} />;
 
   return (
@@ -405,7 +413,7 @@ export default function PageContent({
                               <div className="mt-8 flex justify-center">
                                     <Popover>
                                         <PopoverTrigger asChild><Button variant="outline" className="h-10 px-8 font-bold border-dashed border-primary/40 text-primary">Buscar otra fecha en el Calendario</Button></PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0" align="center"><AvailabilityCalendar selectedDate={selectedDate} onDateSelect={handleDateSelect} availability={availability} onMonthChange={handleMonthChange} isLoading={isLoadingAvailability} /></PopoverContent>
+                                        <PopoverContent className="w-auto p-0" align="center"><AvailabilityCalendar selectedDate={selectedDate} onDateSelect={handleDateSelect} availability={calendarAvailability} onMonthChange={handleMonthChange} isLoading={isLoadingAvailability} /></PopoverContent>
                                     </Popover>
                               </div>
                           </CardContent>

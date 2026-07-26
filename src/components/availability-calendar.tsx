@@ -49,7 +49,7 @@ export function AvailabilityCalendar({
     }
   }, [selectedDate, monthToDisplay]);
 
-  // OPTIMIZACIÓN: Crear un Map de fechas deshabilitadas para búsqueda instantánea
+  // OPTIMIZACIÓN: Crear un Map de disponibilidad para búsqueda instantánea
   const availabilityMap = useMemo(() => {
       const map = new Map<string, number>();
       availability.forEach(d => {
@@ -75,7 +75,8 @@ export function AvailabilityCalendar({
   };
 
   const disabledDays = useMemo(() => {
-    // Si no hay datos de disponibilidad para este rango, permitimos que se vea pero mostramos cargando
+    // Los días sin disponibilidad en el mapa se consideran bloqueados
+    // Pero solo si ya tenemos datos para ese mes.
     const disabledByAvailability = availability
       .filter((d) => d.availableSlots === 0)
       .map((d) => parseISO(d.date));
