@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import React from 'react';
@@ -74,11 +75,12 @@ export default function PageContent({
   const { toast } = useToast();
 
   const normalize = useCallback((val: any) => {
-    if (!val || typeof val !== 'string') return "";
+    if (val === null || val === undefined) return "";
+    const str = String(val);
     try {
-        return val.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
     } catch (e) {
-        return String(val).toUpperCase().trim();
+        return str.toUpperCase().trim();
     }
   }, []);
 
@@ -105,7 +107,8 @@ export default function PageContent({
       
       allAppointments.forEach(app => {
           if (!app.date || !app.clinicId || app.clinicId !== clinic.id) return;
-          const d = app.date.split('T')[0];
+          // Use local-relative component to avoid UTC date mismatch
+          const d = format(parseISO(app.date), 'yyyy-MM-dd');
           if (!dayClinicMap.has(d)) dayClinicMap.set(d, []);
           dayClinicMap.get(d)!.push(app);
       });
@@ -211,6 +214,7 @@ export default function PageContent({
 
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
+        // Fetch a 60-day window to cover next month navigation
         const start = startOfMonth(currentMonth);
         const end = endOfMonth(addDays(start, 45)); 
         const cacheKey = `${selectedClinicId}-${format(start, 'yyyy-MM')}`;
