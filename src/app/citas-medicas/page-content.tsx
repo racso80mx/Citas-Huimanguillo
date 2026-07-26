@@ -191,12 +191,10 @@ export default function PageContent({
                   targetAvail.forEach(item => {
                       const idx = combined.findIndex(c => c.date === item.date);
                       if (idx >= 0) {
-                          // Merge clinic specific data into global availability for this date
                           combined[idx] = {
                               ...combined[idx],
                               availabilityByClinic: { ...combined[idx].availabilityByClinic, ...item.availabilityByClinic },
                               takenTimesByClinic: { ...combined[idx].takenTimesByClinic, ...item.takenTimesByClinic },
-                              // For current selected clinic, availableSlots is what matters for the quick grid
                               availableSlots: item.availableSlots 
                           };
                       }
@@ -243,7 +241,6 @@ export default function PageContent({
     setSelectedDate(undefined);
     setSelectedColoniaId(undefined);
     setSelectedTime(undefined);
-    // Refresh for new clinic to ensure data is current
     const start = startOfMonth(currentMonth);
     const end = endOfMonth(addDays(start, 45));
     const cacheKey = `${clinicId}-${format(start, 'yyyy-MM')}`;
@@ -267,13 +264,10 @@ export default function PageContent({
   const projectedGridData = useMemo(() => {
     if (!selectedClinicId) return [];
     const today = startOfToday();
-    // Show 14 days (2 weeks) as in the reference image
     const range = Array.from({ length: 14 }, (_, i) => addDays(today, i));
     return range.map(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
         const avail = availability.find(a => a.date === dateStr);
-        
-        // If data is in cache but not found for this specific clinic in the state, it might be 0 or still loading
         const clinicSlots = avail?.availabilityByClinic[selectedClinicId];
         
         return { 
