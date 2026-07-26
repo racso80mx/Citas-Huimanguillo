@@ -217,12 +217,30 @@ export default function PageContent({
 
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
-        const start = startOfMonth(currentMonth);
-        const end = endOfMonth(currentMonth);
-        const cacheKey = `${selectedClinicId}-${format(start, 'yyyy-MM')}`;
+        // CARGA INTELIGENTE: Si el rango de 14 días cruza meses, cargamos ambos bloques
+        const today = startOfToday();
+        const endOfRange = addDays(today, 14);
         
-        if (!availabilityCache[cacheKey]) {
-            fetchAvailabilityForRange(selectedClinicId, start, end, cacheKey);
+        const monthsToFetch = [startOfMonth(today)];
+        if (format(today, 'MM') !== format(endOfRange, 'MM')) {
+            monthsToFetch.push(startOfMonth(endOfRange));
+        }
+
+        monthsToFetch.forEach(monthDate => {
+            const start = startOfMonth(monthDate);
+            const end = endOfMonth(monthDate);
+            const cacheKey = `${selectedClinicId}-${format(start, 'yyyy-MM')}`;
+            
+            if (!availabilityCache[cacheKey]) {
+                fetchAvailabilityForRange(selectedClinicId, start, end, cacheKey);
+            }
+        });
+
+        // También sincronizar el mes que el usuario esté viendo en el calendario manual
+        const calMonthStart = startOfMonth(currentMonth);
+        const calCacheKey = `${selectedClinicId}-${format(calMonthStart, 'yyyy-MM')}`;
+        if (!availabilityCache[calCacheKey]) {
+            fetchAvailabilityForRange(selectedClinicId, calMonthStart, endOfMonth(currentMonth), calCacheKey);
         }
     }
   }, [isAuthenticated, selectedClinicId, currentMonth, availabilityCache, fetchAvailabilityForRange]);

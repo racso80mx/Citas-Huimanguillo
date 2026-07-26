@@ -195,14 +195,11 @@ export async function bulkInsertPatients(items: any[]) {
 }
 
 // --- CITAS ---
-/**
- * Obtiene citas médicas con filtrado híbrido para evitar errores de índices.
- */
 export async function getAppointmentsData(options?: { startDate?: string, endDate?: string, clinicId?: string }) {
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 1));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(addDays(new Date(), 60));
     
-    // Consulta base por fecha (indexado automático)
+    // Consulta optimizada: Buscamos primero por rango de fecha para evitar errores de índice y límites
     const q = query(
         collection(adminDb, 'appointments'), 
         where('date', '>=', start), 
@@ -213,7 +210,7 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     const snap = await getDocs(q);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     
-    // Filtrado por consultorio en memoria para evitar error de "Index Required"
+    // Filtrado por consultorio en memoria para garantizar que el límite de 10k no afecte al consultorio específico
     if (options?.clinicId) {
         results = results.filter((app: any) => app.clinicId === options.clinicId);
     }
