@@ -74,12 +74,13 @@ export default function PageContent({
   const [currentMonth, setCurrentMonth] = React.useState(new Date());
   const { toast } = useToast();
 
-  const normalize = useCallback((val: any) => {
-    if (!val || typeof val !== 'string') return "";
+  const normalize = useCallback((val: any): string => {
+    if (val === null || val === undefined) return "";
+    const str = String(val);
     try {
-        return val.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
     } catch (e) {
-        return String(val).toUpperCase().trim();
+        return str.toUpperCase().trim();
     }
   }, []);
 
@@ -173,7 +174,7 @@ export default function PageContent({
   const fetchAvailabilityForRange = React.useCallback(async (targetClinicId: string, startDate: Date, endDate: Date, cacheKey: string) => {
       setIsLoadingAvailability(true);
       try {
-          // CONSULTA ESPECÍFICA POR CLÍNICA PARA PRECISIÓN TOTAL
+          // CONSULTA ESPECÍFICA MEDIANTE FILTRADO HÍBRIDO (Index-free)
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
             getAppointments({ 
                 startDate: startDate.toISOString(), 

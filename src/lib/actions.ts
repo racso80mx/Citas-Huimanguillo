@@ -130,7 +130,7 @@ export async function getPatientByCURP(c: string) { return data.getPatientByCURP
 export async function bulkInsertPatients(items: any[]) { return data.bulkInsertPatients(items); }
 
 // --- CITAS ---
-export async function getAppointments(options?: { startDate?: string, endDate?: string }) { return data.getAppointmentsData(options); }
+export async function getAppointments(options?: { startDate?: string, endDate?: string, clinicId?: string }) { return data.getAppointmentsData(options); }
 export async function getLabAppointments(options?: { startDate?: string, endDate?: string }) { return data.getLabAppointmentsData(options); }
 export async function getXRayAppointments(options?: { startDate?: string, endDate?: string }) { return data.getXRayAppointmentsData(options); }
 export async function getUltrasoundAppointments(options?: { startDate?: string, endDate?: string }) { return data.getUltrasoundAppointmentsData(options); }
@@ -141,7 +141,7 @@ export async function deleteAppointment(id: string) { await data.deleteAppointme
 export async function deleteLabAppointment(id: string) { await data.deleteLabAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
 export async function deleteXRayAppointment(id: string) { await data.deleteXRayAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
 export async function deleteUltrasoundAppointment(id: string) { await data.deleteUltrasoundAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
-export async function deleteVaccineAppointment(id: string) { await data.deleteVaccineAppointment(id); revalidatePath('/', 'layout'); return { success: true }; }
+export async function deleteVaccineAppointment(id: string) { await deleteDoc(doc(adminDb, 'vaccineAppointments', id)); revalidatePath('/', 'layout'); return { success: true }; }
 
 export async function saveNewAppointment(a: any, p: any, d: boolean, c?: string) { 
     const res = await data.saveNewAppointment(a, p, d, c);
