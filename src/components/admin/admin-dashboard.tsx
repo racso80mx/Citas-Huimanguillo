@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useTransition, useEffect, useCallback } from 'react';
 import {
@@ -26,7 +25,9 @@ import {
   Calendar as CalendarIcon,
   Hospital,
   LayoutGrid,
-  ShieldAlert
+  ShieldAlert,
+  Database,
+  Table as TableIcon
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ClinicsManager } from './clinics-manager';
@@ -43,6 +44,7 @@ import { DoctorsCatalog } from './doctors-catalog';
 import { SpecialtiesManager } from './specialties-manager';
 import { ColoniasManager } from './colonias-manager';
 import { DepartmentsManager } from './departments-manager';
+import { TablesDownloader } from './tables-downloader';
 import { Input } from '../ui/input';
 import { v4 as uuidv4 } from 'uuid';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -150,7 +152,6 @@ function AppointmentsViewer() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            // OPTIMIZACIÓN: Estas funciones ahora tienen límites y filtros de fecha por defecto en el servidor
             const [apps, lab, xr, us, vac, clinics, services] = await Promise.all([
                 getAppointments(), getLabAppointments(), getXRayAppointments(), getUltrasoundAppointments(), getVaccineAppointments(), getClinics(), getServiceTypes()
             ]);
@@ -378,11 +379,12 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
       </Card>
       
       <Tabs value={mainTab} onValueChange={setMainTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 h-auto mb-8 bg-muted/20 p-1">
+        <TabsList className="grid w-full grid-cols-5 h-auto mb-8 bg-muted/20 p-1">
           <TabsTrigger value="configuracion" className="py-3 font-bold flex items-center gap-2"><Settings className="h-4 w-4" /> 1. Configuración</TabsTrigger>
           <TabsTrigger value="catalogos" className="py-3 font-bold flex items-center gap-2"><UserRound className="h-4 w-4" /> 2. Catálogos</TabsTrigger>
           <TabsTrigger value="citas" className="py-3 font-bold flex items-center gap-2"><ClipboardList className="h-4 w-4" /> 3. Registro de Citas</TabsTrigger>
           <TabsTrigger value="modulos" className="py-3 font-bold flex items-center gap-2 text-primary"><LayoutGrid className="h-4 w-4" /> 4. Módulos</TabsTrigger>
+          <TabsTrigger value="tablas" className="py-3 font-bold flex items-center gap-2 text-green-700"><TableIcon className="h-4 w-4" /> 5. Todas las Tablas</TabsTrigger>
         </TabsList>
         <TabsContent value="configuracion" className="space-y-8 animate-in fade-in">
             <div className="grid lg:grid-cols-2 gap-8">
@@ -439,6 +441,9 @@ export function AdminDashboard({ onLogout }: { onLogout: () => void }) {
                     <ModuleManager />
                 </div>
             </div>
+        </TabsContent>
+        <TabsContent value="tablas" className="animate-in fade-in">
+            <TablesDownloader />
         </TabsContent>
       </Tabs>
     </div>
