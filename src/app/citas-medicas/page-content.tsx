@@ -75,12 +75,11 @@ export default function PageContent({
   const { toast } = useToast();
 
   const normalize = useCallback((val: any) => {
-    if (val === null || val === undefined) return "";
-    const str = String(val);
+    if (!val || typeof val !== 'string') return "";
     try {
-        return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        return val.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
     } catch (e) {
-        return str.toUpperCase().trim();
+        return String(val).toUpperCase().trim();
     }
   }, []);
 
@@ -107,7 +106,6 @@ export default function PageContent({
       
       allAppointments.forEach(app => {
           if (!app.date || !app.clinicId || app.clinicId !== clinic.id) return;
-          // Use local-relative component to avoid UTC date mismatch
           const d = format(parseISO(app.date), 'yyyy-MM-dd');
           if (!dayClinicMap.has(d)) dayClinicMap.set(d, []);
           dayClinicMap.get(d)!.push(app);
@@ -117,21 +115,20 @@ export default function PageContent({
       const availabilityResult: DailyAvailability[] = [];
       const daysInInterval = eachDayOfInterval({ start: startDate, end: endDate });
 
+      const clinicServiceTypeName = normalize(serviceTypes.find(t => t.id === clinic.serviceTypeId)?.name || clinic.serviceTypeId);
+
       for (const day of daysInInterval) {
         const dateString = format(day, 'yyyy-MM-dd'); 
         const dayBooked = dayClinicMap.get(dateString) || [];
-        const dayIndex = day.getDay();
-        const dayName = dayNames[dayIndex];
+        const dayName = dayNames[day.getDay()];
         
         const isHoliday = holidaySet.has(dateString);
         const isWeekend = isSaturday(day) || isSunday(day);
-        const clinicTypeName = normalize(serviceTypes.find(t => t.id === clinic.serviceTypeId)?.name || clinic.serviceTypeId);
         
         const isSpecialActionDay = freshSpecialActionDays.some(sad => 
             sad.date === dateString && 
-            (normalize(sad.clinicType) === normalize(clinic.serviceTypeId) || 
-             normalize(sad.clinicType) === "CONSULTA EXTERNA" ||
-             clinicTypeName === normalize(sad.clinicType))
+            (normalize(sad.clinicType) === clinicServiceTypeName || 
+             normalize(sad.clinicType) === "CONSULTA EXTERNA")
         );
 
         const isDateBlocked = clinic.unavailableDates?.includes(dateString);
@@ -214,9 +211,8 @@ export default function PageContent({
 
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
-        // Fetch a 60-day window to cover next month navigation
         const start = startOfMonth(currentMonth);
-        const end = endOfMonth(addDays(start, 45)); 
+        const end = endOfMonth(currentMonth);
         const cacheKey = `${selectedClinicId}-${format(start, 'yyyy-MM')}`;
         
         if (!availabilityCache[cacheKey]) {
@@ -244,7 +240,7 @@ export default function PageContent({
     setSelectedColoniaId(undefined);
     setSelectedTime(undefined);
     const start = startOfMonth(currentMonth);
-    const end = endOfMonth(addDays(start, 45));
+    const end = endOfMonth(currentMonth);
     const cacheKey = `${clinicId}-${format(start, 'yyyy-MM')}`;
     fetchAvailabilityForRange(clinicId, start, end, cacheKey);
   };

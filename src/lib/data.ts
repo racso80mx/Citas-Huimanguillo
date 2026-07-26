@@ -111,7 +111,7 @@ export async function logActivity(a: string, d: string) {
     await setDoc(doc(adminDb, 'activityLog', id), { id, action: a, details: d, timestamp: Timestamp.now() });
 }
 export async function getLogsData(): Promise<ActivityLog[]> {
-    const q = query(collection(adminDb, 'activityLog'), orderBy('timestamp', 'desc'), limit(300));
+    const q = query(collection(adminDb, 'activityLog'), orderBy('timestamp', 'desc'), limit(500));
     const snap = await getDocs(q);
     return serializeData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
@@ -196,7 +196,6 @@ export async function bulkInsertPatients(items: any[]) {
 export async function getAppointmentsData(options?: { startDate?: string, endDate?: string }) {
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 1));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(addDays(new Date(), 60));
-    // LIMIT FIX: Firestore structured query limit max is 10,000
     const q = query(collection(adminDb, 'appointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));

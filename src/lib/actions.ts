@@ -26,7 +26,9 @@ import type {
     Specialty,
     Department,
     AppointmentStatus,
-    BISettings
+    BISettings,
+    Prescription,
+    MedicalConsultation
 } from './definitions';
 
 // --- LOGS ---
