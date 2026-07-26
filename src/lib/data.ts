@@ -14,7 +14,9 @@ import {
   where,
   limit,
   orderBy,
-  documentId
+  documentId,
+  startAt,
+  endAt
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -193,13 +195,23 @@ export async function bulkInsertPatients(items: any[]) {
 }
 
 // --- CITAS ---
-export async function getAppointmentsData(options?: { startDate?: string, endDate?: string }) {
+export async function getAppointmentsData(options?: { startDate?: string, endDate?: string, clinicId?: string }) {
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 1));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(addDays(new Date(), 60));
-    const q = query(collection(adminDb, 'appointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
+    
+    // Si hay clinicId, realizamos la consulta específica para ese consultorio.
+    // Si no, realizamos la consulta por fecha y filtramos después si es necesario (limite 10,000).
+    let q;
+    if (options?.clinicId) {
+        q = query(collection(adminDb, 'appointments'), where('clinicId', '==', options.clinicId), where('date', '>=', start), where('date', '<=', end), limit(10000));
+    } else {
+        q = query(collection(adminDb, 'appointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
+    }
+    
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
+
 export async function getLabAppointmentsData(options?: { startDate?: string, endDate?: string }) {
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 1));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(addDays(new Date(), 60));
@@ -229,11 +241,10 @@ export async function getVaccineAppointmentsData(options?: { startDate?: string,
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 export async function getAppointmentsForClinic(id: string) {
-    const start = Timestamp.fromDate(subMonths(new Date(), 6));
-    const q = query(collection(adminDb, 'appointments'), where('date', '>=', start), limit(9999));
+    const start = Timestamp.fromDate(subMonths(new Date(), 12));
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', id), where('date', '>=', start), limit(10000));
     const snap = await getDocs(q);
-    const results = snap.docs.map(d => ({ ...d.data(), id: d.id })).filter((a: any) => a.clinicId === id);
-    return await hydrateAppointments(results);
+    return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 export async function saveNewAppointment(a: any, p: any, d: boolean, c?: string) {
     const curp = String(p.curp).toUpperCase().trim();
@@ -444,9 +455,9 @@ export async function getBIData() {
 export async function getAppointmentCountOnDate(clinicId: string, d: string) {
     const start = Timestamp.fromDate(startOfDay(parseISO(d)));
     const end = Timestamp.fromDate(endOfDay(parseISO(d)));
-    const q = query(collection(adminDb, 'appointments'), where('date', '>=', start), where('date', '<=', end));
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId), where('date', '>=', start), where('date', '<=', end));
     const snap = await getDocs(q);
-    return snap.docs.filter(d => d.data().clinicId === clinicId).length;
+    return snap.size;
 }
 export async function applyStatusUpdateChunk(exps: string[], s: any) {
     const q = query(collection(adminDb, 'patients'), where('expediente', 'in', exps));
@@ -507,9 +518,9 @@ export async function downloadBackupAction() {
 export async function getAvailableSlotsForDate(cid: string, d: string) {
     const start = Timestamp.fromDate(startOfDay(parseISO(d)));
     const end = Timestamp.fromDate(endOfDay(parseISO(d)));
-    const q = query(collection(adminDb, 'appointments'), where('date', '>=', start), where('date', '<=', end));
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), where('date', '>=', start), where('date', '<=', end));
     const snap = await getDocs(q);
-    const booked = snap.docs.map(d => d.data()).filter((a: any) => a.clinicId === cid);
+    const booked = snap.docs.map(d => d.data());
     const cSnap = await getDoc(doc(adminDb, 'clinics', cid));
     if (!cSnap.exists()) return { timeSlots: [], tokens: [] };
     const c = cSnap.data() as Clinic;

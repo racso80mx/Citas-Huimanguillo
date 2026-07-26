@@ -173,8 +173,13 @@ export default function PageContent({
   const fetchAvailabilityForRange = React.useCallback(async (targetClinicId: string, startDate: Date, endDate: Date, cacheKey: string) => {
       setIsLoadingAvailability(true);
       try {
+          // CONSULTA ESPECÍFICA POR CLÍNICA PARA PRECISIÓN TOTAL
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
-            getAppointments({ startDate: startDate.toISOString(), endDate: endDate.toISOString() }), 
+            getAppointments({ 
+                startDate: startDate.toISOString(), 
+                endDate: endDate.toISOString(),
+                clinicId: targetClinicId 
+            }), 
             getHolidays(), 
             getSpecialActionDays()
           ]);
