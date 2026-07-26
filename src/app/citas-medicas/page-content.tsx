@@ -20,7 +20,7 @@ import { getAppointments, getClinics, getHolidays, verifyCitasMedicasPassword, g
 
 import { useToast } from '@/hooks/use-toast';
 import { Hospital, LayoutList, CalendarDays, CalendarPlus, Check, Loader2, RefreshCw, MapPin, Clock } from 'lucide-react';
-import { format, eachDayOfInterval, isSaturday, isSunday, startOfToday, addDays, isSameDay, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { format, eachDayOfInterval, isSaturday, isSunday, startOfToday, addDays, isSameDay, startOfMonth, endOfMonth, parseISO, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
   Select,
@@ -63,7 +63,7 @@ export default function PageContent({
   const [isDoubleSlot, setIsDoubleSlot] = React.useState(false);
   const [selectedTime, setSelectedTime] = React.useState<string | undefined>();
   
-  const [availabilityCache, setAvailabilityCache] = useState<Record<string, DailyAvailability[]>>({});
+  const [availabilityCache, setAvailabilityCache] = useState<Record<string, boolean>>({});
   const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
   
   const [availability, setAvailability] = React.useState<DailyAvailability[]>([]);
@@ -75,7 +75,6 @@ export default function PageContent({
   const [currentMonth, setCurrentMonth] = React.useState(new Date());
   const { toast } = useToast();
 
-  // NORMALIZADOR BLINDADO CONTRA TYPEERRORS Y DATOS NULOS
   const normalize = useCallback((str: any) => {
     if (!str || typeof str !== 'string') return "";
     try {
@@ -191,12 +190,21 @@ export default function PageContent({
                   const combined = [...prev];
                   targetAvail.forEach(item => {
                       const idx = combined.findIndex(c => c.date === item.date);
-                      if (idx >= 0) combined[idx] = item;
+                      if (idx >= 0) {
+                          // Merge clinic specific data into global availability for this date
+                          combined[idx] = {
+                              ...combined[idx],
+                              availabilityByClinic: { ...combined[idx].availabilityByClinic, ...item.availabilityByClinic },
+                              takenTimesByClinic: { ...combined[idx].takenTimesByClinic, ...item.takenTimesByClinic },
+                              // For current selected clinic, availableSlots is what matters for the quick grid
+                              availableSlots: item.availableSlots 
+                          };
+                      }
                       else combined.push(item);
                   });
                   return combined.sort((a,b) => a.date.localeCompare(b.date));
               });
-              setAvailabilityCache(prev => ({ ...prev, [cacheKey]: targetAvail }));
+              setAvailabilityCache(prev => ({ ...prev, [cacheKey]: true }));
           }
       } catch (e) {
           console.error("Fetch availability error", e);
@@ -205,14 +213,12 @@ export default function PageContent({
       }
   }, [clinics, calculateForClinic]);
 
-  // EFECTO DE SINCRONIZACIÓN REACTIVA AL CAMBIO DE MES Y CONSULTORIO
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
         const start = startOfMonth(currentMonth);
         const end = endOfMonth(addDays(start, 45)); 
         const cacheKey = `${selectedClinicId}-${format(start, 'yyyy-MM')}`;
         
-        // Siempre sincronizamos si no hay cache para el mes visible
         if (!availabilityCache[cacheKey]) {
             fetchAvailabilityForRange(selectedClinicId, start, end, cacheKey);
         }
@@ -237,8 +243,11 @@ export default function PageContent({
     setSelectedDate(undefined);
     setSelectedColoniaId(undefined);
     setSelectedTime(undefined);
-    setAvailability([]);
-    setAvailabilityCache({});
+    // Refresh for new clinic to ensure data is current
+    const start = startOfMonth(currentMonth);
+    const end = endOfMonth(addDays(start, 45));
+    const cacheKey = `${clinicId}-${format(start, 'yyyy-MM')}`;
+    fetchAvailabilityForRange(clinicId, start, end, cacheKey);
   };
 
   const selectedClinic = useMemo(() => clinics.find(c => c.id === selectedClinicId), [selectedClinicId, clinics]);
@@ -258,15 +267,20 @@ export default function PageContent({
   const projectedGridData = useMemo(() => {
     if (!selectedClinicId) return [];
     const today = startOfToday();
-    const range = Array.from({ length: 7 }, (_, i) => addDays(today, i));
+    // Show 14 days (2 weeks) as in the reference image
+    const range = Array.from({ length: 14 }, (_, i) => addDays(today, i));
     return range.map(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
         const avail = availability.find(a => a.date === dateStr);
+        
+        // If data is in cache but not found for this specific clinic in the state, it might be 0 or still loading
+        const clinicSlots = avail?.availabilityByClinic[selectedClinicId];
+        
         return { 
             date, 
             dateStr, 
-            slots: avail?.availableSlots ?? 0, 
-            isClosed: avail ? avail.availableSlots === 0 : false,
+            slots: clinicSlots ?? 0, 
+            isClosed: avail ? clinicSlots === 0 : false,
             isLoading: !avail && isLoadingAvailability
         };
     });
@@ -330,7 +344,7 @@ export default function PageContent({
       <div className="text-center mb-10 flex flex-col items-center">
         <div className="text-primary mb-4"><Image src={logoBase64} alt="Logo" width={80} height={80} className="rounded-md" /></div>
         <h1 className="text-4xl lg:text-5xl font-bold font-headline text-foreground tracking-tight uppercase">Reserva tu Cita Médica</h1>
-        <p className="text-muted-foreground mt-2 font-medium max-w-2xl mx-auto">Selecciona el consultorio y verifica los espacios disponibles.</p>
+        <p className="text-muted-foreground mt-2 font-medium max-w-2xl mx-auto">Sigue los pasos para agendar tu consulta de forma segura.</p>
       </div>
 
       <div className="grid lg:grid-cols-12 gap-8 max-w-7xl mx-auto">
@@ -378,8 +392,8 @@ export default function PageContent({
                       <Card className="shadow-xl border-primary/10 overflow-hidden rounded-[2.5rem] relative">
                           <CardHeader className="bg-primary/5 pb-4 border-b border-primary/5">
                                <div className="flex items-center justify-between">
-                                    <CardTitle className="text-xl font-black uppercase text-primary tracking-wider flex items-center gap-2"><CalendarDays className="h-6 w-6" /> 3. Disponibilidad</CardTitle>
-                                    <Badge variant="outline" className="font-bold bg-background uppercase">Cupo Real</Badge>
+                                    <CardTitle className="text-xl font-black uppercase text-primary tracking-wider flex items-center gap-2"><CalendarDays className="h-6 w-6" /> 3. DISPONIBILIDAD PRÓXIMAS 2 SEMANAS</CardTitle>
+                                    <Badge variant="outline" className="font-bold bg-background uppercase">Cupo en {selectedClinic?.name}</Badge>
                                </div>
                           </CardHeader>
                           <CardContent className="p-8 min-h-[300px] relative">
