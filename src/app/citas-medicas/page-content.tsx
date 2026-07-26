@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import React from 'react';
@@ -74,12 +73,12 @@ export default function PageContent({
   const [currentMonth, setCurrentMonth] = React.useState(new Date());
   const { toast } = useToast();
 
-  const normalize = useCallback((str: any) => {
-    if (!str || typeof str !== 'string') return "";
+  const normalize = useCallback((val: any) => {
+    if (!val || typeof val !== 'string') return "";
     try {
-        return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        return val.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
     } catch (e) {
-        return String(str).toUpperCase().trim();
+        return String(val).toUpperCase().trim();
     }
   }, []);
 
@@ -330,7 +329,6 @@ export default function PageContent({
     return colonias.filter(c => c.clinicId === selectedClinicId).sort((a,b) => a.name.localeCompare(b.name));
   }, [colonias, selectedClinicId]);
 
-  // Transforma disponibilidad para el calendario basado en la selección actual
   const calendarAvailability = useMemo(() => {
     if (!selectedClinicId) return availability;
     return availability.map(day => ({

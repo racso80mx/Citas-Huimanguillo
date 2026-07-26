@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
@@ -19,12 +19,19 @@ import {
     ShieldCheck,
     FlaskConical,
     Activity,
-    Baby
+    Baby,
+    FileText,
+    LayoutList,
+    Calendar as CalendarIcon,
+    ShieldAlert,
+    Settings
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { adminDb } from '@/firebase/server-config';
-import { collection, getDocs, query, limit } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { serializeData } from '@/lib/data';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 type TableConfig = {
     id: string;
@@ -54,6 +61,7 @@ export function TablesDownloader() {
         // 3. Inventarios
         { id: 'medications', label: 'medications', icon: Pill, description: 'Inventario de medicamentos', color: 'text-primary' },
         { id: 'pharmacyVouchers', label: 'pharmacyVouchers', icon: ClipboardList, description: 'Vales de salida de farmacia', color: 'text-amber-600' },
+        { id: 'supplies', label: 'supplies', icon: Database, description: 'Insumos de Almacén', color: 'text-slate-600' },
         
         // 4. Catálogos Operativos
         { id: 'clinics', label: 'clinics', icon: Hospital, description: 'Consultorios y médicos', color: 'text-primary' },
@@ -95,7 +103,6 @@ export function TablesDownloader() {
             const rawData = snap.docs.map(d => ({ ...d.data(), id: d.id }));
             const data = serializeData(rawData);
 
-            // Flatten object for Excel if needed
             const flattenedData = data.map((item: any) => {
                 const flatItem: any = {};
                 for (const key in item) {
@@ -136,7 +143,7 @@ export function TablesDownloader() {
                     <div>
                         <CardTitle className="text-2xl font-black uppercase text-green-700">Explorador de Datos Maestro</CardTitle>
                         <CardDescription className="font-bold">
-                            Descarga directa de todas las colecciones de Firestore con el 100% de sus atributos.
+                            Descarga directa de todas las colecciones de Firestore con el 100% de sus atributos para auditoría.
                         </CardDescription>
                     </div>
                 </CardHeader>
@@ -168,13 +175,6 @@ export function TablesDownloader() {
                     </Card>
                 ))}
             </div>
-
-            <Card className="bg-muted/5 border-dashed">
-                <CardContent className="py-6 flex items-center justify-center gap-2 opacity-40">
-                    <TableIcon className="h-4 w-4" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.3em]">Fin del Directorio de Tablas</span>
-                </CardContent>
-            </Card>
         </div>
     );
 }
