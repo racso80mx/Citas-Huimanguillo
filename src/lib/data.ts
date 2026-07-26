@@ -196,23 +196,30 @@ export async function bulkInsertPatients(items: any[]) {
 
 // --- CITAS ---
 export async function getAppointmentsData(options?: { startDate?: string, endDate?: string, clinicId?: string }) {
-    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 1));
-    const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(addDays(new Date(), 60));
-    
-    // Consulta optimizada: Buscamos primero por rango de fecha para evitar errores de índice y límites
-    const q = query(
-        collection(adminDb, 'appointments'), 
-        where('date', '>=', start), 
-        where('date', '<=', end), 
-        limit(10000)
-    );
+    const colRef = collection(adminDb, 'appointments');
+    let q;
+
+    if (options?.clinicId) {
+        // Consulta quirúrgica por consultorio para evitar límites globales
+        q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
+    } else {
+        // Consulta global por rango de fecha
+        const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 1));
+        const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(addDays(new Date(), 60));
+        q = query(colRef, where('date', '>=', start), where('date', '<=', end), limit(10000));
+    }
     
     const snap = await getDocs(q);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     
-    // Filtrado por consultorio en memoria para garantizar que el límite de 10k no afecte al consultorio específico
-    if (options?.clinicId) {
-        results = results.filter((app: any) => app.clinicId === options.clinicId);
+    // Filtrado en memoria si se usó consulta por clinicId pero hay rango de fecha
+    if (options?.clinicId && (options.startDate || options.endDate)) {
+        const start = options.startDate ? new Date(options.startDate).getTime() : 0;
+        const end = options.endDate ? new Date(options.endDate).getTime() : Infinity;
+        results = results.filter((app: any) => {
+            const d = app.date?.toDate?.()?.getTime() || (app.date?.seconds ? app.date.seconds * 1000 : 0);
+            return d >= start && d <= end;
+        });
     }
     
     return await hydrateAppointments(results);

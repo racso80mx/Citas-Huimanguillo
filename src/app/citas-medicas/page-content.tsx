@@ -174,7 +174,7 @@ export default function PageContent({
   const fetchAvailabilityForRange = React.useCallback(async (targetClinicId: string, startDate: Date, endDate: Date, cacheKey: string) => {
       setIsLoadingAvailability(true);
       try {
-          // CONSULTA ESPECÍFICA MEDIANTE FILTRADO HÍBRIDO (Index-free)
+          // CONSULTA ESPECÍFICA MEDIANTE FILTRADO HÍBRIDO (Surgical Fetch)
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
             getAppointments({ 
                 startDate: startDate.toISOString(), 
@@ -197,8 +197,8 @@ export default function PageContent({
                       if (idx >= 0) {
                           combined[idx] = {
                               ...combined[idx],
-                              availabilityByClinic: { ...combined[idx].availabilityByClinic, ...item.availabilityByClinic },
-                              takenTimesByClinic: { ...combined[idx].takenTimesByClinic, ...item.takenTimesByClinic },
+                              availabilityByClinic: { ...combined[idx].availabilityByClinic, [targetClinicId]: item.availabilityByClinic[targetClinicId] },
+                              takenTimesByClinic: { ...combined[idx].takenTimesByClinic, [targetClinicId]: item.takenTimesByClinic[targetClinicId] },
                               availableSlots: item.availableSlots 
                           };
                       }
@@ -217,7 +217,7 @@ export default function PageContent({
 
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
-        // CARGA INTELIGENTE: Si el rango de 14 días cruza meses, cargamos ambos bloques
+        // CARGA PROACTIVA: Sincroniza bloques mensuales para garantizar visibilidad 100%
         const today = startOfToday();
         const endOfRange = addDays(today, 14);
         
