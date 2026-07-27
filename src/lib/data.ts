@@ -352,7 +352,8 @@ export async function saveNewLabAppointment(a: any, p: any) {
     const id = uuidv4();
     const appData = { ...a, patientId: curp, id, date: Timestamp.fromDate(new Date(a.date)), createdAt: Timestamp.now() };
     batch.set(doc(adminDb, 'labAppointments', id), appData);
-    await batch.commit(); return serializeData({ success: true, data: { ...appData, id } });
+    await batch.commit(); 
+    return serializeData({ success: true, data: { appointment: { ...appData, id, patient: p } } });
 }
 
 export async function saveNewXRayAppointment(a: any, p: any) {
@@ -362,7 +363,8 @@ export async function saveNewXRayAppointment(a: any, p: any) {
     const id = uuidv4();
     const appData = { ...a, patientId: curp, id, date: Timestamp.fromDate(new Date(a.date)), createdAt: Timestamp.now() };
     batch.set(doc(adminDb, 'xrayAppointments', id), appData);
-    await batch.commit(); return serializeData({ success: true, data: { ...appData, id } });
+    await batch.commit(); 
+    return serializeData({ success: true, data: { appointment: { ...appData, id, patient: p } } });
 }
 
 export async function saveNewUltrasoundAppointment(a: any, p: any) {
@@ -372,7 +374,8 @@ export async function saveNewUltrasoundAppointment(a: any, p: any) {
     const id = uuidv4();
     const appData = { ...a, patientId: curp, id, date: Timestamp.fromDate(new Date(a.date)), createdAt: Timestamp.now() };
     batch.set(doc(adminDb, 'ultrasoundAppointments', id), appData);
-    await batch.commit(); return serializeData({ success: true, data: { ...appData, id } });
+    await batch.commit(); 
+    return serializeData({ success: true, data: { appointment: { ...appData, id, patient: p } } });
 }
 
 export async function saveNewVaccineAppointment(a: any, p: any) {
@@ -382,7 +385,8 @@ export async function saveNewVaccineAppointment(a: any, p: any) {
     const id = uuidv4();
     const appData = { ...a, patientId: curp, id, date: Timestamp.fromDate(new Date(a.date)), createdAt: Timestamp.now() };
     batch.set(doc(adminDb, 'vaccineAppointments', id), appData);
-    await batch.commit(); return serializeData({ success: true, data: { ...appData, id } });
+    await batch.commit(); 
+    return serializeData({ success: true, data: { appointment: { ...appData, id, patient: p } } });
 }
 
 export async function updateAppointmentStatus(id: string, s: AppointmentStatus, t: string) {
