@@ -107,9 +107,12 @@ export default function PageContent({
       
       allAppointments.forEach(app => {
           if (!app.date || !app.clinicId || app.clinicId !== clinic.id) return;
-          const d = app.date.split('T')[0];
-          if (!dayClinicMap.has(d)) dayClinicMap.set(d, []);
-          dayClinicMap.get(d)!.push(app);
+          // Si app.date es ISO String o Timestamp serializado
+          const d = typeof app.date === 'string' ? app.date.split('T')[0] : '';
+          if (d) {
+              if (!dayClinicMap.has(d)) dayClinicMap.set(d, []);
+              dayClinicMap.get(d)!.push(app);
+          }
       });
 
       const dayNames = ["DOMINGO", "LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"];
@@ -219,7 +222,7 @@ export default function PageContent({
         const today = startOfToday();
         const endOfRange = addDays(today, 14);
         
-        // Carga Inteligente: Detectamos si el rango de 14 días cruza de mes y descargamos ambos
+        // Carga Inteligente de meses involucrados
         const monthsToFetch = [startOfMonth(today)];
         if (format(today, 'MM') !== format(endOfRange, 'MM')) {
             monthsToFetch.push(startOfMonth(endOfRange));
@@ -235,14 +238,15 @@ export default function PageContent({
             }
         });
 
-        // Carga bajo demanda del mes seleccionado en el calendario
-        const targetMonth = selectedDate ? startOfMonth(selectedDate) : startOfMonth(currentMonth);
-        const calCacheKey = `${selectedClinicId}-${format(targetMonth, 'yyyy-MM')}`;
-        if (!availabilityCache[calCacheKey]) {
-            fetchAvailabilityForRange(selectedClinicId, startOfMonth(targetMonth), endOfMonth(targetMonth), calCacheKey);
+        // Carga bajo demanda del mes seleccionado
+        if (currentMonth) {
+            const calCacheKey = `${selectedClinicId}-${format(startOfMonth(currentMonth), 'yyyy-MM')}`;
+            if (!availabilityCache[calCacheKey]) {
+                fetchAvailabilityForRange(selectedClinicId, startOfMonth(currentMonth), endOfMonth(currentMonth), calCacheKey);
+            }
         }
     }
-  }, [isAuthenticated, selectedClinicId, currentMonth, selectedDate, availabilityCache, fetchAvailabilityForRange]);
+  }, [isAuthenticated, selectedClinicId, currentMonth, availabilityCache, fetchAvailabilityForRange]);
 
   const handleMonthChange = (monthDate: Date) => {
     setCurrentMonth(monthDate);
@@ -262,7 +266,6 @@ export default function PageContent({
     setSelectedDate(undefined);
     setSelectedColoniaId(undefined);
     setSelectedTime(undefined);
-    // Limpiamos cache local para forzar actualización inmediata al cambiar de consultorio
     setAvailabilityCache({});
     setAvailability([]);
   };

@@ -14,9 +14,7 @@ import {
   where,
   limit,
   orderBy,
-  documentId,
-  startAt,
-  endAt
+  documentId
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -58,6 +56,7 @@ import { startOfDay, endOfDay, parseISO, startOfMonth, endOfMonth, addDays, subM
 
 /**
  * Normaliza textos para comparaciones robustas (Días, Servicios, etc).
+ * Indestructible ante valores nulos o indefinidos.
  */
 export const normalize = (val: any): string => {
     if (val === null || val === undefined) return "";
@@ -212,64 +211,62 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     const colRef = collection(adminDb, 'appointments');
     let q;
     
-    // ESTRATEGIA EXHAUSTIVA: Fetch por clinicId primero para asegurar visibilidad total
+    // ESTRATEGIA EXHAUSTIVA: Si hay clinicId, priorizamos esa búsqueda específica
     if (options?.clinicId) {
         q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
         const snap = await getDocs(q);
         let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
         
-        // Filtramos por fecha en memoria para evitar líos de índices compuestos si no existen
         if (options.startDate || options.endDate) {
             const start = options.startDate ? new Date(options.startDate).getTime() : 0;
             const end = options.endDate ? new Date(options.endDate).getTime() : Infinity;
             results = results.filter((app: any) => {
-                const d = app.date.toDate().getTime();
+                const d = app.date?.toDate?.()?.getTime() || 0;
                 return d >= start && d <= end;
             });
         }
         return await hydrateAppointments(results);
     }
 
-    // Si no hay clinicId (vista global), usamos el rango de fechas extenso
-    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2024-01-01'));
+    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
 
-    q = query(colRef, where('date', '>=', start), where('date', '<=', end), orderBy('date', 'asc'), limit(15000));
+    q = query(colRef, where('date', '>=', start), where('date', '<=', end), orderBy('date', 'asc'), limit(50000));
     const snap = await getDocs(q);
     const results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     return await hydrateAppointments(results);
 }
 
 export async function getLabAppointmentsData(options?: { startDate?: string, endDate?: string }) {
-    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2024-01-01'));
+    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
-    const q = query(collection(adminDb, 'labAppointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
+    const q = query(collection(adminDb, 'labAppointments'), where('date', '>=', start), where('date', '<=', end), limit(20000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 export async function getXRayAppointmentsData(options?: { startDate?: string, endDate?: string }) {
-    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2024-01-01'));
+    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
-    const q = query(collection(adminDb, 'xrayAppointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
+    const q = query(collection(adminDb, 'xrayAppointments'), where('date', '>=', start), where('date', '<=', end), limit(20000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 export async function getUltrasoundAppointmentsData(options?: { startDate?: string, endDate?: string }) {
-    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2024-01-01'));
+    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
-    const q = query(collection(adminDb, 'ultrasoundAppointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
+    const q = query(collection(adminDb, 'ultrasoundAppointments'), where('date', '>=', start), where('date', '<=', end), limit(20000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 export async function getVaccineAppointmentsData(options?: { startDate?: string, endDate?: string }) {
-    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2024-01-01'));
+    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
-    const q = query(collection(adminDb, 'vaccineAppointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
+    const q = query(collection(adminDb, 'vaccineAppointments'), where('date', '>=', start), where('date', '<=', end), limit(20000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 export async function getAppointmentsForClinic(id: string) {
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', id), limit(10000));
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', id), limit(20000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
@@ -425,7 +422,7 @@ export async function getPendingPrescriptions(f?: any) {
     if (f?.clinicId) results = results.filter(r => r.clinicId === f.clinicId);
     return serializeData(results);
 }
-export async function getPrescriptionHistory(o?: any) { const s = await getDocs(query(collection(adminDb, 'prescriptions'), where('status', '==', 'surtida'), orderBy('dispensedAt', 'desc'), limit(200))); return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id }))); }
+export async function getPrescriptionHistory(options?: any) { const s = await getDocs(query(collection(adminDb, 'prescriptions'), where('status', '==', 'surtida'), orderBy('dispensedAt', 'desc'), limit(200))); return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id }))); }
 export async function deletePrescription(id: string) { await deleteDoc(doc(adminDb, 'prescriptions', id)); return { success: true }; }
 
 export async function saveMedicalConsultation(c: any) {
@@ -441,7 +438,7 @@ export async function getAttendedPatientsForClinic(cid: string) {
     const s = await getDocs(query(collection(adminDb, 'medicalConsultations'), where('clinicId', '==', cid), limit(1000)));
     const ids = Array.from(new Set(s.docs.map(d => d.data().patientId)));
     if (ids.length === 0) return [];
-    const pSnap = await getDocs(query(collection(adminDb, 'patients'), where(documentId(), 'in', ids.slice(0, 100))));
+    const pSnap = await getDocs(query(collection(adminDb, 'patients'), where(documentId(), 'in', ids.slice(0, 30))));
     return serializeData(pSnap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 
@@ -525,13 +522,19 @@ export async function rebuildNombreCompletoAction() {
     await b.commit(); return { success: true, count };
 }
 export async function cleanupOldRecords() {
-    const limit = Timestamp.fromDate(subMonths(new Date(), 4));
+    const limitDate = Timestamp.fromDate(subMonths(new Date(), 4));
     const colls = ['appointments', 'labAppointments', 'xrayAppointments', 'ultrasoundAppointments', 'vaccineAppointments', 'activityLog'];
     let total = 0;
     for (const c of colls) {
         const snap = await getDocs(collection(adminDb, c));
         const b = writeBatch(adminDb);
-        snap.forEach(d => { if (d.data().date && d.data().date < limit) { b.delete(d.ref); total++; } });
+        snap.forEach(d => { 
+            const data = d.data();
+            if (data.date && data.date instanceof Timestamp && data.date.seconds < limitDate.seconds) { 
+                b.delete(d.ref); 
+                total++; 
+            } 
+        });
         await b.commit();
     }
     return { success: true, deletedCount: total };
