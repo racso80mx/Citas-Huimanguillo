@@ -48,37 +48,26 @@ export function TablesDownloader() {
     const { toast } = useToast();
 
     const tables: TableConfig[] = [
-        // 1. Agendas y Citas
         { id: 'appointments', label: 'appointments', icon: ClipboardList, description: 'Citas médicas generales', color: 'text-primary' },
         { id: 'labAppointments', label: 'labAppointments', icon: FlaskConical, description: 'Citas de Laboratorio', color: 'text-emerald-600' },
         { id: 'xrayAppointments', label: 'xrayAppointments', icon: Stethoscope, description: 'Citas de Rayos X', color: 'text-blue-600' },
         { id: 'ultrasoundAppointments', label: 'ultrasoundAppointments', icon: Activity, description: 'Citas de Ultrasonido', color: 'text-indigo-600' },
         { id: 'vaccineAppointments', label: 'vaccineAppointments', icon: ShieldCheck, description: 'Citas de Vacunación', color: 'text-teal-600' },
-        
-        // 2. Pacientes e Historial
         { id: 'patients', label: 'patients', icon: Users, description: 'Padrón maestro de pacientes', color: 'text-primary' },
         { id: 'medicalConsultations', label: 'medicalConsultations', icon: History, description: 'Historial de notas médicas', color: 'text-rose-600' },
         { id: 'prescriptions', label: 'prescriptions', icon: FileText, description: 'Recetas digitales generadas', color: 'text-orange-600' },
-        
-        // 3. Inventarios
         { id: 'medications', label: 'medications', icon: Pill, description: 'Inventario de medicamentos', color: 'text-primary' },
         { id: 'supplies', label: 'supplies', icon: Package, description: 'Insumos de Almacén', color: 'text-slate-600' },
         { id: 'pharmacyVouchers', label: 'pharmacyVouchers', icon: ClipboardList, description: 'Vales de salida de farmacia', color: 'text-amber-600' },
-        
-        // 4. Catálogos Operativos
         { id: 'clinics', label: 'clinics', icon: Hospital, description: 'Consultorios y médicos', color: 'text-primary' },
         { id: 'colonias', label: 'colonias', icon: MapPin, description: 'Localidades y municipios', color: 'text-slate-600' },
         { id: 'departments', label: 'departments', icon: LayoutList, description: 'Destinos para vales', color: 'text-slate-600' },
         { id: 'serviceTypes', label: 'serviceTypes', icon: LayoutList, description: 'Tipos de servicio', color: 'text-slate-600' },
         { id: 'specialties', label: 'specialties', icon: LayoutList, description: 'Especialidades médicas', color: 'text-slate-600' },
-        
-        // 5. Catálogos de Estudios
         { id: 'labStudies', label: 'labStudies', icon: FlaskConical, description: 'Catálogo estudios laboratorio', color: 'text-slate-500' },
         { id: 'xrayStudies', label: 'xrayStudies', icon: Stethoscope, description: 'Catálogo estudios Rayos X', color: 'text-slate-500' },
         { id: 'ultrasoundStudies', label: 'ultrasoundStudies', icon: Activity, description: 'Catálogo estudios Ultrasonido', color: 'text-slate-500' },
         { id: 'vaccines', label: 'vaccines', icon: ShieldCheck, description: 'Catálogo de biológicos', color: 'text-slate-500' },
-        
-        // 6. Configuración y Seguridad
         { id: 'holidays', label: 'holidays', icon: CalendarIcon, description: 'Días festivos oficiales', color: 'text-red-500' },
         { id: 'specialActionDays', label: 'specialActionDays', icon: ShieldAlert, description: 'Bloqueos por informes', color: 'text-red-500' },
         { id: 'cie10', label: 'cie10', icon: BookText, description: 'Catálogo maestro diagnósticos', color: 'text-blue-800' },

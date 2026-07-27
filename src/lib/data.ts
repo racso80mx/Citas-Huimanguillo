@@ -57,7 +57,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { startOfDay, endOfDay, parseISO, startOfMonth, endOfMonth, addDays, subMonths } from 'date-fns';
 
 /**
- * Normaliza textos para comparaciones robustas.
+ * Normaliza textos para comparaciones robustas (Días, Servicios, etc).
  */
 export const normalize = (val: any): string => {
     if (val === null || val === undefined) return "";
@@ -212,21 +212,31 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     const colRef = collection(adminDb, 'appointments');
     let q;
     
-    // ESTRATEGIA EXHAUSTIVA: Fetch por rango de fechas extenso para asegurar visibilidad sin importar filtros iniciales.
-    // Usamos un filtro híbrido: Búsqueda pesada en Firestore y filtrado por consultorio en memoria para evitar errores de índice.
-    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
-    const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
-
-    q = query(colRef, where('date', '>=', start), where('date', '<=', end), orderBy('date', 'asc'), limit(20000));
-
-    const snap = await getDocs(q);
-    let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-
-    // Filtrado por consultorio en memoria para garantizar 100% de fidelidad
+    // ESTRATEGIA EXHAUSTIVA: Fetch por clinicId primero para asegurar visibilidad total
     if (options?.clinicId) {
-        results = results.filter((app: any) => app.clinicId === options.clinicId);
+        q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
+        const snap = await getDocs(q);
+        let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+        
+        // Filtramos por fecha en memoria para evitar líos de índices compuestos si no existen
+        if (options.startDate || options.endDate) {
+            const start = options.startDate ? new Date(options.startDate).getTime() : 0;
+            const end = options.endDate ? new Date(options.endDate).getTime() : Infinity;
+            results = results.filter((app: any) => {
+                const d = app.date.toDate().getTime();
+                return d >= start && d <= end;
+            });
+        }
+        return await hydrateAppointments(results);
     }
 
+    // Si no hay clinicId (vista global), usamos el rango de fechas extenso
+    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2024-01-01'));
+    const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
+
+    q = query(colRef, where('date', '>=', start), where('date', '<=', end), orderBy('date', 'asc'), limit(15000));
+    const snap = await getDocs(q);
+    const results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     return await hydrateAppointments(results);
 }
 
