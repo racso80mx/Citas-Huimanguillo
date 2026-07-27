@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import React from 'react';
@@ -103,7 +102,10 @@ export default function PageContent({
 
       for (const day of daysInMonth) {
           const dateString = format(day, 'yyyy-MM-dd');
-          const dayBooked = allAppointments.filter(a => a.date.split('T')[0] === dateString && a.clinicId === targetClinic.id);
+          const dayBooked = allAppointments.filter(a => {
+              const appDate = typeof a.date === 'string' ? a.date.split('T')[0] : format(a.date, 'yyyy-MM-dd');
+              return appDate === dateString && a.clinicId === targetClinic.id;
+          });
           const dayName = dayNames[day.getDay()];
           
           const isHoliday = holidaySet.has(dateString);
@@ -159,6 +161,7 @@ export default function PageContent({
           const startDate = startOfMonth(monthDate);
           const endDate = endOfMonth(monthDate);
           
+          // ESTRATEGIA SEGMENTADA: Solo descargamos el mes necesario para el consultorio específico
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
             getAppointments({ startDate: startDate.toISOString(), endDate: endDate.toISOString(), clinicId: targetClinicId }), 
             getHolidays(), 

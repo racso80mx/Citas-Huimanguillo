@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -211,7 +210,6 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     let q;
     
     if (options?.clinicId) {
-        // CORRECCIÓN: Filtro quirúrgico para evitar error de 10,000 registros
         q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
         const snap = await getDocs(q);
         let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
@@ -230,7 +228,7 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
 
-    q = query(colRef, where('date', '>=', start), where('date', '<=', end), orderBy('date', 'asc'), limit(10000));
+    q = query(colRef, where('date', '>=', start), where('date', '<=', end), limit(10000));
     const snap = await getDocs(q);
     const results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     return await hydrateAppointments(results);
@@ -476,7 +474,6 @@ export async function getBIData() {
   return { appointments: apps, labAppointments: lab, xRayAppointments: xr, ultrasoundAppointments: us, vaccineAppointments: vac, clinics, colonias };
 }
 export async function getAppointmentCountOnDate(clinicId: string, d: string) {
-    const start = Timestamp.fromDate(startOfToday()); // Approximation
     const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId), limit(10000));
     const snap = await getDocs(q);
     return snap.docs.filter(doc => doc.data().date?.toDate?.().toISOString().split('T')[0] === d).length;
@@ -544,8 +541,6 @@ export async function downloadBackupAction() {
     return { success: true, data: serializeData(res) };
 }
 export async function getAvailableSlotsForDate(cid: string, d: string) {
-    const start = Timestamp.fromDate(startOfDay(parseISO(d)));
-    const end = Timestamp.fromDate(endOfDay(parseISO(d)));
     const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(10000));
     const snap = await getDocs(q);
     const booked = snap.docs.filter(doc => doc.data().date?.toDate?.().toISOString().split('T')[0] === d.split('T')[0]).map(d => d.data());
