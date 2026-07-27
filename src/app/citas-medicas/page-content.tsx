@@ -8,9 +8,6 @@ import { AvailabilityCalendar } from '@/components/availability-calendar';
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import type { DailyAvailability, Colonia, Clinic, Holiday, SpecialActionDay, ServiceType, Specialty } from '@/lib/definitions';
@@ -18,7 +15,7 @@ import { PatientType, BookingMode } from '@/lib/definitions';
 import { getAppointments, getClinics, getHolidays, verifyCitasMedicasPassword, getSpecialActionDays, getServiceTypes } from '@/lib/actions';
 
 import { useToast } from '@/hooks/use-toast';
-import { Hospital, LayoutList, CalendarDays, CalendarPlus, Check, Loader2, RefreshCw, MapPin, Clock, Info, CheckCircle2, AlertCircle, PlusCircle, Calendar as CalendarIcon } from 'lucide-react';
+import { Hospital, LayoutList, CalendarDays, Check, Loader2, RefreshCw, MapPin, Clock, Info, CheckCircle2, AlertCircle, PlusCircle, Calendar as CalendarIcon } from 'lucide-react';
 import { format, eachDayOfInterval, isSaturday, isSunday, startOfToday, addDays, isSameDay, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -102,16 +99,9 @@ export default function PageContent({
       for (const day of daysInMonth) {
           const dateString = format(day, 'yyyy-MM-dd');
           
-          // ESTRATEGIA EXHAUSTIVA: Normalizamos la comparación para asegurar que todas las citas ocupadas sean contadas.
           const dayBooked = allAppointments.filter(a => {
-              let appDate = '';
-              if (typeof a.date === 'string') {
-                  appDate = a.date.split('T')[0];
-              } else {
-                  appDate = format(new Date(a.date), 'yyyy-MM-dd');
-              }
-              // Verificamos por ID y por nombre del núcleo para máxima seguridad
-              return appDate === dateString && (a.clinicId === targetClinic.id || a.clinicName === targetClinic.name);
+              const appDate = (a.date as string).split('T')[0];
+              return appDate === dateString && a.clinicId === targetClinic.id;
           });
 
           const dayName = dayNames[day.getDay()];
@@ -160,16 +150,12 @@ export default function PageContent({
 
   const fetchMonthAvailability = useCallback(async (targetClinicId: string, monthDate: Date) => {
       const cacheKey = `${targetClinicId}-${format(monthDate, 'yyyy-MM')}`;
-      if (availabilityCache[cacheKey]) {
-          return availabilityCache[cacheKey];
-      }
+      if (availabilityCache[cacheKey]) return availabilityCache[cacheKey];
 
       const startDate = startOfMonth(monthDate);
       const endDate = endOfMonth(monthDate);
       
       try {
-          // ESTRATEGIA EXHAUSTIVA: Al usar clinicId como filtro principal, evitamos la necesidad de un índice compuesto
-          // de Firestore y garantizamos ver el 100% de los datos de esa unidad.
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
             getAppointments({ startDate: startDate.toISOString(), endDate: endDate.toISOString(), clinicId: targetClinicId }), 
             getHolidays(), 
@@ -185,11 +171,10 @@ export default function PageContent({
               return monthAvail;
           }
       } catch (e) {
-          console.error("Fetch month availability error", e);
-          toast({ title: 'Sincronizando con base de datos...', variant: 'default' });
+          console.error("Fetch month error", e);
       }
       return [];
-  }, [clinics, availabilityCache, calculateAvailability, toast]);
+  }, [clinics, availabilityCache, calculateAvailability]);
 
   useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
@@ -349,7 +334,9 @@ export default function PageContent({
                         <h3 className="text-xl font-bold font-headline text-foreground flex items-center gap-2">
                             <CalendarIcon className="h-5 w-5 text-primary" /> 3. Disponibilidad Próximas 2 Semanas
                         </h3>
-                        <Badge variant="outline" className="font-bold text-[10px] uppercase bg-muted/20">Cupo en {selectedClinic?.name}</Badge>
+                        <Button variant="ghost" size="icon" onClick={() => { setAvailabilityCache({}); fetchMonthAvailability(selectedClinicId, currentMonth); }} disabled={isPending}>
+                            <RefreshCw className={cn("h-4 w-4 text-primary", isPending && "animate-spin")} />
+                        </Button>
                     </div>
 
                     {viewMode === 'grid' ? (
@@ -466,14 +453,13 @@ export default function PageContent({
 
               {!selectedDate && (
                   <div className="h-full flex flex-col items-center justify-center p-12 border-2 border-dashed rounded-[2.5rem] opacity-30 bg-muted/5 min-h-[400px]">
-                      <CalendarPlus className="h-16 w-16 mb-4" />
+                      <CalendarDays className="h-16 w-16 mb-4" />
                       <p className="text-xl font-black uppercase tracking-widest text-center leading-tight">Por favor, completa los pasos anteriores</p>
                   </div>
               )}
 
               {announcements && announcements.length > 0 && (
                 <Card className="shadow-lg border-primary/10">
-                  <CardHeader className="bg-primary/5 py-4"><CardTitle className="text-lg flex items-center gap-2 font-headline"><Info className="h-5 w-5 text-primary" /> Avisos Importantes</CardTitle></CardHeader>
                   <CardContent className="pt-6"><ul className="space-y-3 text-muted-foreground list-disc pl-5 font-medium">{announcements.map((a, i) => (<li key={i}>{a}</li>))}</ul></CardContent>
                 </Card>
               )}
