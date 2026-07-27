@@ -52,7 +52,7 @@ import type {
 } from './definitions';
 import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
-import { startOfDay, endOfDay, parseISO, startOfMonth, endOfMonth, addDays, subMonths, addMonths } from 'date-fns';
+import { startOfDay, endOfDay, parseISO, startOfMonth, endOfMonth, addDays, subMonths } from 'date-fns';
 
 /**
  * Serializa datos de Firestore para su uso en componentes de servidor y cliente.
@@ -178,13 +178,13 @@ export async function getPatientByCURP(c: string) { const snap = await getDoc(do
 export async function bulkInsertPatients(items: any[]) {
     const b = writeBatch(adminDb);
     items.forEach(i => {
-        const curp = String(i.CURP || '').toUpperCase().trim();
+        const curp = String(i.CURP || i.curp || '').toUpperCase().trim();
         if (curp) {
             const data = {
-                curp, expediente: String(i['No.Expediente'] || ''), name: String(i.Nombre || '').toUpperCase(),
-                paternalLastName: String(i.Apaterno || '').toUpperCase(), maternalLastName: String(i.Amaterno || '').toUpperCase(),
-                nombreCompleto: `${i.Nombre} ${i.Apaterno} ${i.Amaterno}`.toUpperCase(), sex: i.Sexo === 'H' ? 'Hombre' : 'Mujer',
-                age: parseInt(i.Edad) || 0, phoneNumber: String(i.Telefono || ''), status: PatientStatus.Vigente
+                curp, expediente: String(i['No.Expediente'] || i.expediente || ''), name: String(i.Nombre || i.name || '').toUpperCase(),
+                paternalLastName: String(i.Apaterno || i.paternalLastName || '').toUpperCase(), maternalLastName: String(i.Amaterno || i.maternalLastName || '').toUpperCase(),
+                nombreCompleto: `${i.Nombre || i.name} ${i.Apaterno || i.paternalLastName} ${i.Amaterno || i.maternalLastName}`.toUpperCase(), sex: i.Sexo === 'H' ? 'Hombre' : 'Mujer',
+                age: parseInt(i.Edad || i.age) || 0, phoneNumber: String(i.Telefono || i.phoneNumber || ''), status: PatientStatus.Vigente
             };
             b.set(doc(adminDb, 'patients', curp), data, { merge: true });
         }
@@ -192,37 +192,32 @@ export async function bulkInsertPatients(items: any[]) {
     await b.commit(); return { success: true, processedCount: items.length };
 }
 
-// --- CITAS (REINGENIERÍA PARA VISIBILIDAD TOTAL) ---
+// --- CITAS (CONSULTA QUIRÚRGICA POR CONSULTORIO) ---
 export async function getAppointmentsData(options?: { startDate?: string, endDate?: string, clinicId?: string }) {
     const colRef = collection(adminDb, 'appointments');
-    
-    // DEFINICIÓN DE RANGO: Usamos un rango muy amplio por defecto (2020-2030) para que las citas en 2026 sean visibles.
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
 
     let q;
-    // OPTIMIZACIÓN: Si hay clinicId, filtramos por él primero. Esto requiere índice compuesto clinicId+date.
-    // Si no hay índice, el filtrado híbrido (por fecha en nube, clinicId en memoria) es el respaldo.
+    // Si consultamos un consultorio específico, traemos todo lo de ese consultorio para asegurar precisión.
     if (options?.clinicId) {
-        q = query(colRef, where('clinicId', '==', options.clinicId), where('date', '>=', start), where('date', '<=', end), limit(10000));
+        q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
     } else {
         q = query(colRef, where('date', '>=', start), where('date', '<=', end), orderBy('date', 'asc'), limit(10000));
     }
     
-    try {
-        const snap = await getDocs(q);
-        let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-        return await hydrateAppointments(results);
-    } catch (e: any) {
-        // RESPALDO ANTI-ERROR DE ÍNDICE: Si falla por falta de índice, consultamos solo por fecha y filtramos en memoria.
-        const backupQ = query(colRef, where('date', '>=', start), where('date', '<=', end), limit(10000));
-        const backupSnap = await getDocs(backupQ);
-        let results = backupSnap.docs.map(d => ({ ...d.data(), id: d.id }));
-        if (options?.clinicId) {
-            results = results.filter((app: any) => app.clinicId === options.clinicId);
-        }
-        return await hydrateAppointments(results);
+    const snap = await getDocs(q);
+    let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    
+    // Filtrado secundario en servidor para asegurar rango de fechas si se pidió clinicId
+    if (options?.clinicId) {
+        results = results.filter((app: any) => {
+            const d = app.date instanceof Timestamp ? app.date.toDate() : new Date(app.date);
+            return d >= start.toDate() && d <= end.toDate();
+        });
     }
+
+    return await hydrateAppointments(results);
 }
 
 export async function getLabAppointmentsData(options?: { startDate?: string, endDate?: string }) {
@@ -264,7 +259,7 @@ export async function saveNewAppointment(a: any, p: any, d: boolean, c?: string)
     batch.set(doc(adminDb, 'patients', curp), { ...p, curp, nombreCompleto: `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase() }, { merge: true });
     const id = uuidv4();
     const appointmentNumber = `MED-${uuidv4().split('-')[0].toUpperCase()}`;
-    const appData = { ...a, patientId: curp, id, appointmentNumber, coloniaName: c, date: Timestamp.fromDate(parseISO(a.date)), createdAt: Timestamp.now() };
+    const appData = { ...a, patientId: curp, id, appointmentNumber, coloniaName: c, date: Timestamp.fromDate(new Date(a.date)), createdAt: Timestamp.now() };
     batch.set(doc(adminDb, 'appointments', id), appData);
     await batch.commit(); return { success: true, data: { ...appData, id } };
 }
@@ -279,7 +274,7 @@ export async function saveNewLabAppointment(a: any, p: any) {
     const batch = writeBatch(adminDb);
     batch.set(doc(adminDb, 'patients', curp), { ...p, curp, nombreCompleto: `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase() }, { merge: true });
     const id = uuidv4();
-    const appData = { ...a, patientId: curp, id, date: Timestamp.fromDate(parseISO(a.date)), createdAt: Timestamp.now() };
+    const appData = { ...a, patientId: curp, id, date: Timestamp.fromDate(new Date(a.date)), createdAt: Timestamp.now() };
     batch.set(doc(adminDb, 'labAppointments', id), appData);
     await batch.commit(); return { success: true, data: { ...appData, id } };
 }
@@ -288,7 +283,7 @@ export async function saveNewXRayAppointment(a: any, p: any) {
     const batch = writeBatch(adminDb);
     batch.set(doc(adminDb, 'patients', curp), { ...p, curp, nombreCompleto: `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase() }, { merge: true });
     const id = uuidv4();
-    const appData = { ...a, patientId: curp, id, date: Timestamp.fromDate(parseISO(a.date)), createdAt: Timestamp.now() };
+    const appData = { ...a, patientId: curp, id, date: Timestamp.fromDate(new Date(a.date)), createdAt: Timestamp.now() };
     batch.set(doc(adminDb, 'xrayAppointments', id), appData);
     await batch.commit(); return { success: true, data: { ...appData, id } };
 }
@@ -297,7 +292,7 @@ export async function saveNewUltrasoundAppointment(a: any, p: any) {
     const batch = writeBatch(adminDb);
     batch.set(doc(adminDb, 'patients', curp), { ...p, curp, nombreCompleto: `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase() }, { merge: true });
     const id = uuidv4();
-    const appData = { ...a, patientId: curp, id, date: Timestamp.fromDate(parseISO(a.date)), createdAt: Timestamp.now() };
+    const appData = { ...a, patientId: curp, id, date: Timestamp.fromDate(new Date(a.date)), createdAt: Timestamp.now() };
     batch.set(doc(adminDb, 'ultrasoundAppointments', id), appData);
     await batch.commit(); return { success: true, data: { ...appData, id } };
 }
@@ -306,7 +301,7 @@ export async function saveNewVaccineAppointment(a: any, p: any) {
     const batch = writeBatch(adminDb);
     batch.set(doc(adminDb, 'patients', curp), { ...p, curp, nombreCompleto: `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase() }, { merge: true });
     const id = uuidv4();
-    const appData = { ...a, patientId: curp, id, date: Timestamp.fromDate(parseISO(a.date)), createdAt: Timestamp.now() };
+    const appData = { ...a, patientId: curp, id, date: Timestamp.fromDate(new Date(a.date)), createdAt: Timestamp.now() };
     batch.set(doc(adminDb, 'vaccineAppointments', id), appData);
     await batch.commit(); return { success: true, data: { ...appData, id } };
 }
@@ -317,7 +312,7 @@ export async function updateAppointmentStatus(id: string, s: AppointmentStatus, 
 }
 export async function rescheduleAppointment(id: string, date: string, type: string, time: string) {
     const colls: any = { medical: 'appointments', lab: 'labAppointments', xray: 'xrayAppointments', ultrasound: 'ultrasoundAppointments', vaccine: 'vaccineAppointments' };
-    await updateDoc(doc(adminDb, colls[type] || 'appointments', id), { date: Timestamp.fromDate(parseISO(date)), time }); return { success: true };
+    await updateDoc(doc(adminDb, colls[type] || 'appointments', id), { date: Timestamp.fromDate(new Date(date)), time }); return { success: true };
 }
 export async function cloneAppointment(id: string, date: string, type: string, time: string) {
     const colls: any = { medical: 'appointments', lab: 'labAppointments', xray: 'xrayAppointments', ultrasound: 'ultrasoundAppointments', vaccine: 'vaccineAppointments' };
@@ -325,7 +320,7 @@ export async function cloneAppointment(id: string, date: string, type: string, t
     const snap = await getDoc(doc(adminDb, coll, id));
     if (!snap.exists()) return { success: false };
     const newId = uuidv4();
-    await setDoc(doc(adminDb, coll, newId), { ...snap.data(), id: newId, appointmentNumber: `${snap.data().appointmentNumber}-CL`, date: Timestamp.fromDate(parseISO(date)), time, createdAt: Timestamp.now(), status: 'Agendada' });
+    await setDoc(doc(adminDb, coll, newId), { ...snap.data(), id: newId, appointmentNumber: `${snap.data().appointmentNumber}-CL`, date: Timestamp.fromDate(new Date(date)), time, createdAt: Timestamp.now(), status: 'Agendada' });
     return { success: true, message: 'Nueva cita asignada correctamente' };
 }
 
