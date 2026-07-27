@@ -427,7 +427,7 @@ export async function getAttendedPatientsForClinic(cid: string) {
     return serializeData(pSnap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 
-export async function getConsultationsByPatientId(pid: string) { const s = await getDocs(query(collection(adminDb, 'medicalConsultations'), where('patientId', '==', pid), orderBy('createdAt', 'desc'), limit(100))); return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id }))); }
+export async function getConsultationsByPatientId(pid: string) { const s = await getDocs(query(collection(adminDb, 'medicalConsultations'), where('patientId', '==', pid), orderBy('createdAt', 'desc'), limit(100))); return serializeData(s.docs.map(d => ({ ...d.id }))); }
 export async function getPrescriptionsByPatientId(pid: string) { const s = await getDocs(query(collection(adminDb, 'prescriptions'), where('patientId', '==', pid), orderBy('createdAt', 'desc'), limit(100))); return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id }))); }
 export async function getPatientPrescriptionsCountTodayAction(pid: string) {
     const start = Timestamp.fromDate(startOfDay(new Date()));

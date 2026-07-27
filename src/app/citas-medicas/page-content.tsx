@@ -18,7 +18,7 @@ import { PatientType, BookingMode } from '@/lib/definitions';
 import { getAppointments, getClinics, getHolidays, verifyCitasMedicasPassword, getSpecialActionDays, getServiceTypes } from '@/lib/actions';
 
 import { useToast } from '@/hooks/use-toast';
-import { Hospital, LayoutList, CalendarDays, CalendarPlus, Check, Loader2, RefreshCw, MapPin, Clock, Info, CheckCircle2, AlertCircle, PlusCircle } from 'lucide-react';
+import { Hospital, LayoutList, CalendarDays, CalendarPlus, Check, Loader2, RefreshCw, MapPin, Clock, Info, CheckCircle2, AlertCircle, PlusCircle, Calendar as CalendarIcon } from 'lucide-react';
 import { format, eachDayOfInterval, isSaturday, isSunday, startOfToday, addDays, isSameDay, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -51,6 +51,7 @@ export default function PageContent({
     initialServiceTypes,
 }: PageContentProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'calendar'>('grid');
   
   const [selectedServiceTypeId, setSelectedServiceTypeId] = React.useState<string | undefined>();
   const [selectedClinicId, setSelectedClinicId] = React.useState<string | undefined>();
@@ -110,16 +111,18 @@ export default function PageContent({
           const isHoliday = holidaySet.has(dateString);
           const isWeekend = isSaturday(day) || isSunday(day);
           
-          // Día de Acción Especial: SIEMPRE BLOQUEADO
+          // DÍA DE ACCIÓN: Son días administrativos donde NO se dan citas
+          const isDayOfAction = targetClinic.daysOfAction?.some(doa => normalize(doa) === dayName);
+          
           const isSpecialActionDay = specialDays.some(sad => 
               sad.date === dateString && (normalize(sad.clinicType) === clinicServiceTypeName || normalize(sad.clinicType) === "CONSULTA EXTERNA")
           );
 
-          // ESTRATEGIA VACUNAS: Lunes a Viernes son hábiles por defecto si no están bloqueados
           const isDateBlocked = targetClinic.unavailableDates?.includes(dateString);
           const isWeekendBlocked = isWeekend && !targetClinic.weekendBookingEnabled;
           
-          const isBlocked = isDateBlocked || isHoliday || isWeekendBlocked || isSpecialActionDay;
+          // Lógica de Bloqueo Exhaustiva
+          const isBlocked = isDateBlocked || isHoliday || isWeekendBlocked || isSpecialActionDay || isDayOfAction;
 
           let availableSlotsCount = 0;
           let takenInfo = dayBooked.map(a => ({ time: a.time, duration: a.duration }));
@@ -153,15 +156,14 @@ export default function PageContent({
   const fetchMonthAvailability = useCallback(async (targetClinicId: string, monthDate: Date) => {
       const cacheKey = `${targetClinicId}-${format(monthDate, 'yyyy-MM')}`;
       if (availabilityCache[cacheKey]) {
-          setAvailability(availabilityCache[cacheKey]);
-          return;
+          return availabilityCache[cacheKey];
       }
 
       const startDate = startOfMonth(monthDate);
       const endDate = endOfMonth(monthDate);
       
       try {
-          // CONSULTA QUIRÚRGICA: Solo traemos las citas del mes para este consultorio (Estrategia Vacunas)
+          // ESTRATEGIA VACUNAS: Carga por segmento mensual para evitar límites de Firestore
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
             getAppointments({ startDate: startDate.toISOString(), endDate: endDate.toISOString(), clinicId: targetClinicId }), 
             getHolidays(), 
@@ -173,19 +175,25 @@ export default function PageContent({
           
           if (targetClinic) {
               const monthAvail = calculateAvailability(targetClinic, monthDate, allAppointments, holidaySet, freshSpecialActionDays);
-              setAvailability(monthAvail);
               setAvailabilityCache(prev => ({ ...prev, [cacheKey]: monthAvail }));
+              return monthAvail;
           }
       } catch (e) {
           console.error("Fetch month availability error", e);
           toast({ title: 'Error al sincronizar', variant: 'destructive' });
       }
+      return [];
   }, [clinics, availabilityCache, calculateAvailability, toast]);
 
   useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
         startTransition(async () => {
-            await fetchMonthAvailability(selectedClinicId, currentMonth);
+            const currentMonthAvail = await fetchMonthAvailability(selectedClinicId, currentMonth);
+            const nextMonthDate = addDays(endOfMonth(currentMonth), 1);
+            const nextMonthAvail = await fetchMonthAvailability(selectedClinicId, nextMonthDate);
+            
+            // Consolidar disponibilidad para cubrir las 2 semanas sin importar el cambio de mes
+            setAvailability([...currentMonthAvail, ...nextMonthAvail]);
         });
     }
   }, [isAuthenticated, selectedClinicId, currentMonth, fetchMonthAvailability]);
@@ -208,7 +216,6 @@ export default function PageContent({
     setSelectedDate(undefined);
     setSelectedColoniaId(undefined);
     setSelectedTime(undefined);
-    setAvailability([]);
   };
 
   const selectedClinic = useMemo(() => clinics.find(c => c.id === selectedClinicId), [selectedClinicId, clinics]);
@@ -225,11 +232,10 @@ export default function PageContent({
         })).sort((a,b) => a.label.localeCompare(b.label));
   }, [clinics, selectedServiceTypeId]);
 
-  const selectedDayAvailability = useMemo(() => {
-    if (!selectedDate) return null;
-    const dateString = format(selectedDate, 'yyyy-MM-dd');
-    return availability.find((d) => d.date === dateString) || null;
-  }, [selectedDate, availability]);
+  const gridDays = useMemo(() => {
+    const today = startOfToday();
+    return Array.from({ length: 14 }, (_, i) => addDays(today, i));
+  }, []);
 
   const availableTimeSlots = useMemo(() => {
     if (!selectedClinic || !selectedDate || selectedClinic.bookingMode !== BookingMode.Time) return [];
@@ -263,7 +269,7 @@ export default function PageContent({
     if (!dayAvail) return [];
 
     const booked = dayAvail.takenTimesByClinic[selectedClinic.id] || [];
-    const totalSlots = (selectedClinic.dailySlots || 15) + (targetClinic.waitlistSlots || 0);
+    const totalSlots = (selectedClinic.dailySlots || 15) + (selectedClinic.waitlistSlots || 0);
     const allTokens = Array.from({ length: totalSlots }, (_, i) => `Ficha ${i + 1}`);
     const freeTokens = allTokens.filter(t => !booked.some(a => a.time === t));
 
@@ -298,85 +304,106 @@ export default function PageContent({
           <Image src={logoBase64} alt="Logo" width={80} height={80} className="rounded-md shadow-md" />
         </div>
         <h1 className="text-4xl lg:text-5xl font-bold font-headline text-foreground uppercase tracking-tight">Agenda tu Cita Médica</h1>
-        <p className="text-lg text-muted-foreground mt-2 max-w-2xl mx-auto">Selecciona un día, el consultorio que te corresponde y registra tus datos.</p>
+        <p className="text-lg text-muted-foreground mt-2 max-w-2xl mx-auto">Selecciona el consultorio que te corresponde y reserva tu lugar.</p>
       </div>
 
       <Card className="w-full max-w-6xl mx-auto shadow-2xl border-border/60 overflow-hidden">
         <CardContent className="p-4 md:p-8">
           <div className="grid md:grid-cols-2 gap-12 items-start">
-            {/* COLUMNA IZQUIERDA: SELECCIÓN (ESTILO VACUNAS) */}
+            {/* COLUMNA IZQUIERDA: SELECCIÓN */}
             <div className="flex flex-col gap-8">
-              <div>
-                <h3 className="text-2xl font-bold font-headline text-foreground mb-6 flex items-center justify-between">
-                  <span className="flex items-center gap-2"><CalendarDays className="h-6 w-6 text-primary" /> 1. Selecciona un día</span>
-                  <Button variant="ghost" size="icon" onClick={refreshData} disabled={!selectedClinicId || isPending}>
-                      <RefreshCw className={cn("h-5 w-5 text-primary", isPending && "animate-spin")} />
-                  </Button>
-                </h3>
-                <AvailabilityCalendar
-                  selectedDate={selectedDate}
-                  onDateSelect={handleDateSelect}
-                  availability={availability}
-                  onMonthChange={handleMonthChange}
-                  isLoading={isPending}
-                />
-              </div>
+               <div className="space-y-4">
+                    <h3 className="text-xl font-bold font-headline text-foreground flex items-center gap-2">
+                        <LayoutList className="h-5 w-5 text-primary" /> 1. Categoría de Atención
+                    </h3>
+                    <Select onValueChange={(v) => { setSelectedServiceTypeId(v); setSelectedClinicId(undefined); }} value={selectedServiceTypeId}>
+                        <SelectTrigger className="h-12 text-base font-bold"><SelectValue placeholder="Elige el servicio..." /></SelectTrigger>
+                        <SelectContent>{serviceTypes.map(t => <SelectItem key={t.id} value={t.id} className="font-bold">{t.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                </div>
 
-              {selectedDate && (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
-                      <div className="space-y-4">
-                          <h3 className="text-xl font-bold font-headline text-foreground flex items-center gap-2">
-                              <LayoutList className="h-5 w-5 text-primary" /> 2. Categoría de Atención
-                          </h3>
-                          <Select onValueChange={(v) => { setSelectedServiceTypeId(v); setSelectedClinicId(undefined); }} value={selectedServiceTypeId}>
-                              <SelectTrigger className="h-12 text-base font-bold"><SelectValue placeholder="Elige el servicio..." /></SelectTrigger>
-                              <SelectContent>{serviceTypes.map(t => <SelectItem key={t.id} value={t.id} className="font-bold">{t.name}</SelectItem>)}</SelectContent>
-                          </Select>
-                      </div>
+                {selectedServiceTypeId && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <h3 className="text-xl font-bold font-headline text-foreground flex items-center gap-2">
+                            <Hospital className="h-5 w-5 text-primary" /> 2. Consultorio / Núcleo
+                        </h3>
+                        <div className="grid gap-2">
+                            {clinicOptions.map(opt => (
+                                <button key={opt.value} onClick={() => handleClinicSelect(opt.value)} className={cn("w-full p-4 rounded-xl border-2 text-left transition-all group", selectedClinicId === opt.value ? "bg-primary border-primary text-white shadow-md ring-2 ring-primary/20 scale-[1.02]" : "bg-background border-muted hover:border-primary/40 hover:bg-muted/30")}>
+                                    <div className="flex justify-between items-start">
+                                        <div><p className="font-black text-sm uppercase leading-none">{opt.label}</p><p className={cn("text-[10px] mt-1 font-bold uppercase", selectedClinicId === opt.value ? "text-white/70" : "text-muted-foreground group-hover:text-primary")}>Dr. {opt.doctor}</p></div>
+                                        {selectedClinicId === opt.value && <Check className="h-5 w-5 text-white" />}
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
-                      {selectedServiceTypeId && (
-                          <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                              <h3 className="text-xl font-bold font-headline text-foreground flex items-center gap-2">
-                                  <Hospital className="h-5 w-5 text-primary" /> 3. Consultorio / Núcleo
-                              </h3>
-                              <div className="grid gap-2">
-                                  {clinicOptions.map(opt => (
-                                      <button key={opt.value} onClick={() => handleClinicSelect(opt.value)} className={cn("w-full p-4 rounded-xl border-2 text-left transition-all group", selectedClinicId === opt.value ? "bg-primary border-primary text-white shadow-md ring-2 ring-primary/20 scale-[1.02]" : "bg-background border-muted hover:border-primary/40 hover:bg-muted/30")}>
-                                          <div className="flex justify-between items-start">
-                                              <div><p className="font-black text-sm uppercase leading-none">{opt.label}</p><p className={cn("text-[10px] mt-1 font-bold uppercase", selectedClinicId === opt.value ? "text-white/70" : "text-muted-foreground group-hover:text-primary")}>Dr. {opt.doctor}</p></div>
-                                              {selectedClinicId === opt.value && <Check className="h-5 w-5 text-white" />}
-                                          </div>
-                                      </button>
-                                  ))}
-                              </div>
-                          </div>
-                      )}
+                {selectedClinicId && (
+                  <div className="space-y-6 animate-in fade-in duration-500">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-xl font-bold font-headline text-foreground flex items-center gap-2">
+                            <CalendarIcon className="h-5 w-5 text-primary" /> 3. Disponibilidad Próximas 2 Semanas
+                        </h3>
+                        <Badge variant="outline" className="font-bold text-[10px] uppercase bg-muted/20">Cupo en {selectedClinic?.name}</Badge>
+                    </div>
+
+                    {viewMode === 'grid' ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+                            {gridDays.map((day) => {
+                                const dateStr = format(day, 'yyyy-MM-dd');
+                                const dayAvail = availability.find(d => d.date === dateStr);
+                                const isSelected = selectedDate && isSameDay(day, selectedDate);
+                                const slots = dayAvail?.availableSlots ?? 0;
+                                
+                                return (
+                                    <button
+                                        key={dateStr}
+                                        onClick={() => handleDateSelect(day)}
+                                        disabled={slots === 0 && !isPending}
+                                        className={cn(
+                                            "flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all",
+                                            isSelected ? "bg-primary border-primary text-white scale-105 shadow-lg" : "bg-background border-muted hover:border-primary/40 hover:bg-muted/30",
+                                            slots === 0 && "opacity-40 grayscale cursor-not-allowed border-dashed"
+                                        )}
+                                    >
+                                        <span className={cn("text-[10px] font-black uppercase tracking-widest", isSelected ? "text-white/80" : "text-muted-foreground")}>{format(day, 'EEEE', { locale: es })}</span>
+                                        <span className="text-2xl font-black my-1">{format(day, 'dd')}</span>
+                                        <span className={cn("text-[10px] font-black uppercase", isSelected ? "text-white/80" : "text-muted-foreground")}>{format(day, 'MMM', { locale: es })}</span>
+                                        <Badge className={cn("mt-2 text-[9px] font-black uppercase", slots === 0 ? "bg-muted text-muted-foreground" : slots < 5 ? "bg-orange-100 text-orange-700" : "bg-green-100 text-green-700")}>
+                                            {slots === 0 ? 'CERRADO' : `${slots} LIBRES`}
+                                        </Badge>
+                                    </button>
+                                );
+                            })}
+                            <button 
+                                onClick={() => setViewMode('calendar')}
+                                className="col-span-full mt-4 p-4 border-2 border-dashed rounded-2xl flex items-center justify-center gap-2 font-bold text-primary hover:bg-primary/5 transition-colors"
+                            >
+                                <CalendarDays className="h-5 w-5" /> Buscar otra fecha en el Calendario
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center gap-4">
+                            <AvailabilityCalendar
+                                selectedDate={selectedDate}
+                                onDateSelect={handleDateSelect}
+                                availability={availability}
+                                onMonthChange={handleMonthChange}
+                                isLoading={isPending}
+                            />
+                            <Button variant="ghost" onClick={() => setViewMode('grid')} className="text-xs font-bold uppercase tracking-widest">
+                                Volver a vista rápida
+                            </Button>
+                        </div>
+                    )}
                   </div>
-              )}
+                )}
             </div>
 
-            {/* COLUMNA DERECHA: HORARIOS Y DATOS */}
+            {/* COLUMNA DERECHA: DATOS Y CONFIRMACIÓN */}
             <div className="flex flex-col gap-8">
-              {selectedDate && selectedClinicId && selectedDayAvailability && (
-                  <Card className="border-primary/20 bg-primary/5 animate-in zoom-in-95 duration-500">
-                    <CardContent className="pt-6">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Info className="h-5 w-5 text-primary" />
-                          <span className="font-semibold text-sm">Cupo para el {format(selectedDate, 'dd/MM/yyyy')}:</span>
-                        </div>
-                        <Badge variant={selectedDayAvailability.availableSlots > 5 ? "secondary" : "destructive"} className={cn("text-lg px-3 py-1 font-bold", selectedDayAvailability.availableSlots > 5 ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700")}>
-                          {selectedDayAvailability.availableSlots === 0 ? (
-                            <span className="flex items-center gap-1"><AlertCircle className="h-4 w-4" /> Agotado</span>
-                          ) : (
-                            <span className="flex items-center gap-1"><CheckCircle2 className="h-4 w-4" /> {selectedDayAvailability.availableSlots} espacios libres</span>
-                          )}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-              )}
-
               {selectedDate && selectedClinicId && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                       <div className="grid md:grid-cols-2 gap-6">
@@ -425,7 +452,7 @@ export default function PageContent({
                                 selectedTime={selectedTime} 
                                 patientType={patientType} 
                                 isDoubleSlot={isDoubleSlot} 
-                                onBookingSuccess={() => { setAvailabilityCache({}); setAvailability([]); handleClinicSelect(selectedClinicId!); }} 
+                                onBookingSuccess={() => { refreshData(); setSelectedDate(undefined); setSelectedTime(undefined); }} 
                                 announcements={announcements} 
                                 requireColonia={true} 
                               />
@@ -435,7 +462,7 @@ export default function PageContent({
               )}
 
               {!selectedDate && (
-                  <div className="h-full flex flex-col items-center justify-center p-12 border-2 border-dashed rounded-[2.5rem] opacity-30 bg-muted/5 min-h-[300px]">
+                  <div className="h-full flex flex-col items-center justify-center p-12 border-2 border-dashed rounded-[2.5rem] opacity-30 bg-muted/5 min-h-[400px]">
                       <CalendarPlus className="h-16 w-16 mb-4" />
                       <p className="text-xl font-black uppercase tracking-widest text-center leading-tight">Por favor, completa los pasos anteriores</p>
                   </div>
