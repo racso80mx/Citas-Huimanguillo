@@ -192,27 +192,23 @@ export async function bulkInsertPatients(items: any[]) {
     await b.commit(); return { success: true, processedCount: items.length };
 }
 
-// --- CITAS (CONSULTA QUIRÚRGICA POR CONSULTORIO) ---
+// --- CITAS ---
 export async function getAppointmentsData(options?: { startDate?: string, endDate?: string, clinicId?: string }) {
     const colRef = collection(adminDb, 'appointments');
+    
+    // Rango extendido para no perder citas en años futuros
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
 
-    let q;
-    if (options?.clinicId) {
-        q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
-    } else {
-        q = query(colRef, where('date', '>=', start), where('date', '<=', end), orderBy('date', 'asc'), limit(10000));
-    }
+    // FILTRADO HÍBRIDO: Filtramos por fecha en Firestore (índice automático) 
+    // y por consultorio en el servidor para evitar el error de "Index Required" y visibilidad limitada.
+    const q = query(colRef, where('date', '>=', start), where('date', '<=', end), limit(10000));
     
     const snap = await getDocs(q);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     
     if (options?.clinicId) {
-        results = results.filter((app: any) => {
-            const d = app.date instanceof Timestamp ? app.date.toDate() : new Date(app.date);
-            return d >= start.toDate() && d <= end.toDate();
-        });
+        results = results.filter((app: any) => app.clinicId === options.clinicId);
     }
 
     return await hydrateAppointments(results);

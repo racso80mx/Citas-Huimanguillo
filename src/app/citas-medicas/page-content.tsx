@@ -75,11 +75,12 @@ export default function PageContent({
   const { toast } = useToast();
 
   const normalize = useCallback((val: any): string => {
-    if (!val || typeof val !== 'string') return "";
+    if (val === null || val === undefined) return "";
+    const str = String(val);
     try {
-        return val.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
     } catch (e) {
-        return String(val).toUpperCase().trim();
+        return str.toUpperCase().trim();
     }
   }, []);
 
@@ -218,8 +219,8 @@ export default function PageContent({
         const today = startOfToday();
         const endOfRange = addDays(today, 14);
         
-        // Carga Dinámica: Aseguramos que el rango de 14 días esté cubierto cargando meses si es necesario
-        const monthsToFetch = [startOfToday()];
+        // Carga Inteligente: Detectamos si el rango de 14 días cruza de mes y descargamos ambos
+        const monthsToFetch = [startOfMonth(today)];
         if (format(today, 'MM') !== format(endOfRange, 'MM')) {
             monthsToFetch.push(startOfMonth(endOfRange));
         }
@@ -234,7 +235,7 @@ export default function PageContent({
             }
         });
 
-        // Carga bajo demanda del mes del calendario actual o del mes de la fecha seleccionada
+        // Carga bajo demanda del mes seleccionado en el calendario
         const targetMonth = selectedDate ? startOfMonth(selectedDate) : startOfMonth(currentMonth);
         const calCacheKey = `${selectedClinicId}-${format(targetMonth, 'yyyy-MM')}`;
         if (!availabilityCache[calCacheKey]) {
@@ -261,11 +262,9 @@ export default function PageContent({
     setSelectedDate(undefined);
     setSelectedColoniaId(undefined);
     setSelectedTime(undefined);
-    // Limpiamos parcialmente el cache local para forzar actualización inmediata al cambiar de unidad
-    const start = startOfMonth(currentMonth);
-    const end = endOfMonth(currentMonth);
-    const cacheKey = `${clinicId}-${format(start, 'yyyy-MM')}`;
-    fetchAvailabilityForRange(clinicId, start, end, cacheKey);
+    // Limpiamos cache local para forzar actualización inmediata al cambiar de consultorio
+    setAvailabilityCache({});
+    setAvailability([]);
   };
 
   const selectedClinic = useMemo(() => clinics.find(c => c.id === selectedClinicId), [selectedClinicId, clinics]);
@@ -284,7 +283,7 @@ export default function PageContent({
 
   const projectedGridData = useMemo(() => {
     if (!selectedClinicId) return [];
-    const baseDate = selectedDate || startOfToday();
+    const baseDate = startOfToday();
     const range = Array.from({ length: 14 }, (_, i) => addDays(baseDate, i));
     return range.map(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
@@ -299,7 +298,7 @@ export default function PageContent({
             isLoading: !avail && isLoadingAvailability
         };
     });
-  }, [selectedClinicId, availability, isLoadingAvailability, selectedDate]);
+  }, [selectedClinicId, availability, isLoadingAvailability]);
 
   const availableTimeSlots = React.useMemo(() => {
     if (!selectedClinic || !selectedDate || selectedClinic.bookingMode !== BookingMode.Time) return [];
