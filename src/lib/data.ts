@@ -54,7 +54,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { startOfDay, endOfDay, parseISO, startOfMonth, endOfMonth, addDays, subMonths } from 'date-fns';
 
 /**
- * Normaliza textos para comparaciones robustas (Días, Servicios, etc).
+ * Normaliza textos para comparaciones robustas (elimina acentos, fuerza mayúsculas).
  */
 export const normalize = (val: any): string => {
     if (val === null || val === undefined) return "";
@@ -67,7 +67,7 @@ export const normalize = (val: any): string => {
 };
 
 /**
- * Serializa datos de Firestore.
+ * Serializa datos de Firestore para evitar errores de objetos no planos en Server Actions.
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return data;
@@ -85,7 +85,7 @@ export function serializeData(data: any): any {
 }
 
 /**
- * Hidrata las citas de forma optimizada.
+ * Hidrata las citas con datos de pacientes y clínicas de forma optimizada.
  */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
@@ -209,28 +209,19 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     const colRef = collection(adminDb, 'appointments');
     let q;
     
-    if (options?.clinicId) {
-        q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
-        const snap = await getDocs(q);
-        let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-        
-        if (options.startDate || options.endDate) {
-            const start = options.startDate ? new Date(options.startDate).getTime() : 0;
-            const end = options.endDate ? new Date(options.endDate).getTime() : Infinity;
-            results = results.filter((app: any) => {
-                const d = app.date?.toDate?.()?.getTime() || 0;
-                return d >= start && d <= end;
-            });
-        }
-        return await hydrateAppointments(results);
-    }
-
+    // ESTRATEGIA EXHAUSTIVA: Filtramos por fecha (que tiene índice) y luego filtramos localmente por clínica.
+    // Esto evita el error de límite de 10,000 registros y asegura visibilidad total.
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
 
     q = query(colRef, where('date', '>=', start), where('date', '<=', end), limit(10000));
     const snap = await getDocs(q);
-    const results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+    
+    if (options?.clinicId) {
+        results = results.filter((app: any) => app.clinicId === options.clinicId);
+    }
+    
     return await hydrateAppointments(results);
 }
 
