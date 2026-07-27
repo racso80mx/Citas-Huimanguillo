@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useCallback, useEffect, useMemo, useTransition } from 'react';
 import React from 'react';
@@ -102,16 +103,17 @@ export default function PageContent({
 
       for (const day of daysInMonth) {
           const dateString = format(day, 'yyyy-MM-dd');
+          
+          // CONTEO REAL DE CITAS: Filtramos por consultorio y por fecha exacta (local)
           const dayBooked = allAppointments.filter(a => {
-              const appDate = typeof a.date === 'string' ? a.date.split('T')[0] : format(a.date, 'yyyy-MM-dd');
+              const appDate = typeof a.date === 'string' ? a.date.split('T')[0] : format(new Date(a.date), 'yyyy-MM-dd');
               return appDate === dateString && a.clinicId === targetClinic.id;
           });
+
           const dayName = dayNames[day.getDay()];
-          
           const isHoliday = holidaySet.has(dateString);
           const isWeekend = isSaturday(day) || isSunday(day);
           
-          // DÍA DE ACCIÓN: Son días administrativos donde NO se dan citas
           const isDayOfAction = targetClinic.daysOfAction?.some(doa => normalize(doa) === dayName);
           
           const isSpecialActionDay = specialDays.some(sad => 
@@ -120,8 +122,6 @@ export default function PageContent({
 
           const isDateBlocked = targetClinic.unavailableDates?.includes(dateString);
           const isWeekendBlocked = isWeekend && !targetClinic.weekendBookingEnabled;
-          
-          // Lógica de Bloqueo Exhaustiva
           const isBlocked = isDateBlocked || isHoliday || isWeekendBlocked || isSpecialActionDay || isDayOfAction;
 
           let availableSlotsCount = 0;
@@ -136,6 +136,7 @@ export default function PageContent({
               if (targetClinic.bookingMode === BookingMode.Time) {
                   const allSlots = generateDynamicTimeSlots(currentStartTime, currentEndTime, currentDuration);
                   const filteredSlots = allSlots.filter(s => s !== targetClinic.breakTime);
+                  // La disponibilidad es el total de slots configurados menos los ya ocupados
                   availableSlotsCount = Math.max(0, filteredSlots.length - dayBooked.length);
               } else {
                   const totalSlots = (targetClinic.dailySlots || 15) + (targetClinic.waitlistSlots || 0);
@@ -164,6 +165,7 @@ export default function PageContent({
       
       try {
           // ESTRATEGIA VACUNAS: Carga por segmento mensual para evitar límites de Firestore
+          // Pasamos el clinicId a la consulta para traer SOLO lo necesario de ese núcleo
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
             getAppointments({ startDate: startDate.toISOString(), endDate: endDate.toISOString(), clinicId: targetClinicId }), 
             getHolidays(), 

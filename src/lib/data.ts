@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -211,14 +212,15 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
 
-    q = query(colRef, where('date', '>=', start), where('date', '<=', end), limit(10000));
-    const snap = await getDocs(q);
-    let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-    
     if (options?.clinicId) {
-        results = results.filter((app: any) => app.clinicId === options.clinicId);
+        // Consulta específica por consultorio para evitar límites globales
+        q = query(colRef, where('clinicId', '==', options.clinicId), where('date', '>=', start), where('date', '<=', end), limit(10000));
+    } else {
+        q = query(colRef, where('date', '>=', start), where('date', '<=', end), limit(10000));
     }
     
+    const snap = await getDocs(q);
+    const results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     return await hydrateAppointments(results);
 }
 
@@ -427,7 +429,7 @@ export async function getAttendedPatientsForClinic(cid: string) {
     return serializeData(pSnap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 
-export async function getConsultationsByPatientId(pid: string) { const s = await getDocs(query(collection(adminDb, 'medicalConsultations'), where('patientId', '==', pid), orderBy('createdAt', 'desc'), limit(100))); return serializeData(s.docs.map(d => ({ ...d.id }))); }
+export async function getConsultationsByPatientId(pid: string) { const s = await getDocs(query(collection(adminDb, 'medicalConsultations'), where('patientId', '==', pid), orderBy('createdAt', 'desc'), limit(100))); return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id }))); }
 export async function getPrescriptionsByPatientId(pid: string) { const s = await getDocs(query(collection(adminDb, 'prescriptions'), where('patientId', '==', pid), orderBy('createdAt', 'desc'), limit(100))); return serializeData(s.docs.map(d => ({ ...d.data(), id: d.id }))); }
 export async function getPatientPrescriptionsCountTodayAction(pid: string) {
     const start = Timestamp.fromDate(startOfDay(new Date()));
