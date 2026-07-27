@@ -84,8 +84,6 @@ import { Checkbox } from '../ui/checkbox';
 import { Separator } from '../ui/separator';
 import { cn } from '@/lib/utils';
 
-const DAYS_OF_WEEK = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
-
 function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete, onCancel }: { 
     clinic: Clinic, 
     specialties: Specialty[], 
@@ -108,7 +106,6 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
         setEditedClinic({ 
             ...clinic, 
             unavailableDates: clinic.unavailableDates || [], 
-            daysOfAction: clinic.daysOfAction || [],
             customSchedules: clinic.customSchedules || [],
             waitlistSlots: clinic.waitlistSlots || 0,
             password: clinic.password || '123'
@@ -118,12 +115,6 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
     const handleFieldChange = (field: keyof Omit<Clinic, 'id'>, value: any) => {
         setEditedClinic(prev => ({...prev, [field]: value}));
     }
-
-    const toggleDay = (day: string) => {
-        const current = editedClinic.daysOfAction || [];
-        const updated = current.includes(day) ? current.filter(d => d !== day) : [...current, day];
-        handleFieldChange('daysOfAction', updated);
-    };
 
     const handleDateSelection = async (dates: Date[] | undefined) => {
         const prevDates = editedClinic.unavailableDates || [];
@@ -251,7 +242,6 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
                                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                     </Button>
                                 </div>
-                                <p className="text-[9px] text-muted-foreground italic">Esta clave permite al médico entrar a su panel de reportes.</p>
                             </div>
                         </div>
                         <div className='grid sm:grid-cols-3 gap-8'>
@@ -276,24 +266,7 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
                                 <SelectContent><SelectItem value="none">Sin Descanso</SelectItem>{dynamicBreakSlots.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                             </Select></div>
                         </div>
-                    </div>
-
-                    <Separator />
-
-                    <div className="grid lg:grid-cols-2 gap-10">
-                        <div className="space-y-4">
-                            <Label className="text-sm font-black text-primary uppercase flex items-center gap-2"><CalendarDays className="h-5 w-5" /> 3. Días de Atención Semanal</Label>
-                            <div className="flex flex-wrap gap-3 p-6 bg-muted/20 border-2 border-dashed rounded-3xl">
-                                {DAYS_OF_WEEK.map(day => (<div key={day} className="flex items-center space-x-3 bg-background p-3 px-4 rounded-xl border-2 shadow-sm"><Checkbox id={`day-${day}`} checked={editedClinic.daysOfAction?.includes(day)} onCheckedChange={() => toggleDay(day)} /><Label htmlFor={`day-${day}`} className="text-xs font-black uppercase cursor-pointer">{day}</Label></div>))}
-                            </div>
-                        </div>
-                        <div className="space-y-4">
-                            <Label className="text-sm font-black text-primary uppercase flex items-center gap-2"><Clock className="h-5 w-5" /> Parámetros Operativos</Label>
-                            <div className="p-6 bg-muted/20 border-2 border-dashed rounded-3xl space-y-6">
-                                <div className="flex items-center justify-between p-4 bg-background rounded-2xl border-2 shadow-sm"><Label className="text-sm font-black uppercase">Atención Sábados/Domingos</Label><Switch checked={editedClinic.weekendBookingEnabled} onCheckedChange={(v) => handleFieldChange('weekendBookingEnabled', v)} /></div>
-                                <div className="flex items-center justify-between p-4 bg-background rounded-2xl border-2 shadow-sm"><Label className="text-sm font-black uppercase">Método de Asignación</Label><Select value={editedClinic.bookingMode} onValueChange={(v: BookingMode) => handleFieldChange('bookingMode', v)}><SelectTrigger className="w-44 h-10 font-bold"><SelectValue /></SelectTrigger><SelectContent><SelectItem value={BookingMode.Time}>Por Horario (Exacto)</SelectItem><SelectItem value={BookingMode.Token}>Por Ficha (General)</SelectItem></SelectContent></Select></div>
-                            </div>
-                        </div>
+                        <div className="flex items-center justify-between p-4 bg-background rounded-2xl border-2 shadow-sm max-w-sm"><Label className="text-sm font-black uppercase">Atención Sábados/Domingos</Label><Switch checked={editedClinic.weekendBookingEnabled} onCheckedChange={(v) => handleFieldChange('weekendBookingEnabled', v)} /></div>
                     </div>
 
                     <Separator />
@@ -301,7 +274,7 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
                     <div className='space-y-6'>
                         <div className="flex items-center justify-between">
                             <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2">
-                                <CalendarDays className="h-5 w-5" /> 4. Vacaciones y Bloqueos Totales
+                                <CalendarDays className="h-5 w-5" /> 3. Vacaciones y Bloqueos Totales
                             </h4>
                             <Popover>
                                 <PopoverTrigger asChild>
@@ -356,7 +329,7 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
                     <Separator />
 
                     <div className="space-y-6">
-                        <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2"><Timer className="h-5 w-5" /> 5. Salidas Tempranas y Horarios Especiales</h4>
+                        <h4 className="text-sm font-black text-primary uppercase tracking-widest flex items-center gap-2"><Timer className="h-5 w-5" /> 4. Salidas Tempranas y Horarios Especiales</h4>
                         <div className="grid sm:grid-cols-3 gap-6 items-end bg-blue-50/50 p-6 rounded-3xl border border-blue-100 shadow-sm">
                              <div className="space-y-2">
                                 <Label className="text-[10px] font-black uppercase text-blue-700">Fecha del Cambio</Label>
@@ -379,39 +352,6 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
                              </div>
                              <Button onClick={addCustomSchedule} disabled={!newScheduleDate} className="h-12 font-black bg-blue-600 hover:bg-blue-700 uppercase tracking-widest">ASIGNAR SALIDA</Button>
                         </div>
-                        
-                        <div className="border rounded-2xl overflow-hidden bg-background shadow-sm">
-                            <Table>
-                                <TableHeader className="bg-muted/50">
-                                    <TableRow>
-                                        <TableHead className="font-bold text-[10px] uppercase">Fecha</TableHead>
-                                        <TableHead className="font-bold text-[10px] uppercase text-center">Hora Cierre</TableHead>
-                                        <TableHead className="w-[100px] text-right pr-6">Acción</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {(editedClinic.customSchedules || []).length ? (editedClinic.customSchedules || []).map(sched => (
-                                        <TableRow key={sched.date} className="hover:bg-muted/30 transition-colors">
-                                            <TableCell className="font-black text-sm uppercase">
-                                                {format(new Date(sched.date + 'T12:00:00'), "eeee dd 'de' MMMM", { locale: es })}
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                                <Badge className="bg-blue-600 text-white font-black h-7 px-4">{sched.endTime} HRS</Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right pr-6">
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => removeCustomSchedule(sched.date)}>
-                                                    <X className="h-4 w-4" />
-                                                </Button>
-                                            </TableCell>
-                                        </TableRow>
-                                    )) : (
-                                        <TableRow>
-                                            <TableCell colSpan={3} className="text-center py-20 opacity-30 uppercase font-black text-xs">No hay cierres especiales programados</TableCell>
-                                        </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
                     </div>
                 </div>
             </ScrollArea>
@@ -420,28 +360,6 @@ function ClinicEditDialog({ clinic, specialties, serviceTypes, onSave, onDelete,
                     <Save className="mr-2 h-6 w-6" /> GUARDAR TODA LA CONFIGURACIÓN
                 </Button>
             </DialogFooter>
-
-            <AlertDialog open={isConfirmingBlock} onOpenChange={setIsConfirmingBlock}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-                            <AlertTriangle className="h-6 w-6" /> ADVERTENCIA DE SEGURIDAD
-                        </AlertDialogTitle>
-                        <div className="space-y-4 pt-2 text-sm text-muted-foreground">
-                            <div className="font-bold text-foreground">
-                                Se han detectado <span className="text-primary text-lg">{conflictInfo?.count}</span> pacientes agendados para el día <span className="text-primary">{conflictInfo?.date}</span>.
-                            </div>
-                            <div className="text-xs">
-                                Si bloqueas este día, las citas actuales permanecerán registradas pero no se permitirán nuevas reservas. ¿Deseas continuar con el bloqueo de vacaciones?
-                            </div>
-                        </div>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <Button variant="outline" onClick={() => { setIsConfirmingBlock(false); setConflictInfo(null); setPendingDates(undefined); }}>Cancelar y revisar fecha</Button>
-                        <Button onClick={confirmBlockage} className="bg-destructive hover:bg-destructive/90 font-bold">SÍ, APLICAR BLOQUEO</Button>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </DialogContent>
     );
 }
@@ -530,7 +448,6 @@ export function ClinicsManager() {
         bookingMode: BookingMode.Time,
         consultationDuration: 30,
         unavailableDates: [],
-        daysOfAction: ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
     };
     setSelectedClinic(newClinic);
     setIsDialogOpen(true);

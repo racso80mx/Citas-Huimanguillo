@@ -208,9 +208,6 @@ export async function bulkInsertPatients(items: any[]) {
 export async function getAppointmentsData(options?: { startDate?: string, endDate?: string, clinicId?: string }) {
     const colRef = collection(adminDb, 'appointments');
     let q;
-    
-    // ESTRATEGIA EXHAUSTIVA: Filtramos por fecha (que tiene índice) y luego filtramos localmente por clínica.
-    // Esto evita el error de límite de 10,000 registros y asegura visibilidad total.
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
 

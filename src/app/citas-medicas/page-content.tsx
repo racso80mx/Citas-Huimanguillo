@@ -18,7 +18,7 @@ import { PatientType, BookingMode } from '@/lib/definitions';
 import { getAppointments, getClinics, getHolidays, verifyCitasMedicasPassword, getSpecialActionDays, getServiceTypes } from '@/lib/actions';
 
 import { useToast } from '@/hooks/use-toast';
-import { Hospital, LayoutList, CalendarDays, CalendarPlus, Check, Loader2, RefreshCw, MapPin, Clock, Info, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Hospital, LayoutList, CalendarDays, CalendarPlus, Check, Loader2, RefreshCw, MapPin, Clock, Info, CheckCircle2, AlertCircle, PlusCircle } from 'lucide-react';
 import { format, eachDayOfInterval, isSaturday, isSunday, startOfToday, addDays, isSameDay, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -109,15 +109,17 @@ export default function PageContent({
           
           const isHoliday = holidaySet.has(dateString);
           const isWeekend = isSaturday(day) || isSunday(day);
+          
+          // Día de Acción Especial: SIEMPRE BLOQUEADO
           const isSpecialActionDay = specialDays.some(sad => 
               sad.date === dateString && (normalize(sad.clinicType) === clinicServiceTypeName || normalize(sad.clinicType) === "CONSULTA EXTERNA")
           );
 
-          const worksOnThisDay = !targetClinic.daysOfAction || targetClinic.daysOfAction.length === 0 || targetClinic.daysOfAction.map(d => normalize(d)).includes(dayName);
+          // ESTRATEGIA VACUNAS: Lunes a Viernes son hábiles por defecto si no están bloqueados
           const isDateBlocked = targetClinic.unavailableDates?.includes(dateString);
           const isWeekendBlocked = isWeekend && !targetClinic.weekendBookingEnabled;
           
-          const isBlocked = isDateBlocked || isHoliday || isWeekendBlocked || isSpecialActionDay || !worksOnThisDay;
+          const isBlocked = isDateBlocked || isHoliday || isWeekendBlocked || isSpecialActionDay;
 
           let availableSlotsCount = 0;
           let takenInfo = dayBooked.map(a => ({ time: a.time, duration: a.duration }));
@@ -159,6 +161,7 @@ export default function PageContent({
       const endDate = endOfMonth(monthDate);
       
       try {
+          // CONSULTA QUIRÚRGICA: Solo traemos las citas del mes para este consultorio (Estrategia Vacunas)
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
             getAppointments({ startDate: startDate.toISOString(), endDate: endDate.toISOString(), clinicId: targetClinicId }), 
             getHolidays(), 
@@ -260,7 +263,7 @@ export default function PageContent({
     if (!dayAvail) return [];
 
     const booked = dayAvail.takenTimesByClinic[selectedClinic.id] || [];
-    const totalSlots = (selectedClinic.dailySlots || 15) + (selectedClinic.waitlistSlots || 0);
+    const totalSlots = (selectedClinic.dailySlots || 15) + (targetClinic.waitlistSlots || 0);
     const allTokens = Array.from({ length: totalSlots }, (_, i) => `Ficha ${i + 1}`);
     const freeTokens = allTokens.filter(t => !booked.some(a => a.time === t));
 
@@ -301,7 +304,7 @@ export default function PageContent({
       <Card className="w-full max-w-6xl mx-auto shadow-2xl border-border/60 overflow-hidden">
         <CardContent className="p-4 md:p-8">
           <div className="grid md:grid-cols-2 gap-12 items-start">
-            {/* COLUMNA IZQUIERDA: SELECCIÓN */}
+            {/* COLUMNA IZQUIERDA: SELECCIÓN (ESTILO VACUNAS) */}
             <div className="flex flex-col gap-8">
               <div>
                 <h3 className="text-2xl font-bold font-headline text-foreground mb-6 flex items-center justify-between">
