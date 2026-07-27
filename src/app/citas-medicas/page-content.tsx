@@ -75,12 +75,11 @@ export default function PageContent({
   const { toast } = useToast();
 
   const normalize = useCallback((val: any): string => {
-    if (val === null || val === undefined) return "";
-    const str = String(val);
+    if (!val || typeof val !== 'string') return "";
     try {
-        return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        return val.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
     } catch (e) {
-        return str.toUpperCase().trim();
+        return String(val).toUpperCase().trim();
     }
   }, []);
 
@@ -174,7 +173,6 @@ export default function PageContent({
   const fetchAvailabilityForRange = React.useCallback(async (targetClinicId: string, startDate: Date, endDate: Date, cacheKey: string) => {
       setIsLoadingAvailability(true);
       try {
-          // CONSULTA ESPECÍFICA MEDIANTE FILTRADO HÍBRIDO: Fidelidad total por consultorio
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
             getAppointments({ 
                 startDate: startDate.toISOString(), 
@@ -217,7 +215,6 @@ export default function PageContent({
 
   React.useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
-        // CARGA PROACTIVA: Sincroniza bloques mensuales para garantizar visibilidad 100%
         const today = startOfToday();
         const endOfRange = addDays(today, 14);
         
@@ -236,7 +233,6 @@ export default function PageContent({
             }
         });
 
-        // También sincronizar el mes que el usuario esté viendo en el calendario manual
         const calMonthStart = startOfMonth(currentMonth);
         const calCacheKey = `${selectedClinicId}-${format(calMonthStart, 'yyyy-MM')}`;
         if (!availabilityCache[calCacheKey]) {
