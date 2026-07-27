@@ -14,7 +14,9 @@ import {
   where,
   limit,
   orderBy,
-  documentId
+  documentId,
+  startAt,
+  endAt
 } from 'firebase/firestore';
 import { adminDb } from '@/firebase/server-config';
 import type { 
@@ -53,6 +55,19 @@ import type {
 import { PatientStatus, BookingMode } from './definitions';
 import { v4 as uuidv4 } from 'uuid';
 import { startOfDay, endOfDay, parseISO, startOfMonth, endOfMonth, addDays, subMonths } from 'date-fns';
+
+/**
+ * Normaliza textos para comparaciones robustas.
+ */
+export const normalize = (val: any): string => {
+    if (val === null || val === undefined) return "";
+    const str = String(val);
+    try {
+        return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+    } catch (e) {
+        return str.toUpperCase().trim();
+    }
+};
 
 /**
  * Serializa datos de Firestore para su uso en componentes de servidor y cliente.
@@ -195,20 +210,28 @@ export async function bulkInsertPatients(items: any[]) {
 // --- CITAS ---
 export async function getAppointmentsData(options?: { startDate?: string, endDate?: string, clinicId?: string }) {
     const colRef = collection(adminDb, 'appointments');
+    let q;
     
-    // Rango extendido para no perder citas en años futuros
-    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
-    const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
+    // ESTRATEGIA EXHAUSTIVA: Si se pide un consultorio, consultamos por consultorio primero.
+    // Esto evita el error de "Index Required" y asegura visibilidad total de esa unidad.
+    if (options?.clinicId) {
+        q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
+    } else {
+        const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
+        q = query(colRef, where('date', '>=', start), orderBy('date', 'asc'), limit(10000));
+    }
 
-    // FILTRADO HÍBRIDO: Filtramos por fecha en Firestore (índice automático) 
-    // y por consultorio en el servidor para evitar el error de "Index Required" y visibilidad limitada.
-    const q = query(colRef, where('date', '>=', start), where('date', '<=', end), limit(10000));
-    
     const snap = await getDocs(q);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-    
-    if (options?.clinicId) {
-        results = results.filter((app: any) => app.clinicId === options.clinicId);
+
+    // Filtrado en memoria para rangos de fecha si consultamos por clinicId
+    if (options?.clinicId && (options.startDate || options.endDate)) {
+        const startTime = options.startDate ? new Date(options.startDate).getTime() : 0;
+        const endTime = options.endDate ? new Date(options.endDate).getTime() : Infinity;
+        results = results.filter((app: any) => {
+            const appTime = app.date?.toMillis ? app.date.toMillis() : new Date(app.date).getTime();
+            return appTime >= startTime && appTime <= endTime;
+        });
     }
 
     return await hydrateAppointments(results);
