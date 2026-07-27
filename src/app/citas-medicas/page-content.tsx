@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
+import { cn, normalize } from '@/lib/utils';
 import { ModuleLoginForm } from '@/components/shared/module-login-form';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -62,10 +62,10 @@ export default function PageContent({
   const [isDoubleSlot, setIsDoubleSlot] = React.useState(false);
   const [selectedTime, setSelectedTime] = React.useState<string | undefined>();
   
-  const [availabilityCache, setAvailabilityCache] = useState<Record<string, boolean>>({});
+  const [availabilityCache, setAvailabilityCache] = useState<Record<string, DailyAvailability[]>>({});
+  const [availability, setAvailability] = React.useState<DailyAvailability[]>([]);
   const [isLoadingAvailability, setIsLoadingAvailability] = useState(false);
   
-  const [availability, setAvailability] = React.useState<DailyAvailability[]>([]);
   const [announcements] = React.useState<string[]>(initialAnnouncements);
   const [colonias] = React.useState<Colonia[]>(initialColonias);
   const [clinics] = React.useState<Clinic[]>(initialClinics);
@@ -73,16 +73,6 @@ export default function PageContent({
   
   const [currentMonth, setCurrentMonth] = React.useState(new Date());
   const { toast } = useToast();
-
-  const normalize = useCallback((val: any): string => {
-    if (val === null || val === undefined) return "";
-    const str = String(val);
-    try {
-        return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-    } catch (e) {
-        return str.toUpperCase().trim();
-    }
-  }, []);
 
   const generateDynamicTimeSlots = React.useCallback((startTimeStr: string, endTimeStr: string, duration: number): string[] => {
     const startHour = startTimeStr || "08:00";
@@ -102,86 +92,75 @@ export default function PageContent({
     return slots;
   }, []);
 
-  const calculateForClinic = useCallback((clinic: Clinic, startDate: Date, endDate: Date, allAppointments: any[], holidaySet: Set<string>, freshSpecialActionDays: SpecialActionDay[]): DailyAvailability[] => {
-      const dayClinicMap = new Map<string, any[]>();
-      
-      allAppointments.forEach(app => {
-          if (!app.date || !app.clinicId || app.clinicId !== clinic.id) return;
-          const d = typeof app.date === 'string' ? app.date.split('T')[0] : '';
-          if (d) {
-              if (!dayClinicMap.has(d)) dayClinicMap.set(d, []);
-              dayClinicMap.get(d)!.push(app);
-          }
-      });
-
+  const calculateAvailability = useCallback((targetClinic: Clinic, monthDate: Date, allAppointments: any[], holidaySet: Set<string>, specialDays: SpecialActionDay[]): DailyAvailability[] => {
+      const startDate = startOfMonth(monthDate);
+      const endDate = endOfMonth(monthDate);
+      const daysInMonth = eachDayOfInterval({ start: startDate, end: endDate });
       const dayNames = ["DOMINGO", "LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"];
-      const availabilityResult: DailyAvailability[] = [];
-      const daysInInterval = eachDayOfInterval({ start: startDate, end: endDate });
+      const clinicServiceTypeName = normalize(serviceTypes.find(t => t.id === targetClinic.serviceTypeId)?.name || targetClinic.serviceTypeId);
+      
+      const results: DailyAvailability[] = [];
 
-      const clinicServiceTypeName = normalize(serviceTypes.find(t => t.id === clinic.serviceTypeId)?.name || clinic.serviceTypeId);
+      for (const day of daysInMonth) {
+          const dateString = format(day, 'yyyy-MM-dd');
+          const dayBooked = allAppointments.filter(a => a.date.split('T')[0] === dateString && a.clinicId === targetClinic.id);
+          const dayName = dayNames[day.getDay()];
+          
+          const isHoliday = holidaySet.has(dateString);
+          const isWeekend = isSaturday(day) || isSunday(day);
+          const isSpecialActionDay = specialDays.some(sad => 
+              sad.date === dateString && (normalize(sad.clinicType) === clinicServiceTypeName || normalize(sad.clinicType) === "CONSULTA EXTERNA")
+          );
 
-      for (const day of daysInInterval) {
-        const dateString = format(day, 'yyyy-MM-dd'); 
-        const dayBooked = dayClinicMap.get(dateString) || [];
-        const dayName = dayNames[day.getDay()];
-        
-        const isHoliday = holidaySet.has(dateString);
-        const isWeekend = isSaturday(day) || isSunday(day);
-        
-        const isSpecialActionDay = freshSpecialActionDays.some(sad => 
-            sad.date === dateString && 
-            (normalize(sad.clinicType) === clinicServiceTypeName || 
-             normalize(sad.clinicType) === "CONSULTA EXTERNA")
-        );
+          const worksOnThisDay = !targetClinic.daysOfAction || targetClinic.daysOfAction.length === 0 || targetClinic.daysOfAction.map(d => normalize(d)).includes(dayName);
+          const isDateBlocked = targetClinic.unavailableDates?.includes(dateString);
+          const isWeekendBlocked = isWeekend && !targetClinic.weekendBookingEnabled;
+          
+          const isBlocked = isDateBlocked || isHoliday || isWeekendBlocked || isSpecialActionDay || !worksOnThisDay;
 
-        const isDateBlocked = clinic.unavailableDates?.includes(dateString);
-        const isWeekendBlocked = isWeekend && !clinic.weekendBookingEnabled;
-        
-        const effectiveDaysOfAction = (clinic.daysOfAction && clinic.daysOfAction.length > 0)
-            ? clinic.daysOfAction.map(d => normalize(d))
-            : ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"];
-            
-        const isActionDay = !effectiveDaysOfAction.includes(dayName);
-        const isBlocked = isDateBlocked || isHoliday || isWeekendBlocked || isSpecialActionDay || isActionDay;
+          let availableSlotsCount = 0;
+          let takenInfo = dayBooked.map(a => ({ time: a.time, duration: a.duration }));
 
-        let availableSlotsForClinic = 0;
-        let takenInfo = dayBooked.map(a => ({ time: a.time, duration: a.duration }));
+          if (!isBlocked) {
+              const customSchedule = targetClinic.customSchedules?.find(s => s.date === dateString);
+              const currentEndTime = customSchedule ? customSchedule.endTime : (targetClinic.endTime || "14:00");
+              const currentStartTime = targetClinic.startTime || "08:00";
+              const currentDuration = targetClinic.consultationDuration || 30;
 
-        if (!isBlocked) {
-            const customSchedule = clinic.customSchedules?.find(s => s.date === dateString);
-            const currentEndTime = customSchedule ? customSchedule.endTime : (clinic.endTime || "14:00");
-            const currentStartTime = clinic.startTime || "08:00";
-            const currentDuration = clinic.consultationDuration || 30;
+              if (targetClinic.bookingMode === BookingMode.Time) {
+                  const allSlots = generateDynamicTimeSlots(currentStartTime, currentEndTime, currentDuration);
+                  const filteredSlots = allSlots.filter(s => s !== targetClinic.breakTime);
+                  availableSlotsCount = Math.max(0, filteredSlots.length - dayBooked.length);
+              } else {
+                  const totalSlots = (targetClinic.dailySlots || 15) + (targetClinic.waitlistSlots || 0);
+                  availableSlotsCount = Math.max(0, totalSlots - dayBooked.length);
+              }
+          }
 
-            if (clinic.bookingMode === BookingMode.Time) {
-                const allSlots = generateDynamicTimeSlots(currentStartTime, currentEndTime, currentDuration);
-                const filteredSlots = allSlots.filter(s => s !== clinic.breakTime);
-                availableSlotsForClinic = Math.max(0, filteredSlots.length - dayBooked.length);
-            } else {
-                const totalSlots = (clinic.dailySlots || 15) + (clinic.waitlistSlots || 0);
-                availableSlotsForClinic = Math.max(0, totalSlots - dayBooked.length);
-            }
-        }
-
-        availabilityResult.push({ 
-            date: dateString, 
-            availableSlots: availableSlotsForClinic, 
-            availabilityByClinic: { [clinic.id]: availableSlotsForClinic }, 
-            takenTimesByClinic: { [clinic.id]: takenInfo } 
-        });
+          results.push({ 
+              date: dateString, 
+              availableSlots: availableSlotsCount, 
+              availabilityByClinic: { [targetClinic.id]: availableSlotsCount }, 
+              takenTimesByClinic: { [targetClinic.id]: takenInfo } 
+          });
       }
-      return availabilityResult;
-  }, [generateDynamicTimeSlots, serviceTypes, normalize]);
+      return results;
+  }, [generateDynamicTimeSlots, serviceTypes]);
 
-  const fetchAvailabilityForRange = React.useCallback(async (targetClinicId: string, startDate: Date, endDate: Date, cacheKey: string) => {
+  const fetchMonthAvailability = React.useCallback(async (targetClinicId: string, monthDate: Date) => {
+      const cacheKey = `${targetClinicId}-${format(monthDate, 'yyyy-MM')}`;
+      if (availabilityCache[cacheKey]) {
+          setAvailability(availabilityCache[cacheKey]);
+          return;
+      }
+
       setIsLoadingAvailability(true);
       try {
+          const startDate = startOfMonth(monthDate);
+          const endDate = endOfMonth(monthDate);
+          
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
-            getAppointments({ 
-                startDate: startDate.toISOString(), 
-                endDate: endDate.toISOString(),
-                clinicId: targetClinicId 
-            }), 
+            getAppointments({ startDate: startDate.toISOString(), endDate: endDate.toISOString(), clinicId: targetClinicId }), 
             getHolidays(), 
             getSpecialActionDays()
           ]);
@@ -190,60 +169,22 @@ export default function PageContent({
           const targetClinic = clinics.find(c => c.id === targetClinicId);
           
           if (targetClinic) {
-              const targetAvail = calculateForClinic(targetClinic, startDate, endDate, allAppointments, holidaySet, freshSpecialActionDays);
-              setAvailability(prev => {
-                  const combined = [...prev];
-                  targetAvail.forEach(item => {
-                      const idx = combined.findIndex(c => c.date === item.date);
-                      if (idx >= 0) {
-                          combined[idx] = {
-                              ...combined[idx],
-                              availabilityByClinic: { ...combined[idx].availabilityByClinic, [targetClinicId]: item.availabilityByClinic[targetClinicId] },
-                              takenTimesByClinic: { ...combined[idx].takenTimesByClinic, [targetClinicId]: item.takenTimesByClinic[targetClinicId] },
-                              availableSlots: item.availableSlots 
-                          };
-                      }
-                      else combined.push(item);
-                  });
-                  return combined.sort((a,b) => a.date.localeCompare(b.date));
-              });
-              setAvailabilityCache(prev => ({ ...prev, [cacheKey]: true }));
+              const monthAvail = calculateAvailability(targetClinic, monthDate, allAppointments, holidaySet, freshSpecialActionDays);
+              setAvailability(monthAvail);
+              setAvailabilityCache(prev => ({ ...prev, [cacheKey]: monthAvail }));
           }
       } catch (e) {
-          console.error("Fetch availability error", e);
+          console.error("Fetch month availability error", e);
       } finally {
           setIsLoadingAvailability(false); 
       }
-  }, [clinics, calculateForClinic]);
+  }, [clinics, availabilityCache, calculateAvailability]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (isAuthenticated && selectedClinicId) {
-        const today = startOfToday();
-        const endOfRange = addDays(today, 14);
-        
-        const monthsToFetch = [startOfMonth(today)];
-        if (format(today, 'MM') !== format(endOfRange, 'MM')) {
-            monthsToFetch.push(startOfMonth(endOfRange));
-        }
-
-        monthsToFetch.forEach(monthDate => {
-            const start = startOfMonth(monthDate);
-            const end = endOfMonth(monthDate);
-            const cacheKey = `${selectedClinicId}-${format(start, 'yyyy-MM')}`;
-            
-            if (!availabilityCache[cacheKey]) {
-                fetchAvailabilityForRange(selectedClinicId, start, end, cacheKey);
-            }
-        });
-
-        if (currentMonth) {
-            const calCacheKey = `${selectedClinicId}-${format(startOfMonth(currentMonth), 'yyyy-MM')}`;
-            if (!availabilityCache[calCacheKey]) {
-                fetchAvailabilityForRange(selectedClinicId, startOfMonth(currentMonth), endOfMonth(currentMonth), calCacheKey);
-            }
-        }
+        fetchMonthAvailability(selectedClinicId, currentMonth);
     }
-  }, [isAuthenticated, selectedClinicId, currentMonth, availabilityCache, fetchAvailabilityForRange]);
+  }, [isAuthenticated, selectedClinicId, currentMonth, fetchMonthAvailability]);
 
   const handleMonthChange = (monthDate: Date) => {
     setCurrentMonth(monthDate);
@@ -263,7 +204,6 @@ export default function PageContent({
     setSelectedDate(undefined);
     setSelectedColoniaId(undefined);
     setSelectedTime(undefined);
-    setAvailabilityCache({});
     setAvailability([]);
   };
 
@@ -351,14 +291,6 @@ export default function PageContent({
     return colonias.filter(c => c.clinicId === selectedClinicId).sort((a,b) => a.name.localeCompare(b.name));
   }, [colonias, selectedClinicId]);
 
-  const calendarAvailability = useMemo(() => {
-    if (!selectedClinicId) return availability;
-    return availability.map(day => ({
-        ...day,
-        availableSlots: day.availabilityByClinic[selectedClinicId] ?? 0
-    }));
-  }, [availability, selectedClinicId]);
-
   if (!isAuthenticated) return <ModuleLoginForm title="Citas Médicas" onVerify={verifyCitasMedicasPassword} onSuccess={() => setIsAuthenticated(true)} />;
 
   return (
@@ -385,7 +317,7 @@ export default function PageContent({
                         <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-500">
                             <h3 className="text-lg font-black uppercase text-primary tracking-widest flex items-center justify-between">
                                 <span className="flex items-center gap-2"><Hospital className="h-5 w-5" /> 2. Consultorio</span>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => handleClinicSelect(selectedClinicId!)}><RefreshCw className={cn("h-4 w-4", isLoadingAvailability && "animate-spin")} /></Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-primary" onClick={() => fetchMonthAvailability(selectedClinicId!, currentMonth)} disabled={!selectedClinicId || isLoadingAvailability}><RefreshCw className={cn("h-4 w-4", isLoadingAvailability && "animate-spin")} /></Button>
                             </h3>
                             <div className="grid gap-2">
                                 {clinicOptions.map(opt => (
@@ -433,7 +365,7 @@ export default function PageContent({
                               <div className="mt-8 flex justify-center">
                                     <Popover>
                                         <PopoverTrigger asChild><Button variant="outline" className="h-10 px-8 font-bold border-dashed border-primary/40 text-primary">Buscar otra fecha en el Calendario</Button></PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0" align="center"><AvailabilityCalendar selectedDate={selectedDate} onDateSelect={handleDateSelect} availability={calendarAvailability} onMonthChange={handleMonthChange} isLoading={isLoadingAvailability} /></PopoverContent>
+                                        <PopoverContent className="w-auto p-0" align="center"><AvailabilityCalendar selectedDate={selectedDate} onDateSelect={handleDateSelect} availability={availability} onMonthChange={handleMonthChange} isLoading={isLoadingAvailability} /></PopoverContent>
                                     </Popover>
                               </div>
                           </CardContent>

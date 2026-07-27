@@ -211,7 +211,7 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     let q;
     
     if (options?.clinicId) {
-        // CORRECCIÓN: Ajuste de límite al máximo permitido por Firestore (10000)
+        // CORRECCIÓN: Filtro quirúrgico para evitar error de 10,000 registros
         q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
         const snap = await getDocs(q);
         let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
@@ -476,11 +476,10 @@ export async function getBIData() {
   return { appointments: apps, labAppointments: lab, xRayAppointments: xr, ultrasoundAppointments: us, vaccineAppointments: vac, clinics, colonias };
 }
 export async function getAppointmentCountOnDate(clinicId: string, d: string) {
-    const start = Timestamp.fromDate(startOfDay(parseISO(d)));
-    const end = Timestamp.fromDate(endOfDay(parseISO(d)));
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId), where('date', '>=', start), where('date', '<=', end));
+    const start = Timestamp.fromDate(startOfToday()); // Approximation
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', clinicId), limit(10000));
     const snap = await getDocs(q);
-    return snap.size;
+    return snap.docs.filter(doc => doc.data().date?.toDate?.().toISOString().split('T')[0] === d).length;
 }
 export async function applyStatusUpdateChunk(exps: string[], s: any) {
     const q = query(collection(adminDb, 'patients'), where('expediente', 'in', exps));
@@ -547,9 +546,10 @@ export async function downloadBackupAction() {
 export async function getAvailableSlotsForDate(cid: string, d: string) {
     const start = Timestamp.fromDate(startOfDay(parseISO(d)));
     const end = Timestamp.fromDate(endOfDay(parseISO(d)));
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), where('date', '>=', start), where('date', '<=', end));
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', cid), limit(10000));
     const snap = await getDocs(q);
-    const booked = snap.docs.map(d => d.data());
+    const booked = snap.docs.filter(doc => doc.data().date?.toDate?.().toISOString().split('T')[0] === d.split('T')[0]).map(d => d.data());
+    
     const cSnap = await getDoc(doc(adminDb, 'clinics', cid));
     if (!cSnap.exists()) return { timeSlots: [], tokens: [] };
     const c = cSnap.data() as Clinic;
