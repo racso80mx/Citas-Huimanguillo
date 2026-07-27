@@ -219,7 +219,7 @@ export default function PageContent({
         const endOfRange = addDays(today, 14);
         
         // Carga Dinámica: Aseguramos que el rango de 14 días esté cubierto cargando meses si es necesario
-        const monthsToFetch = [startOfMonth(today)];
+        const monthsToFetch = [startOfToday()];
         if (format(today, 'MM') !== format(endOfRange, 'MM')) {
             monthsToFetch.push(startOfMonth(endOfRange));
         }
@@ -485,3 +485,4 @@ export default function PageContent({
     </div>
   );
 }
+

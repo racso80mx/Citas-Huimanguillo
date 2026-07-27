@@ -272,3 +272,4 @@ export async function getVaccineSettings() { return data.getVaccineSettings(); }
 export async function updateVaccineSettings(s: any) { return data.updateVaccineSettings(s); }
 export async function getVaccines() { return data.getVaccines(); }
 export async function updateVaccines(i: any[]) { return data.updateVaccines(i); }
+

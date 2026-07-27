@@ -558,3 +558,4 @@ export async function deleteAllCie10Glossary() { const s = await getDocs(collect
 export async function deleteAllCie10Catalog() { const s = await getDocs(collection(adminDb, 'cie10')); const b = writeBatch(adminDb); s.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 export async function getAnnouncementsData(): Promise<string[]> { const s = await getDoc(doc(adminDb, 'settings', 'announcements')); return s.exists() ? s.data().messages || [] : []; }
 export async function updateAnnouncementsData(messages: string[]) { await setDoc(doc(adminDb, 'settings', 'announcements'), { messages }); return { success: true }; }
+
