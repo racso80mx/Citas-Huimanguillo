@@ -192,11 +192,12 @@ export async function bulkInsertPatients(items: any[]) {
     await b.commit(); return { success: true, processedCount: items.length };
 }
 
-// --- CITAS ---
+// --- CITAS (REINGENIERÍA DE CONSULTA) ---
 export async function getAppointmentsData(options?: { startDate?: string, endDate?: string, clinicId?: string }) {
     const colRef = collection(adminDb, 'appointments');
     let q;
 
+    // CONSULTA QUIRÚRGICA: Si hay clinicId, priorizamos filtrar por consultorio para evitar límites globales
     if (options?.clinicId) {
         q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
     } else {
@@ -208,6 +209,7 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     const snap = await getDocs(q);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     
+    // FILTRADO HÍBRIDO: Filtramos el resto de criterios en memoria para evitar errores de índices y pérdida de datos
     if (options?.clinicId && (options.startDate || options.endDate)) {
         const start = options.startDate ? new Date(options.startDate).getTime() : 0;
         const end = options.endDate ? new Date(options.endDate).getTime() : Infinity;
@@ -221,29 +223,29 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
 }
 
 export async function getLabAppointmentsData(options?: { startDate?: string, endDate?: string }) {
-    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 2));
-    const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(addMonths(new Date(), 4));
+    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 1));
+    const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(addMonths(new Date(), 1));
     const q = query(collection(adminDb, 'labAppointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 export async function getXRayAppointmentsData(options?: { startDate?: string, endDate?: string }) {
-    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 2));
-    const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(addMonths(new Date(), 4));
+    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 1));
+    const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(addMonths(new Date(), 1));
     const q = query(collection(adminDb, 'xrayAppointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 export async function getUltrasoundAppointmentsData(options?: { startDate?: string, endDate?: string }) {
-    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 2));
-    const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(addMonths(new Date(), 4));
+    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 1));
+    const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(addMonths(new Date(), 1));
     const q = query(collection(adminDb, 'ultrasoundAppointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 export async function getVaccineAppointmentsData(options?: { startDate?: string, endDate?: string }) {
-    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 2));
-    const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(addMonths(new Date(), 4));
+    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(subMonths(new Date(), 1));
+    const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(addMonths(new Date(), 1));
     const q = query(collection(adminDb, 'vaccineAppointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));

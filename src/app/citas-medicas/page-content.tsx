@@ -106,7 +106,7 @@ export default function PageContent({
       
       allAppointments.forEach(app => {
           if (!app.date || !app.clinicId || app.clinicId !== clinic.id) return;
-          const d = format(parseISO(app.date), 'yyyy-MM-dd');
+          const d = app.date.split('T')[0];
           if (!dayClinicMap.has(d)) dayClinicMap.set(d, []);
           dayClinicMap.get(d)!.push(app);
       });
@@ -218,6 +218,7 @@ export default function PageContent({
         const today = startOfToday();
         const endOfRange = addDays(today, 14);
         
+        // Carga Dinámica: Aseguramos que el rango de 14 días esté cubierto cargando meses si es necesario
         const monthsToFetch = [startOfMonth(today)];
         if (format(today, 'MM') !== format(endOfRange, 'MM')) {
             monthsToFetch.push(startOfMonth(endOfRange));
@@ -233,6 +234,7 @@ export default function PageContent({
             }
         });
 
+        // Carga bajo demanda del mes del calendario actual
         const calMonthStart = startOfMonth(currentMonth);
         const calCacheKey = `${selectedClinicId}-${format(calMonthStart, 'yyyy-MM')}`;
         if (!availabilityCache[calCacheKey]) {
@@ -259,6 +261,7 @@ export default function PageContent({
     setSelectedDate(undefined);
     setSelectedColoniaId(undefined);
     setSelectedTime(undefined);
+    // Limpiamos parcialmente el cache local para forzar actualización inmediata al cambiar de unidad
     const start = startOfMonth(currentMonth);
     const end = endOfMonth(currentMonth);
     const cacheKey = `${clinicId}-${format(start, 'yyyy-MM')}`;
