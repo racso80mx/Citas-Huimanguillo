@@ -211,7 +211,8 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     let q;
     
     if (options?.clinicId) {
-        q = query(colRef, where('clinicId', '==', options.clinicId), limit(50000));
+        // CORRECCIÓN: Ajuste de límite al máximo permitido por Firestore (10000)
+        q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
         const snap = await getDocs(q);
         let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
         
@@ -229,7 +230,7 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
 
-    q = query(colRef, where('date', '>=', start), where('date', '<=', end), orderBy('date', 'asc'), limit(50000));
+    q = query(colRef, where('date', '>=', start), where('date', '<=', end), orderBy('date', 'asc'), limit(10000));
     const snap = await getDocs(q);
     const results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     return await hydrateAppointments(results);
@@ -238,33 +239,33 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
 export async function getLabAppointmentsData(options?: { startDate?: string, endDate?: string }) {
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
-    const q = query(collection(adminDb, 'labAppointments'), where('date', '>=', start), where('date', '<=', end), limit(20000));
+    const q = query(collection(adminDb, 'labAppointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 export async function getXRayAppointmentsData(options?: { startDate?: string, endDate?: string }) {
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
-    const q = query(collection(adminDb, 'xrayAppointments'), where('date', '>=', start), where('date', '<=', end), limit(20000));
+    const q = query(collection(adminDb, 'xrayAppointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 export async function getUltrasoundAppointmentsData(options?: { startDate?: string, endDate?: string }) {
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
-    const q = query(collection(adminDb, 'ultrasoundAppointments'), where('date', '>=', start), where('date', '<=', end), limit(20000));
+    const q = query(collection(adminDb, 'ultrasoundAppointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 export async function getVaccineAppointmentsData(options?: { startDate?: string, endDate?: string }) {
     const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
-    const q = query(collection(adminDb, 'vaccineAppointments'), where('date', '>=', start), where('date', '<=', end), limit(20000));
+    const q = query(collection(adminDb, 'vaccineAppointments'), where('date', '>=', start), where('date', '<=', end), limit(10000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
 export async function getAppointmentsForClinic(id: string) {
-    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', id), limit(20000));
+    const q = query(collection(adminDb, 'appointments'), where('clinicId', '==', id), limit(10000));
     const snap = await getDocs(q);
     return await hydrateAppointments(snap.docs.map(d => ({ ...d.data(), id: d.id })));
 }
