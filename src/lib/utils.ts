@@ -7,6 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Normaliza textos para comparaciones robustas (elimina acentos, fuerza mayúsculas).
+ * Indestructible ante valores nulos o indefinidos.
  */
 export const normalize = (val: any): string => {
     if (val === null || val === undefined) return "";
