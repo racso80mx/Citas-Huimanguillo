@@ -197,7 +197,6 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     const colRef = collection(adminDb, 'appointments');
     let q;
 
-    // OPTIMIZACIÓN: Si hay clinicId, consultamos por consultorio (Index safe)
     if (options?.clinicId) {
         q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
     } else {
@@ -209,7 +208,6 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     const snap = await getDocs(q);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     
-    // Filtrado secundario en memoria para evitar errores de Index required
     if (options?.clinicId && (options.startDate || options.endDate)) {
         const start = options.startDate ? new Date(options.startDate).getTime() : 0;
         const end = options.endDate ? new Date(options.endDate).getTime() : Infinity;
