@@ -199,7 +199,6 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
 
     let q;
-    // Si consultamos un consultorio específico, traemos todo lo de ese consultorio para asegurar precisión.
     if (options?.clinicId) {
         q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
     } else {
@@ -209,7 +208,6 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     const snap = await getDocs(q);
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     
-    // Filtrado secundario en servidor para asegurar rango de fechas si se pidió clinicId
     if (options?.clinicId) {
         results = results.filter((app: any) => {
             const d = app.date instanceof Timestamp ? app.date.toDate() : new Date(app.date);
@@ -558,4 +556,3 @@ export async function deleteAllCie10Glossary() { const s = await getDocs(collect
 export async function deleteAllCie10Catalog() { const s = await getDocs(collection(adminDb, 'cie10')); const b = writeBatch(adminDb); s.forEach(d => b.delete(d.ref)); await b.commit(); return { success: true }; }
 export async function getAnnouncementsData(): Promise<string[]> { const s = await getDoc(doc(adminDb, 'settings', 'announcements')); return s.exists() ? s.data().messages || [] : []; }
 export async function updateAnnouncementsData(messages: string[]) { await setDoc(doc(adminDb, 'settings', 'announcements'), { messages }); return { success: true }; }
-

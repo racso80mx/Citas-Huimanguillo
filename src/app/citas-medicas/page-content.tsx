@@ -238,7 +238,7 @@ export default function PageContent({
         const targetMonth = selectedDate ? startOfMonth(selectedDate) : startOfMonth(currentMonth);
         const calCacheKey = `${selectedClinicId}-${format(targetMonth, 'yyyy-MM')}`;
         if (!availabilityCache[calCacheKey]) {
-            fetchAvailabilityForRange(selectedClinicId, targetMonth, endOfMonth(targetMonth), calCacheKey);
+            fetchAvailabilityForRange(selectedClinicId, startOfMonth(targetMonth), endOfMonth(targetMonth), calCacheKey);
         }
     }
   }, [isAuthenticated, selectedClinicId, currentMonth, selectedDate, availabilityCache, fetchAvailabilityForRange]);
@@ -485,4 +485,3 @@ export default function PageContent({
     </div>
   );
 }
-
