@@ -234,14 +234,14 @@ export default function PageContent({
             }
         });
 
-        // Carga bajo demanda del mes del calendario actual
-        const calMonthStart = startOfMonth(currentMonth);
-        const calCacheKey = `${selectedClinicId}-${format(calMonthStart, 'yyyy-MM')}`;
+        // Carga bajo demanda del mes del calendario actual o del mes de la fecha seleccionada
+        const targetMonth = selectedDate ? startOfMonth(selectedDate) : startOfMonth(currentMonth);
+        const calCacheKey = `${selectedClinicId}-${format(targetMonth, 'yyyy-MM')}`;
         if (!availabilityCache[calCacheKey]) {
-            fetchAvailabilityForRange(selectedClinicId, calMonthStart, endOfMonth(currentMonth), calCacheKey);
+            fetchAvailabilityForRange(selectedClinicId, targetMonth, endOfMonth(targetMonth), calCacheKey);
         }
     }
-  }, [isAuthenticated, selectedClinicId, currentMonth, availabilityCache, fetchAvailabilityForRange]);
+  }, [isAuthenticated, selectedClinicId, currentMonth, selectedDate, availabilityCache, fetchAvailabilityForRange]);
 
   const handleMonthChange = (monthDate: Date) => {
     setCurrentMonth(monthDate);
@@ -284,8 +284,8 @@ export default function PageContent({
 
   const projectedGridData = useMemo(() => {
     if (!selectedClinicId) return [];
-    const today = startOfToday();
-    const range = Array.from({ length: 14 }, (_, i) => addDays(today, i));
+    const baseDate = selectedDate || startOfToday();
+    const range = Array.from({ length: 14 }, (_, i) => addDays(baseDate, i));
     return range.map(date => {
         const dateStr = format(date, 'yyyy-MM-dd');
         const avail = availability.find(a => a.date === dateStr);
@@ -299,7 +299,7 @@ export default function PageContent({
             isLoading: !avail && isLoadingAvailability
         };
     });
-  }, [selectedClinicId, availability, isLoadingAvailability]);
+  }, [selectedClinicId, availability, isLoadingAvailability, selectedDate]);
 
   const availableTimeSlots = React.useMemo(() => {
     if (!selectedClinic || !selectedDate || selectedClinic.bookingMode !== BookingMode.Time) return [];
