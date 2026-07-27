@@ -34,8 +34,6 @@ type PageContentProps = {
     initialAnnouncements: string[];
     initialColonias: Colonia[];
     initialClinics: Clinic[];
-    initialHolidays: Holiday[];
-    initialSpecialActionDays: SpecialActionDay[];
     initialServiceTypes: ServiceType[];
     initialSpecialties: Specialty[];
 };
@@ -100,7 +98,7 @@ export default function PageContent({
           const dateString = format(day, 'yyyy-MM-dd');
           
           const dayBooked = allAppointments.filter(a => {
-              const appDate = (a.date as string).split('T')[0];
+              const appDate = a.date?.split ? a.date.split('T')[0] : '';
               return appDate === dateString && a.clinicId === targetClinic.id;
           });
 
