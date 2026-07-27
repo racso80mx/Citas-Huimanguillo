@@ -56,7 +56,6 @@ import { startOfDay, endOfDay, parseISO, startOfMonth, endOfMonth, addDays, subM
 
 /**
  * Normaliza textos para comparaciones robustas (Días, Servicios, etc).
- * Indestructible ante valores nulos o indefinidos.
  */
 export const normalize = (val: any): string => {
     if (val === null || val === undefined) return "";
@@ -69,7 +68,7 @@ export const normalize = (val: any): string => {
 };
 
 /**
- * Serializa datos de Firestore para su uso en componentes de servidor y cliente.
+ * Serializa datos de Firestore.
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return data;
@@ -87,7 +86,7 @@ export function serializeData(data: any): any {
 }
 
 /**
- * Hidrata las citas con información del paciente y clínica de forma optimizada.
+ * Hidrata las citas de forma optimizada.
  */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
@@ -211,9 +210,8 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     const colRef = collection(adminDb, 'appointments');
     let q;
     
-    // ESTRATEGIA EXHAUSTIVA: Si hay clinicId, priorizamos esa búsqueda específica
     if (options?.clinicId) {
-        q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
+        q = query(colRef, where('clinicId', '==', options.clinicId), limit(50000));
         const snap = await getDocs(q);
         let results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
         

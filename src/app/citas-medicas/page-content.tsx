@@ -107,7 +107,6 @@ export default function PageContent({
       
       allAppointments.forEach(app => {
           if (!app.date || !app.clinicId || app.clinicId !== clinic.id) return;
-          // Si app.date es ISO String o Timestamp serializado
           const d = typeof app.date === 'string' ? app.date.split('T')[0] : '';
           if (d) {
               if (!dayClinicMap.has(d)) dayClinicMap.set(d, []);
@@ -222,7 +221,6 @@ export default function PageContent({
         const today = startOfToday();
         const endOfRange = addDays(today, 14);
         
-        // Carga Inteligente de meses involucrados
         const monthsToFetch = [startOfMonth(today)];
         if (format(today, 'MM') !== format(endOfRange, 'MM')) {
             monthsToFetch.push(startOfMonth(endOfRange));
@@ -238,7 +236,6 @@ export default function PageContent({
             }
         });
 
-        // Carga bajo demanda del mes seleccionado
         if (currentMonth) {
             const calCacheKey = `${selectedClinicId}-${format(startOfMonth(currentMonth), 'yyyy-MM')}`;
             if (!availabilityCache[calCacheKey]) {
