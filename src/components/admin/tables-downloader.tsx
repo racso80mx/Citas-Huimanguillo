@@ -24,7 +24,8 @@ import {
     LayoutList,
     Calendar as CalendarIcon,
     ShieldAlert,
-    Settings
+    Settings,
+    Package
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { adminDb } from '@/firebase/server-config';
@@ -45,31 +46,47 @@ export function TablesDownloader() {
     const [downloading, setDownloading] = useState<string | null>(null);
     const { toast } = useToast();
 
+    // LISTADO COMPLETO DE LAS 25 TABLAS EN ORDEN DE IMPORTANCIA OPERATIVA
     const tables: TableConfig[] = [
+        // 1. AGENDAS (EL NÚCLEO)
         { id: 'appointments', label: 'appointments', icon: ClipboardList, description: 'Citas médicas generales', color: 'text-primary' },
         { id: 'labAppointments', label: 'labAppointments', icon: FlaskConical, description: 'Citas de Laboratorio', color: 'text-emerald-600' },
         { id: 'xrayAppointments', label: 'xrayAppointments', icon: Stethoscope, description: 'Citas de Rayos X', color: 'text-blue-600' },
         { id: 'ultrasoundAppointments', label: 'ultrasoundAppointments', icon: Activity, description: 'Citas de Ultrasonido', color: 'text-indigo-600' },
         { id: 'vaccineAppointments', label: 'vaccineAppointments', icon: ShieldCheck, description: 'Citas de Vacunación', color: 'text-teal-600' },
+        
+        // 2. PACIENTES E HISTORIAL
         { id: 'patients', label: 'patients', icon: Users, description: 'Padrón maestro de pacientes', color: 'text-primary' },
         { id: 'medicalConsultations', label: 'medicalConsultations', icon: History, description: 'Historial de notas médicas', color: 'text-rose-600' },
         { id: 'prescriptions', label: 'prescriptions', icon: FileText, description: 'Recetas digitales generadas', color: 'text-orange-600' },
+        
+        // 3. INVENTARIOS Y SALIDAS
         { id: 'medications', label: 'medications', icon: Pill, description: 'Inventario de medicamentos', color: 'text-primary' },
+        { id: 'supplies', label: 'supplies', icon: Package, description: 'Insumos de Almacén', color: 'text-slate-600' },
         { id: 'pharmacyVouchers', label: 'pharmacyVouchers', icon: ClipboardList, description: 'Vales de salida de farmacia', color: 'text-amber-600' },
-        { id: 'supplies', label: 'supplies', icon: Database, description: 'Insumos de Almacén', color: 'text-slate-600' },
+        
+        // 4. CONFIGURACIÓN DE UNIDADES
         { id: 'clinics', label: 'clinics', icon: Hospital, description: 'Consultorios y médicos', color: 'text-primary' },
         { id: 'colonias', label: 'colonias', icon: Hospital, description: 'Localidades y municipios', color: 'text-slate-600' },
+        { id: 'departments', label: 'departments', icon: Hospital, description: 'Destinos para vales', color: 'text-slate-600' },
+        
+        // 5. CATÁLOGOS TÉCNICOS
         { id: 'serviceTypes', label: 'serviceTypes', icon: LayoutList, description: 'Tipos de servicio', color: 'text-slate-600' },
         { id: 'specialties', label: 'specialties', icon: LayoutList, description: 'Especialidades médicas', color: 'text-slate-600' },
-        { id: 'departments', label: 'departments', icon: Hospital, description: 'Destinos para vales', color: 'text-slate-600' },
         { id: 'labStudies', label: 'labStudies', icon: FlaskConical, description: 'Catálogo estudios laboratorio', color: 'text-slate-500' },
         { id: 'xrayStudies', label: 'xrayStudies', icon: Stethoscope, description: 'Catálogo estudios Rayos X', color: 'text-slate-500' },
         { id: 'ultrasoundStudies', label: 'ultrasoundStudies', icon: Activity, description: 'Catálogo estudios Ultrasonido', color: 'text-slate-500' },
         { id: 'vaccines', label: 'vaccines', icon: ShieldCheck, description: 'Catálogo de biológicos', color: 'text-slate-500' },
+        
+        // 6. RESTRICCIONES Y BLOQUEOS
         { id: 'holidays', label: 'holidays', icon: CalendarIcon, description: 'Días festivos oficiales', color: 'text-red-500' },
         { id: 'specialActionDays', label: 'specialActionDays', icon: ShieldAlert, description: 'Bloqueos por informes', color: 'text-red-500' },
+        
+        // 7. CATALOGO CIE-10 (PESADOS)
         { id: 'cie10', label: 'cie10', icon: BookText, description: 'Catálogo maestro diagnósticos', color: 'text-blue-800' },
         { id: 'cie10_glossary', label: 'cie10_glossary', icon: Search, description: 'Glosario CIE-10', color: 'text-blue-800' },
+        
+        // 8. AUDITORÍA Y SISTEMA
         { id: 'activityLog', label: 'activityLog', icon: History, description: 'Bitácora de movimientos', color: 'text-slate-700' },
         { id: 'settings', label: 'settings', icon: Settings, description: 'Ajustes globales sistema', color: 'text-slate-700' }
     ];

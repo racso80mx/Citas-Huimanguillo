@@ -174,7 +174,7 @@ export default function PageContent({
   const fetchAvailabilityForRange = React.useCallback(async (targetClinicId: string, startDate: Date, endDate: Date, cacheKey: string) => {
       setIsLoadingAvailability(true);
       try {
-          // CONSULTA ESPECÍFICA MEDIANTE FILTRADO HÍBRIDO (Surgical Fetch)
+          // CONSULTA ESPECÍFICA MEDIANTE FILTRADO HÍBRIDO: Fidelidad total por consultorio
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
             getAppointments({ 
                 startDate: startDate.toISOString(), 
