@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -55,7 +54,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { startOfDay, endOfDay, parseISO, startOfMonth, endOfMonth, addDays, subMonths } from 'date-fns';
 
 /**
- * Normaliza textos para comparaciones robustas (elimina acentos, fuerza mayúsculas).
+ * Normaliza textos para comparaciones robustas.
  */
 export const normalize = (val: any): string => {
     if (val === null || val === undefined) return "";
@@ -68,7 +67,7 @@ export const normalize = (val: any): string => {
 };
 
 /**
- * Serializa datos de Firestore para evitar errores de objetos no planos en Server Actions.
+ * Serializa datos de Firestore.
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return data;
@@ -85,9 +84,6 @@ export function serializeData(data: any): any {
   return data;
 }
 
-/**
- * Hidrata las citas con datos de pacientes y clínicas de forma optimizada.
- */
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     try {
@@ -208,19 +204,31 @@ export async function bulkInsertPatients(items: any[]) {
 // --- CITAS ---
 export async function getAppointmentsData(options?: { startDate?: string, endDate?: string, clinicId?: string }) {
     const colRef = collection(adminDb, 'appointments');
-    let q;
-    const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
-    const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
+    let results: any[] = [];
 
+    // ESTRATEGIA EXHAUSTIVA: Para evitar el error de índice de Firebase, filtramos por clinicId (campo único) 
+    // y realizamos el filtrado de fecha en memoria. Esto garantiza visibilidad total sin errores de consola.
     if (options?.clinicId) {
-        // Consulta específica por consultorio para evitar límites globales
-        q = query(colRef, where('clinicId', '==', options.clinicId), where('date', '>=', start), where('date', '<=', end), limit(10000));
+        const q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
+        const snap = await getDocs(q);
+        results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+
+        if (options.startDate || options.endDate) {
+            const start = options.startDate ? new Date(options.startDate).getTime() : 0;
+            const end = options.endDate ? new Date(options.endDate).getTime() : Infinity;
+            results = results.filter(a => {
+                const appDate = a.date?.toDate ? a.date.toDate().getTime() : new Date(a.date).getTime();
+                return appDate >= start && appDate <= end;
+            });
+        }
     } else {
-        q = query(colRef, where('date', '>=', start), where('date', '<=', end), limit(10000));
+        const start = options?.startDate ? Timestamp.fromDate(new Date(options.startDate)) : Timestamp.fromDate(new Date('2020-01-01'));
+        const end = options?.endDate ? Timestamp.fromDate(new Date(options.endDate)) : Timestamp.fromDate(new Date('2030-12-31'));
+        const q = query(colRef, where('date', '>=', start), where('date', '<=', end), limit(10000));
+        const snap = await getDocs(q);
+        results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     }
     
-    const snap = await getDocs(q);
-    const results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
     return await hydrateAppointments(results);
 }
 

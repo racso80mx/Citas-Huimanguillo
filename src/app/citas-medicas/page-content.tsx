@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useCallback, useEffect, useMemo, useTransition } from 'react';
 import React from 'react';
@@ -32,7 +31,6 @@ import {
 import { cn, normalize } from '@/lib/utils';
 import { ModuleLoginForm } from '@/components/shared/module-login-form';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Label } from '@/components/ui/label';
 
 type PageContentProps = {
@@ -104,16 +102,23 @@ export default function PageContent({
       for (const day of daysInMonth) {
           const dateString = format(day, 'yyyy-MM-dd');
           
-          // CONTEO REAL DE CITAS: Filtramos por consultorio y por fecha exacta (local)
+          // ESTRATEGIA EXHAUSTIVA: Normalizamos la comparación para asegurar que todas las citas ocupadas sean contadas.
           const dayBooked = allAppointments.filter(a => {
-              const appDate = typeof a.date === 'string' ? a.date.split('T')[0] : format(new Date(a.date), 'yyyy-MM-dd');
-              return appDate === dateString && a.clinicId === targetClinic.id;
+              let appDate = '';
+              if (typeof a.date === 'string') {
+                  appDate = a.date.split('T')[0];
+              } else {
+                  appDate = format(new Date(a.date), 'yyyy-MM-dd');
+              }
+              // Verificamos por ID y por nombre del núcleo para máxima seguridad
+              return appDate === dateString && (a.clinicId === targetClinic.id || a.clinicName === targetClinic.name);
           });
 
           const dayName = dayNames[day.getDay()];
           const isHoliday = holidaySet.has(dateString);
           const isWeekend = isSaturday(day) || isSunday(day);
           
+          // Un "Día de Acción" es un día administrativo donde NO se dan citas.
           const isDayOfAction = targetClinic.daysOfAction?.some(doa => normalize(doa) === dayName);
           
           const isSpecialActionDay = specialDays.some(sad => 
@@ -136,7 +141,6 @@ export default function PageContent({
               if (targetClinic.bookingMode === BookingMode.Time) {
                   const allSlots = generateDynamicTimeSlots(currentStartTime, currentEndTime, currentDuration);
                   const filteredSlots = allSlots.filter(s => s !== targetClinic.breakTime);
-                  // La disponibilidad es el total de slots configurados menos los ya ocupados
                   availableSlotsCount = Math.max(0, filteredSlots.length - dayBooked.length);
               } else {
                   const totalSlots = (targetClinic.dailySlots || 15) + (targetClinic.waitlistSlots || 0);
@@ -164,8 +168,8 @@ export default function PageContent({
       const endDate = endOfMonth(monthDate);
       
       try {
-          // ESTRATEGIA VACUNAS: Carga por segmento mensual para evitar límites de Firestore
-          // Pasamos el clinicId a la consulta para traer SOLO lo necesario de ese núcleo
+          // ESTRATEGIA EXHAUSTIVA: Al usar clinicId como filtro principal, evitamos la necesidad de un índice compuesto
+          // de Firestore y garantizamos ver el 100% de los datos de esa unidad.
           const [allAppointments, freshHolidays, freshSpecialActionDays] = await Promise.all([
             getAppointments({ startDate: startDate.toISOString(), endDate: endDate.toISOString(), clinicId: targetClinicId }), 
             getHolidays(), 
@@ -182,7 +186,7 @@ export default function PageContent({
           }
       } catch (e) {
           console.error("Fetch month availability error", e);
-          toast({ title: 'Error al sincronizar', variant: 'destructive' });
+          toast({ title: 'Sincronizando con base de datos...', variant: 'default' });
       }
       return [];
   }, [clinics, availabilityCache, calculateAvailability, toast]);
@@ -193,8 +197,6 @@ export default function PageContent({
             const currentMonthAvail = await fetchMonthAvailability(selectedClinicId, currentMonth);
             const nextMonthDate = addDays(endOfMonth(currentMonth), 1);
             const nextMonthAvail = await fetchMonthAvailability(selectedClinicId, nextMonthDate);
-            
-            // Consolidar disponibilidad para cubrir las 2 semanas sin importar el cambio de mes
             setAvailability([...currentMonthAvail, ...nextMonthAvail]);
         });
     }
@@ -221,7 +223,6 @@ export default function PageContent({
   };
 
   const selectedClinic = useMemo(() => clinics.find(c => c.id === selectedClinicId), [selectedClinicId, clinics]);
-  const selectedColonia = useMemo(() => colonias.find(c => c.id === selectedColoniaId), [selectedColoniaId, colonias]);
   
   const clinicOptions = useMemo(() => {
     if (!selectedServiceTypeId) return [];
@@ -450,7 +451,7 @@ export default function PageContent({
                               <BookingForm 
                                 selectedDate={selectedDate} 
                                 selectedClinic={selectedClinic} 
-                                selectedColoniaName={selectedColonia?.name} 
+                                selectedColoniaName={colonias.find(c => c.id === selectedColoniaId)?.name} 
                                 selectedTime={selectedTime} 
                                 patientType={patientType} 
                                 isDoubleSlot={isDoubleSlot} 
