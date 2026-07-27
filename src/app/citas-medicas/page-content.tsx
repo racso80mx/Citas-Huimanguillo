@@ -98,15 +98,15 @@ export default function PageContent({
           const dateString = format(day, 'yyyy-MM-dd');
           
           const dayBooked = allAppointments.filter(a => {
-              const appDate = a.date?.split ? a.date.split('T')[0] : '';
-              return appDate === dateString && a.clinicId === targetClinic.id;
+              const appDateStr = String(a.date || '').split('T')[0];
+              const appClinicId = String(a.clinicId || '');
+              return appDateStr === dateString && normalize(appClinicId) === normalize(targetClinic.id);
           });
 
           const dayName = dayNames[day.getDay()];
           const isHoliday = holidaySet.has(dateString);
           const isWeekend = isSaturday(day) || isSunday(day);
           
-          // Un "Día de Acción" es un día administrativo donde NO se dan citas.
           const isDayOfAction = targetClinic.daysOfAction?.some(doa => normalize(doa) === dayName);
           
           const isSpecialActionDay = specialDays.some(sad => 

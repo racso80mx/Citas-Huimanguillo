@@ -55,15 +55,13 @@ import { startOfDay, endOfDay, parseISO, startOfMonth, endOfMonth, addDays, subM
 
 /**
  * Serializa de forma agresiva datos de Firestore para pasar a Client Components.
- * Convierte Timestamps a ISO strings de forma recursiva y garantiza objetos planos.
+ * Convierte Timestamps y References a valores planos de forma recursiva.
  */
 export function serializeData(data: any): any {
   if (data === null || data === undefined) return data;
   
-  // Caso 1: Firestore Timestamp real
+  // Caso 1: Firestore Timestamp real o similar
   if (typeof data.toDate === 'function') return data.toDate().toISOString();
-  
-  // Caso 2: Objeto literal que parece Timestamp (seconds/nanoseconds)
   if (data && typeof data === 'object' && 'seconds' in data) {
     try {
         return new Date(data.seconds * 1000).toISOString();
@@ -72,13 +70,17 @@ export function serializeData(data: any): any {
     }
   }
 
+  // Caso 2: Firestore Reference
+  if (data && typeof data === 'object' && 'path' in data && typeof data.path === 'string') {
+      return data.id; // Retornamos solo el ID como string
+  }
+
   // Caso 3: Array
   if (Array.isArray(data)) return data.map(item => serializeData(item));
   
-  // Caso 4: Objeto
+  // Caso 4: Objeto plano
   if (typeof data === 'object' && data !== null) {
-    // Si es una fecha JS pura
-    if (data instanceof Date || typeof data.getMonth === 'function') return data.toISOString();
+    if (data instanceof Date) return data.toISOString();
     
     const serialized: any = {};
     for (const key in data) {
@@ -89,14 +91,20 @@ export function serializeData(data: any): any {
     return serialized;
   }
 
-  // Caso 5: Primitivos
   return data;
 }
 
 async function hydrateAppointments(appointments: any[]) {
     if (!appointments || appointments.length === 0) return [];
     try {
-        const patientIds = Array.from(new Set(appointments.map(a => a.patientId).filter(Boolean)));
+        // Normalizamos IDs para que siempre sean strings antes de procesar
+        const normalizedApps = appointments.map(a => ({
+            ...a,
+            patientId: a.patientId && typeof a.patientId === 'object' ? a.patientId.id : String(a.patientId || ''),
+            clinicId: a.clinicId && typeof a.clinicId === 'object' ? a.clinicId.id : String(a.clinicId || '')
+        }));
+
+        const patientIds = Array.from(new Set(normalizedApps.map(a => a.patientId).filter(Boolean)));
         const patientsMap: Record<string, any> = {};
         
         if (patientIds.length > 0) {
@@ -112,7 +120,7 @@ async function hydrateAppointments(appointments: any[]) {
         const clinicsMap: Record<string, any> = {};
         clinicsSnap.forEach(d => { clinicsMap[d.id] = { ...d.data(), id: d.id }; });
 
-        const results = appointments.map(app => ({
+        const results = normalizedApps.map(app => ({
             ...app,
             patient: patientsMap[app.patientId] || { name: 'PACIENTE', curp: app.patientId || 'S/C', phoneNumber: '' },
             clinicName: clinicsMap[app.clinicId]?.name || 'N/A',
@@ -217,8 +225,9 @@ export async function getAppointmentsData(options?: { startDate?: string, endDat
     const colRef = collection(adminDb, 'appointments');
     let results: any[] = [];
 
+    // Estrategia: Filtramos solo por clinicId en el servidor para evitar índices compuestos complejos
+    // y aplicamos el filtro de fecha en hydrate/serialize para máxima fidelidad.
     if (options?.clinicId) {
-        // Consultar solo por clinicId para evitar errores de índice compuesto y filtrar en memoria
         const q = query(colRef, where('clinicId', '==', options.clinicId), limit(10000));
         const snap = await getDocs(q);
         results = snap.docs.map(d => ({ ...d.data(), id: d.id }));
@@ -310,11 +319,24 @@ export async function saveNewAppointment(a: any, p: any, d: boolean, c?: string)
     const curp = String(p.curp).toUpperCase().trim();
     const batch = writeBatch(adminDb);
     batch.set(doc(adminDb, 'patients', curp), { ...p, curp, nombreCompleto: `${p.name} ${p.paternalLastName} ${p.maternalLastName}`.toUpperCase() }, { merge: true });
+    
     const id = uuidv4();
     const appointmentNumber = `MED-${uuidv4().split('-')[0].toUpperCase()}`;
     const appData = { ...a, patientId: curp, id, appointmentNumber, coloniaName: c, date: Timestamp.fromDate(new Date(a.date)), createdAt: Timestamp.now() };
+    
     batch.set(doc(adminDb, 'appointments', id), appData);
-    await batch.commit(); return serializeData({ success: true, data: { ...appData, id } });
+    await batch.commit();
+
+    const clinicSnap = await getDoc(doc(adminDb, 'clinics', a.clinicId));
+    const clinicData = clinicSnap.exists() ? { ...clinicSnap.data(), id: clinicSnap.id } : null;
+
+    return serializeData({ 
+        success: true, 
+        data: { 
+            appointment: { ...appData, id, patient: p }, 
+            clinic: clinicData 
+        } 
+    });
 }
 
 export async function deleteAppointment(id: string) { await deleteDoc(doc(adminDb, 'appointments', id)); return { success: true }; }
